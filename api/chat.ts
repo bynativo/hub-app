@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: system || 'Eres un asistente de trabajo. Responde en espanol, directo y practico.',
         messages,
