@@ -13,7 +13,10 @@ import { PresentationDetail } from './components/presentations/PresentationDetai
 import { GrillaView } from './components/grilla/GrillaView'
 
 export default function App() {
-  const { loadAll, loading, activeView, detailOpen } = useStore()
+  const loadAll = useStore(s => s.loadAll)
+  const loading = useStore(s => s.loading)
+  const activeView = useStore(s => s.activeView)
+  const detailOpen = useStore(s => s.detailOpen)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
@@ -46,15 +49,17 @@ export default function App() {
 
   return (
     <>
-      <div className="grid grid-cols-[230px_1fr] grid-rows-[52px_1fr] h-screen overflow-hidden">
+      <div className="h-screen flex flex-col overflow-hidden">
         <Topbar />
-        <Sidebar />
-        <main
-          className="overflow-y-auto transition-[margin-right] duration-200"
-          style={{ marginRight: detailOpen ? '540px' : '0' }}
-        >
-          {renderView()}
-        </main>
+        <div className="flex flex-1 min-h-0">
+          <Sidebar />
+          <main
+            className="flex-1 overflow-y-auto"
+            style={{ marginRight: detailOpen ? '540px' : '0', transition: 'margin-right 0.2s' }}
+          >
+            {renderView()}
+          </main>
+        </div>
       </div>
 
       {detailOpen && <TaskDetail />}

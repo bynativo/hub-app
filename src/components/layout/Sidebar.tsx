@@ -1,7 +1,8 @@
 import { useStore } from '../../lib/store'
 
 function NavItem({ label, color, view, count }: { label: string; color: string; view: string; count?: number }) {
-  const { activeView, setView } = useStore(s => ({ activeView: s.activeView, setView: s.setView }))
+  const activeView = useStore(s => s.activeView)
+  const setView = useStore(s => s.setView)
   const isActive = activeView === view
 
   return (
@@ -23,7 +24,12 @@ function NavItem({ label, color, view, count }: { label: string; color: string; 
 }
 
 export function Sidebar() {
-  const { tasks, projects, clients, presentations, setActiveClient, setView } = useStore()
+  const tasks = useStore(s => s.tasks)
+  const projects = useStore(s => s.projects)
+  const clients = useStore(s => s.clients)
+  const presentations = useStore(s => s.presentations)
+  const setActiveClient = useStore(s => s.setActiveClient)
+  const setView = useStore(s => s.setView)
   const active = tasks.filter(t => !t.done)
   const banco = active.filter(t => t.context === 'banco').length
   const agencia = active.filter(t => t.context === 'agencia').length
@@ -32,7 +38,7 @@ export function Sidebar() {
   const agClients = clients.filter(c => c.context === 'agencia')
 
   return (
-    <aside className="bg-bg2 border-r border-black/7 overflow-y-auto py-3 shadow-sm">
+    <aside className="w-[230px] shrink-0 bg-bg2 border-r border-black/7 overflow-y-auto py-3 shadow-sm">
       <div className="font-mono text-[10px] text-gray-400 tracking-wider uppercase px-3.5 pb-1 pt-2.5">Principal</div>
       <NavItem label="Dashboard" color="#a09d98" view="dashboard" count={active.length} />
       <NavItem label="Proyectos" color="#7c3aed" view="proyectos" count={projects.length} />
