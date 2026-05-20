@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { ESTADOS, STATUS_ICON, STATUS_COLOR, CATS } from '../../lib/constants'
+import { callClaude } from '../../lib/claude'
+import { ESTADOS, STATUS_ICON, STATUS_COLOR, CATS, ORIGIN_LABELS } from '../../lib/constants'
 import { ctxLabel } from '../../lib/helpers'
 import type { Subtask, Thread } from '../../lib/types'
 
@@ -15,6 +16,8 @@ export function TaskDetail() {
   const [threads, setThreads] = useState<Thread[]>([])
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const msgsEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!task) return
@@ -49,19 +52,51 @@ export function TaskDetail() {
     setSubtasks(prev => prev.map(s => s.id === id ? { ...s, done: !done } : s))
   }
 
-  function handleChatSend() {
-    if (!chatInput.trim() || !task) return
-    setChatMessages(prev => [...prev, { role: 'user', content: chatInput }])
+  function buildSystemPrompt() {
+    if (!task) return ''
+    return `Eres el agente de trabajo personal del usuario, en conversacion sobre una tarea especifica.
+
+TAREA: ${task.title}
+Contexto: ${ctxLabel(task.context)}
+Cliente: ${task.clients?.name || 'ninguno'}
+Proyecto: ${task.projects?.name || 'ninguno'}
+Prioridad: ${task.priority} | Origen: ${ORIGIN_LABELS[task.origin] || task.origin}
+Categorias: ${(task.cats || []).join(', ') || 'ninguna'}
+Fecha limite: ${task.due_date || 'sin fecha'} | Notas: ${task.notes || 'ninguna'}
+Plan actual: ${task.plan?.length ? task.plan.join(' → ') : 'sin plan aun'}
+Draft email: ${task.draft_body ? 'existe borrador' : 'no hay borrador'}
+Status: ${task.status || 'Inbox'}
+
+Canales: Gmail (agencia + personal) = envio directo. Outlook (banco) = solo copia manual, cortafuegos corporativo.
+
+REGLAS:
+- Ayuda a avanzar en ESTA tarea especifica
+- Emails: tono humano y profesional, que NADIE note la IA
+- Si aprueba un email, dile que vaya a la pestana "Email"
+- Si propones reunion, incluye agenda con 5-6 puntos concretos
+- Espanol, directo y practico
+- Respuestas concisas, no mas de 3 parrafos a menos que se pida detalle`
+  }
+
+  async function handleChatSend() {
+    if (!chatInput.trim() || !task || chatLoading) return
     const userMsg = chatInput
-    const taskTitle = task.title
+    setChatMessages(prev => [...prev, { role: 'user', content: userMsg }])
     setChatInput('')
-    // Simulated response - in production this would call Claude API
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Entiendo. Sobre "${taskTitle}": ${userMsg.length > 20 ? 'Estoy analizando tu solicitud. En produccion, esta respuesta vendria de Claude con contexto completo de la tarea.' : 'Perfecto. ¿Que mas necesitas?'}`
-      }])
-    }, 500)
+    setChatLoading(true)
+
+    try {
+      const history = [...chatMessages, { role: 'user', content: userMsg }]
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-12)
+      const reply = await callClaude(history, buildSystemPrompt())
+      setChatMessages(prev => [...prev, { role: 'assistant', content: reply }])
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Error de conexion. Verifica que ANTHROPIC_API_KEY este configurada en Vercel.' }])
+    } finally {
+      setChatLoading(false)
+      msgsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }
 
   return (
@@ -132,11 +167,29 @@ export function TaskDetail() {
               {task.notes && <><br />Notas: {task.notes}</>}
             </div>
 
+            {/* Quick actions */}
+            <div className="flex gap-1.5 flex-wrap mb-3">
+              {[
+                { label: 'Plan de ataque', prompt: 'Dame los pasos concretos para abordar esta tarea.' },
+                { label: 'Redactar email', prompt: 'Redacta el email de respuesta. Tono humano, que nadie note IA.' },
+                { label: 'Ver riesgos', prompt: 'Hay riesgos o bloqueos que debo considerar?' },
+                { label: 'Update equipo', prompt: 'Dame un WhatsApp para actualizar al equipo sobre esta tarea.' },
+              ].map(q => (
+                <button
+                  key={q.label}
+                  onClick={() => { setChatInput(q.prompt); }}
+                  className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-full cursor-pointer hover:border-claude/20 hover:text-claude hover:bg-claude/7 font-mono transition-all"
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+
             {/* Messages */}
             <div className="flex-1 min-h-[120px] max-h-[320px] overflow-y-auto flex flex-col gap-2 pb-1">
               {chatMessages.map((m, i) => (
                 <div key={i} className={`max-w-[90%] ${m.role === 'user' ? 'self-end' : 'self-start'}`}>
-                  <div className={`px-3 py-2 rounded-[10px] text-[13px] leading-relaxed ${
+                  <div className={`px-3 py-2 rounded-[10px] text-[13px] leading-relaxed whitespace-pre-wrap ${
                     m.role === 'user'
                       ? 'bg-claude text-white rounded-br-sm'
                       : 'bg-bg3 border border-black/7 rounded-bl-sm'
@@ -145,6 +198,14 @@ export function TaskDetail() {
                   </div>
                 </div>
               ))}
+              {chatLoading && (
+                <div className="flex items-center gap-1 px-3 py-2 bg-bg3 border border-black/7 rounded-[10px] w-fit self-start">
+                  <div className="dot w-[5px] h-[5px] bg-gray-400 rounded-full" />
+                  <div className="dot w-[5px] h-[5px] bg-gray-400 rounded-full" />
+                  <div className="dot w-[5px] h-[5px] bg-gray-400 rounded-full" />
+                </div>
+              )}
+              <div ref={msgsEndRef} />
             </div>
 
             {/* Input */}
@@ -156,10 +217,12 @@ export function TaskDetail() {
                 className="flex-1 bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] resize-none outline-none focus:border-claude/20 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.07)] min-h-[42px] max-h-[120px]"
                 placeholder="Escribe sobre esta tarea..."
                 rows={2}
+                disabled={chatLoading}
               />
               <button
                 onClick={handleChatSend}
-                className="bg-claude text-white px-3.5 py-2 rounded-lg text-[13px] self-end hover:bg-purple-700 transition-colors cursor-pointer"
+                disabled={chatLoading}
+                className="bg-claude text-white px-3.5 py-2 rounded-lg text-[13px] self-end hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Enviar
               </button>

@@ -1,5 +1,7 @@
+import { useState, useRef } from 'react'
 import { useStore } from '../../lib/store'
-import { getGreeting } from '../../lib/helpers'
+import { getGreeting, ctxLabel } from '../../lib/helpers'
+import { callClaude } from '../../lib/claude'
 import { TaskList } from '../tasks/TaskList'
 
 function StatCard({ label, value, color, borderColor }: { label: string; value: number; color?: string; borderColor?: string }) {
@@ -12,6 +14,13 @@ function StatCard({ label, value, color, borderColor }: { label: string; value: 
   )
 }
 
+const QUICK_PROMPTS: Record<string, string> = {
+  'Priorizar dia': 'Prioriza mis tareas de hoy con orden de ataque concreto.',
+  'Email seguimiento': 'Redacta un email de seguimiento para un cliente que lleva 3 dias sin responder.',
+  'Resumen': 'Resumen ejecutivo de todos mis pendientes por contexto.',
+  'Tiempo total': 'Estima el tiempo total para todo lo activo.',
+}
+
 export function Dashboard() {
   const { tasks } = useStore()
   const active = tasks.filter(t => !t.done)
@@ -19,6 +28,52 @@ export function Dashboard() {
   const agencia = active.filter(t => t.context === 'agencia')
   const personal = active.filter(t => t.context === 'personal')
   const overdue = active.filter(t => t.due_date && new Date(t.due_date + 'T00:00:00') < new Date(new Date().toDateString())).length
+
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([
+    { role: 'assistant', content: 'Hola. Haz clic en cualquier tarea para abrir una conversacion conmigo, o preguntame algo general sobre tu carga de trabajo.' }
+  ])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const msgsEndRef = useRef<HTMLDivElement>(null)
+
+  function buildSystem() {
+    const summary = active.map(t =>
+      `- [${t.priority}] ${t.title} (${ctxLabel(t.context)}${t.due_date ? `, vence ${t.due_date}` : ''}${t.status ? `, ${t.status}` : ''})`
+    ).join('\n')
+    return `Eres el agente de trabajo personal del usuario. Tienes acceso a todas sus tareas activas.
+
+TAREAS ACTIVAS (${active.length}):
+${summary}
+
+Contextos: Banco Falabella (${banco.length}), Agencia (${agencia.length}), Personal (${personal.length})
+Vencidas: ${overdue}
+
+REGLAS:
+- Espanol, directo y practico
+- Respuestas concisas
+- Prioriza por urgencia real, no solo por la etiqueta
+- Si pide email, tono humano y profesional`
+  }
+
+  async function send(text?: string) {
+    const msg = text || input.trim()
+    if (!msg || loading) return
+    setMessages(prev => [...prev, { role: 'user', content: msg }])
+    setInput('')
+    setLoading(true)
+    try {
+      const history = [...messages, { role: 'user', content: msg }]
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-12)
+      const reply = await callClaude(history, buildSystem())
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+    } catch {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'Error de conexion. Verifica que ANTHROPIC_API_KEY este configurada.' }])
+    } finally {
+      setLoading(false)
+      msgsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
 
   return (
     <div className="animate-fade-in p-5">
@@ -62,26 +117,52 @@ export function Dashboard() {
             </div>
           </div>
           <div className="p-2.5 border-b border-black/7 flex gap-1.5 flex-wrap">
-            {['Priorizar dia', 'Email seguimiento', 'Resumen', 'Tiempo total'].map(chip => (
-              <span key={chip} className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2 py-1 rounded-full cursor-pointer hover:border-claude/20 hover:text-claude hover:bg-claude/7 font-mono transition-all">
+            {Object.keys(QUICK_PROMPTS).map(chip => (
+              <span
+                key={chip}
+                onClick={() => send(QUICK_PROMPTS[chip])}
+                className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2 py-1 rounded-full cursor-pointer hover:border-claude/20 hover:text-claude hover:bg-claude/7 font-mono transition-all"
+              >
                 {chip}
               </span>
             ))}
           </div>
           <div className="h-[230px] overflow-y-auto p-3 flex flex-col gap-2">
-            <div className="max-w-[90%] self-start">
-              <div className="px-3 py-2 rounded-[10px] text-[13px] leading-relaxed bg-bg3 border border-black/7 rounded-bl-sm">
-                Hola. Haz clic en cualquier tarea para abrir una conversacion conmigo sobre ese trabajo especifico. Supabase conectado ✓
+            {messages.map((m, i) => (
+              <div key={i} className={`max-w-[90%] ${m.role === 'user' ? 'self-end' : 'self-start'}`}>
+                <div className={`px-3 py-2 rounded-[10px] text-[13px] leading-relaxed whitespace-pre-wrap ${
+                  m.role === 'user'
+                    ? 'bg-claude text-white rounded-br-sm'
+                    : 'bg-bg3 border border-black/7 rounded-bl-sm'
+                }`}>
+                  {m.content}
+                </div>
               </div>
-            </div>
+            ))}
+            {loading && (
+              <div className="flex items-center gap-1 px-3 py-2 bg-bg3 border border-black/7 rounded-[10px] w-fit self-start">
+                <div className="dot w-[5px] h-[5px] bg-gray-400 rounded-full" />
+                <div className="dot w-[5px] h-[5px] bg-gray-400 rounded-full" />
+                <div className="dot w-[5px] h-[5px] bg-gray-400 rounded-full" />
+              </div>
+            )}
+            <div ref={msgsEndRef} />
           </div>
           <div className="p-2.5 border-t border-black/7 flex gap-2 bg-bg3">
             <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
               className="flex-1 bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] resize-none outline-none focus:border-claude/20"
               placeholder="Pregunta o pide algo..."
               rows={1}
+              disabled={loading}
             />
-            <button className="bg-claude text-white px-3.5 py-2 rounded-lg text-[13px] hover:bg-purple-700 transition-colors cursor-pointer">
+            <button
+              onClick={() => send()}
+              disabled={loading}
+              className="bg-claude text-white px-3.5 py-2 rounded-lg text-[13px] hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               ↑
             </button>
           </div>
