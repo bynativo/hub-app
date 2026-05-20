@@ -210,6 +210,45 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ---
 
+## Decisiones tecnicas
+
+- **Flex layout para app shell** — el grid original (`grid-cols-[230px_1fr] grid-rows-[52px_1fr]`) causaba problemas de asignacion de celdas. Cambiado a flex column (topbar) + flex row (sidebar + main) que es mas predecible.
+- **Zustand: selectores individuales** — usar `useStore(s => ({ a: s.a, b: s.b }))` crea un objeto nuevo cada render y causa loop infinito (React error #185). Siempre usar `useStore(s => s.field)` por separado.
+- **Tailwind v4 con `@theme`** — colores custom (bg, bg2, bg3, claude, banco, agencia, etc.) definidos en `@theme` de `index.css`. Soporta opacity modifiers (`bg-claude/7`, `border-black/13`).
+- **Claude model ID** — la API key del proyecto tiene acceso a `claude-sonnet-4-6`. Otros model IDs como `claude-sonnet-4-20250514` o `claude-3-5-sonnet-20241022` no estan disponibles para esta key.
+- **Serverless proxy** — `/api/chat` (Vercel function) hace proxy a Anthropic API para mantener la key server-side. No se usa SDK, es fetch directo.
+- **Supabase anon key publica** — hardcodeada en frontend, protegida por RLS. Pendiente migrar a Supabase Auth para RLS basado en `auth.uid()`.
+
+---
+
+## Changelog
+
+### 2026-05-20 — Sesion 1: Reescritura completa
+
+**Hecho:**
+1. Creado proyecto Vite + React + TS + Tailwind v4 desde cero
+2. Leido `index.html` original (2266 lineas) como referencia de funcionalidad
+3. Consultado schema Supabase via MCP (11 tablas, relaciones, datos reales)
+4. Construidos 15 componentes organizados en 5 modulos (layout, dashboard, tasks, presentations, grilla)
+5. Zustand store con carga paralela de 5 tablas desde Supabase
+6. Deploy a Vercel con auto-deploy desde GitHub
+7. Fix de layout (grid → flex) y loop infinito de zustand
+8. Integrado Claude API real via serverless function (`/api/chat`)
+9. Chat funcional en Dashboard (contexto global de tareas) y TaskDetail (contexto de tarea individual)
+10. Quick prompts, typing indicator, historial de 12 mensajes
+11. README completo con documentacion del proyecto
+
+**Commits:**
+- `Initial hub-app: Vite + React + TypeScript + Tailwind`
+- `Fix layout: flex layout + zustand selector infinite loop`
+- `Add Claude API integration via Vercel serverless function`
+- `Fix Claude model ID to claude-sonnet-4-6`
+- `Add comprehensive README with stack, DB schema, features and roadmap`
+
+**Verificado con Playwright:** screenshots automaticos confirmaron layout correcto y chat con Claude funcionando en produccion.
+
+---
+
 ## Origen
 
 Reescritura completa de un `index.html` monolitico de 200KB (HTML+CSS+JS en un solo archivo) que estaba roto en produccion por conflictos de JavaScript. El archivo original sirvio como referencia de funcionalidad y datos, no de codigo.
