@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: 'Fraunces', serif;
+  --font-sans: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --color-bg: #f5f4f0;
+  --color-bg2: #ffffff;
+  --color-bg3: #f0eeea;
+  --color-bg4: #e8e5e0;
+  --color-bg5: #dedad4;
+  --color-banco: #2563eb;
+  --color-agencia: #0d9488;
+  --color-personal: #d97706;
+  --color-claude: #7c3aed;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-warn: #d97706;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-gray-900 font-sans text-sm antialiased;
+    margin: 0;
+  }
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-bg4); border-radius: 2px; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.18s ease; }
+
+@keyframes pulse-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
+  30% { opacity: 1; transform: scale(1.2); }
+}
+.dot { animation: pulse-dot 1.2s infinite; }
+.dot:nth-child(2) { animation-delay: 0.2s; }
+.dot:nth-child(3) { animation-delay: 0.4s; }

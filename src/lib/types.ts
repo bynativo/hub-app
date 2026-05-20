@@ -1,0 +1,158 @@
+export interface Client {
+  id: number
+  name: string
+  email: string | null
+  context: string
+  color: string | null
+  active: boolean
+  created_at: string
+}
+
+export interface Project {
+  id: number
+  name: string
+  context: string
+  client_id: number | null
+  type: string | null
+  description: string | null
+  due_date: string | null
+  email: string | null
+  color: string | null
+  created_at: string
+  presentation_url: string | null
+  presentation_type: string | null
+  is_content_grid: boolean
+  clients?: { name: string } | null
+}
+
+export interface Task {
+  id: number
+  title: string
+  context: string
+  client_id: number | null
+  project_id: number | null
+  priority: string
+  status: string
+  task_type: string
+  origin: string
+  due_date: string | null
+  time_minutes: number
+  notes: string | null
+  done: boolean
+  cats: string[]
+  draft_to: string | null
+  draft_cc: string | null
+  draft_subject: string | null
+  draft_body: string | null
+  draft_needs_review: boolean
+  draft_sent: boolean
+  plan: string[]
+  meeting_title: string | null
+  meeting_duration: string | null
+  meeting_agenda: string[]
+  created_at: string
+  updated_at: string
+  slide_idea: string | null
+  slide_number: number | null
+  content_format: string | null
+  content_platform: string | null
+  delegated_to: string | null
+  last_followup_at: string | null
+  followup_notes: string | null
+  projects?: { name: string; color: string | null } | null
+  clients?: { name: string; email: string | null } | null
+}
+
+export interface Subtask {
+  id: number
+  task_id: number
+  title: string
+  done: boolean
+  position: number
+  created_at: string
+}
+
+export interface Thread {
+  id: number
+  task_id: number
+  from_name: string | null
+  from_email: string | null
+  subject: string | null
+  body: string | null
+  received_at: string | null
+  created_at: string
+}
+
+export interface Presentation {
+  id: number
+  slug: string
+  title: string
+  subtitle: string | null
+  context: string
+  client_id: number | null
+  project_id: number | null
+  kv_style: string | null
+  kv_color: string
+  month_label: string | null
+  share_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Slide {
+  id: number
+  presentation_id: number
+  position: number
+  title: string
+  campana: string | null
+  objetivo: string | null
+  idea_descripcion: string | null
+  problema: string | null
+  solucion: string | null
+  insight: string | null
+  tipo_contenido: string | null
+  canales: string[] | null
+  perfil_rostro: string | null
+  equipo: string | null
+  responsable: string | null
+  fecha_filmacion: string | null
+  fecha_validacion: string | null
+  fecha_publicacion: string | null
+  status: string | null
+  link_guion: string | null
+  link_referencia: string | null
+  contenido_url_interno: string | null
+  contenido_url_externo: string | null
+  contenido_embed_type: string | null
+  task_id: number | null
+  client_variants: unknown[]
+  created_at: string
+  updated_at: string
+  status_prod: string
+  status_cm: string
+  plataformas: string[]
+  tipo_pieza: string
+  is_aprobada: boolean
+  grilla_project_id: number | null
+  grilla_date: string | null
+  grilla_slot_confirmed: boolean
+  campana_nombre: string | null
+  producto: string | null
+  presentations?: Presentation | null
+}
+
+export interface Recurrente {
+  id: number
+  title: string
+  context: string
+  client_id: number | null
+  cats: string[]
+  assign: string | null
+  freq: string
+  day_of_month: string
+  time_minutes: number
+  priority: string
+  active: boolean
+  created_at: string
+  clients?: { name: string } | null
+}
