@@ -1,7 +1,7 @@
 import { getTodayLabel } from '../../lib/helpers'
 import { useStore } from '../../lib/store'
 
-export function Topbar() {
+export function Topbar({ onCapture, onNotes }: { onCapture: () => void; onNotes?: () => void }) {
   const setView = useStore(s => s.setView)
 
   return (
@@ -14,10 +14,15 @@ export function Topbar() {
         {getTodayLabel()}
       </div>
       <div className="flex-1" />
-      <button onClick={() => setView('recurrentes')} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-3 py-1 rounded-lg hover:bg-bg4 transition-colors">
+      <button onClick={() => setView('recurrentes')} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-3 py-1 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
         ↻ Recurrentes
       </button>
-      <button onClick={() => setView('dashboard')} className="text-xs bg-claude border-claude text-white px-3 py-1 rounded-lg hover:bg-purple-700 transition-colors">
+      {onNotes && (
+        <button onClick={onNotes} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-3 py-1 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
+          📝 Reunion / Nota
+        </button>
+      )}
+      <button onClick={onCapture} className="text-xs bg-claude border-claude text-white px-3 py-1 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
         + Capturar
       </button>
     </header>

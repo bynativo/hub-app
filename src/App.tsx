@@ -11,6 +11,8 @@ import { TaskDetail } from './components/tasks/TaskDetail'
 import { PresentationsView } from './components/presentations/PresentationsView'
 import { PresentationDetail } from './components/presentations/PresentationDetail'
 import { GrillaView } from './components/grilla/GrillaView'
+import { CaptureModal } from './components/modals/CaptureModal'
+import { NotesModal } from './components/modals/NotesModal'
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -18,6 +20,8 @@ export default function App() {
   const activeView = useStore(s => s.activeView)
   const detailOpen = useStore(s => s.detailOpen)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
+  const [captureOpen, setCaptureOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -50,7 +54,7 @@ export default function App() {
   return (
     <>
       <div className="h-screen flex flex-col overflow-hidden">
-        <Topbar />
+        <Topbar onCapture={() => setCaptureOpen(true)} onNotes={() => setNotesOpen(true)} />
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main
@@ -63,6 +67,9 @@ export default function App() {
       </div>
 
       {detailOpen && <TaskDetail />}
+
+      {captureOpen && <CaptureModal onClose={() => setCaptureOpen(false)} />}
+      {notesOpen && <NotesModal onClose={() => setNotesOpen(false)} />}
 
       {openPresId !== null && (
         <PresentationDetail presId={openPresId} onClose={() => setOpenPresId(null)} />
