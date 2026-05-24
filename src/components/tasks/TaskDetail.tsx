@@ -18,6 +18,10 @@ export function TaskDetail() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const msgsEndRef = useRef<HTMLDivElement>(null)
+  const [editingSub, setEditingSub] = useState<number | null>(null)
+  const [subTitle, setSubTitle] = useState('')
+  const [subNotes, setSubNotes] = useState('')
+  const [subLink, setSubLink] = useState('')
 
   useEffect(() => {
     if (!task) return
@@ -69,8 +73,13 @@ Status: ${task.status || 'Inbox'}
 
 Canales: Gmail (agencia + personal) = envio directo. Outlook (banco) = solo copia manual, cortafuegos corporativo.
 
+Subtareas actuales: ${subtasks.length ? subtasks.map(s => `${s.done ? '✓' : '○'} ${s.title}`).join(', ') : 'ninguna'}
+Otras tareas con fecha proxima: ${tasks.filter(t => !t.done && t.id !== task.id && t.due_date).map(t => `"${t.title}" vence ${t.due_date}`).slice(0, 5).join('; ') || 'ninguna'}
+
 REGLAS:
-- Ayuda a avanzar en ESTA tarea especifica
+- Se directo y practico. No teorico.
+- Cuando sugieras subtareas, se especifico y realista, no generico
+- Cuando el usuario diga que hara algo para una fecha, calcula si es posible considerando sus otras tareas con due_date proximo y adviertele si hay conflicto de tiempo
 - Emails: tono humano y profesional, que NADIE note la IA
 - Si aprueba un email, dile que vaya a la pestana "Email"
 - Si propones reunion, incluye agenda con 5-6 puntos concretos
@@ -272,16 +281,59 @@ REGLAS:
             <div className="mb-4">
               <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">Subtareas</div>
               {subtasks.length ? subtasks.map(s => (
-                <div key={s.id} className="flex items-center gap-2 py-1.5 border-b border-black/7 text-[13px]">
-                  <div
-                    onClick={() => toggleSubtask(s.id, s.done)}
-                    className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] transition-all ${
-                      s.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'
-                    }`}
-                  >
-                    {s.done && '✓'}
+                <div key={s.id}>
+                  <div className="flex items-center gap-2 py-1.5 border-b border-black/7 text-[13px]">
+                    <div
+                      onClick={(e) => { e.stopPropagation(); toggleSubtask(s.id, s.done) }}
+                      className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] transition-all ${
+                        s.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'
+                      }`}
+                    >
+                      {s.done && '✓'}
+                    </div>
+                    <span
+                      onClick={() => {
+                        if (editingSub === s.id) { setEditingSub(null); return }
+                        setEditingSub(s.id); setSubTitle(s.title); setSubNotes(''); setSubLink('')
+                      }}
+                      className={`cursor-pointer hover:text-claude transition-colors flex-1 ${s.done ? 'line-through text-gray-400' : ''}`}
+                    >
+                      {s.title}
+                    </span>
                   </div>
-                  <span className={s.done ? 'line-through text-gray-400' : ''}>{s.title}</span>
+                  {editingSub === s.id && (
+                    <div className="bg-bg3 border border-black/7 rounded-lg p-3 my-1.5 animate-fade-in">
+                      <div className="mb-2">
+                        <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Titulo</label>
+                        <input value={subTitle} onChange={e => setSubTitle(e.target.value)}
+                          className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
+                      </div>
+                      <div className="mb-2">
+                        <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Notas</label>
+                        <textarea value={subNotes} onChange={e => setSubNotes(e.target.value)} rows={2}
+                          className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none resize-y focus:border-claude/20"
+                          placeholder="Detalles de esta subtarea..." />
+                      </div>
+                      <div className="mb-2">
+                        <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Enlace</label>
+                        <input value={subLink} onChange={e => setSubLink(e.target.value)} type="url"
+                          className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 font-mono"
+                          placeholder="https://..." />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => setEditingSub(null)}
+                          className="text-[11px] text-gray-400 px-2 py-1 cursor-pointer hover:text-gray-900">Cancelar</button>
+                        <button onClick={async () => {
+                          await supabase.from('subtasks').update({ title: subTitle }).eq('id', s.id)
+                          setSubtasks(prev => prev.map(x => x.id === s.id ? { ...x, title: subTitle } : x))
+                          setEditingSub(null)
+                        }}
+                          className="text-[11px] bg-claude text-white px-3 py-1 rounded-md cursor-pointer hover:bg-purple-700 transition-colors">
+                          Guardar
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )) : (
                 <div className="text-xs text-gray-400">Sin subtareas</div>

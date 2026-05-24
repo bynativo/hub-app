@@ -28,6 +28,9 @@ export function Dashboard() {
   const agencia = active.filter(t => t.context === 'agencia')
   const personal = active.filter(t => t.context === 'personal')
   const overdue = active.filter(t => t.due_date && new Date(t.due_date + 'T00:00:00') < new Date(new Date().toDateString())).length
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayTasks = active.filter(t => t.due_date === todayStr || (t.due_date && new Date(t.due_date + 'T00:00:00') < new Date(new Date().toDateString())))
+  const todayIds = new Set(todayTasks.map(t => t.id))
 
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([
     { role: 'assistant', content: 'Hola. Haz clic en cualquier tarea para abrir una conversacion conmigo, o preguntame algo general sobre tu carga de trabajo.' }
@@ -91,20 +94,33 @@ REGLAS:
 
       <div className="grid grid-cols-[1fr_360px] gap-4 items-start">
         <div>
+          {/* Hoy */}
           <div className="flex items-center justify-between mb-2.5">
+            <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">📌 Hoy</div>
+          </div>
+          {todayTasks.length ? (
+            <TaskList tasks={todayTasks} />
+          ) : (
+            <div className="bg-bg2 border border-black/7 rounded-[10px] p-5 text-center shadow-sm mb-2">
+              <div className="text-[15px] mb-1">Sin tareas urgentes para hoy</div>
+              <div className="text-[12px] text-gray-400">Buen momento para avanzar con lo de esta semana</div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mb-2.5 mt-5">
             <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">🔴 Urgente</div>
           </div>
-          <TaskList tasks={active.filter(t => t.priority === 'alta')} emptyText="Sin urgentes" />
+          <TaskList tasks={active.filter(t => t.priority === 'alta' && !todayIds.has(t.id))} emptyText="Sin urgentes" />
 
           <div className="flex items-center justify-between mb-2.5 mt-5">
             <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">🟡 Esta semana</div>
           </div>
-          <TaskList tasks={active.filter(t => t.priority === 'media')} emptyText="Sin tareas esta semana" />
+          <TaskList tasks={active.filter(t => t.priority === 'media' && !todayIds.has(t.id))} emptyText="Sin tareas esta semana" />
 
           <div className="flex items-center justify-between mb-2.5 mt-5">
             <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">🟢 Proximamente</div>
           </div>
-          <TaskList tasks={active.filter(t => t.priority === 'baja')} emptyText="Sin tareas proximas" />
+          <TaskList tasks={active.filter(t => t.priority === 'baja' && !todayIds.has(t.id))} emptyText="Sin tareas proximas" />
         </div>
 
         {/* Claude Panel */}

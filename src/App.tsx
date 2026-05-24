@@ -12,7 +12,6 @@ import { PresentationsView } from './components/presentations/PresentationsView'
 import { PresentationDetail } from './components/presentations/PresentationDetail'
 import { GrillaView } from './components/grilla/GrillaView'
 import { CaptureModal } from './components/modals/CaptureModal'
-import { NotesModal } from './components/modals/NotesModal'
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -21,7 +20,6 @@ export default function App() {
   const detailOpen = useStore(s => s.detailOpen)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
   const [captureOpen, setCaptureOpen] = useState(false)
-  const [notesOpen, setNotesOpen] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -42,7 +40,7 @@ export default function App() {
       case 'banco': return <ContextView context="banco" />
       case 'agencia': return <ContextView context="agencia" />
       case 'personal': return <ContextView context="personal" />
-      case 'proyectos': return <ProjectsView />
+      case 'proyectos': return <ProjectsView onOpenPres={setOpenPresId} />
       case 'recurrentes': return <RecurrentesView />
       case 'seguimiento': return <SeguimientoView />
       case 'presentaciones': return <PresentationsView onOpen={setOpenPresId} />
@@ -54,7 +52,7 @@ export default function App() {
   return (
     <>
       <div className="h-screen flex flex-col overflow-hidden">
-        <Topbar onCapture={() => setCaptureOpen(true)} onNotes={() => setNotesOpen(true)} />
+        <Topbar onCapture={() => setCaptureOpen(true)} />
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main
@@ -69,7 +67,6 @@ export default function App() {
       {detailOpen && <TaskDetail />}
 
       {captureOpen && <CaptureModal onClose={() => setCaptureOpen(false)} />}
-      {notesOpen && <NotesModal onClose={() => setNotesOpen(false)} />}
 
       {openPresId !== null && (
         <PresentationDetail presId={openPresId} onClose={() => setOpenPresId(null)} />
