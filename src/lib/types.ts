@@ -69,6 +69,10 @@ export interface Subtask {
   title: string
   done: boolean
   position: number
+  status: string | null
+  due_date: string | null
+  notes: string | null
+  link_url: string | null
   created_at: string
 }
 

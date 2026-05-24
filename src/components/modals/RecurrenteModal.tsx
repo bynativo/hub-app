@@ -6,8 +6,11 @@ const DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
 
 export function RecurrenteModal({ onClose }: { onClose: () => void }) {
   const loadAll = useStore(s => s.loadAll)
+  const clients = useStore(s => s.clients)
   const [title, setTitle] = useState('')
   const [context, setContext] = useState('banco')
+  const [clientId, setClientId] = useState<number | null>(null)
+  const agClients = clients.filter(c => c.context === 'agencia')
   const [freq, setFreq] = useState('mensual')
   const [dayOfMonth, setDayOfMonth] = useState('1')
   const [weekday, setWeekday] = useState('lunes')
@@ -20,6 +23,7 @@ export function RecurrenteModal({ onClose }: { onClose: () => void }) {
     const { error } = await supabase.from('recurrentes').insert({
       title: title.trim(),
       context,
+      client_id: context === 'agencia' ? clientId : null,
       freq,
       day_of_month: freq === 'semanal' ? weekday : dayOfMonth,
       priority: 'media',
@@ -55,7 +59,7 @@ export function RecurrenteModal({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Contexto</label>
-            <select value={context} onChange={e => setContext(e.target.value)} className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }} className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
               <option value="banco">Banco Falabella</option>
               <option value="agencia">Agencia</option>
               <option value="personal">Personal</option>
@@ -70,6 +74,17 @@ export function RecurrenteModal({ onClose }: { onClose: () => void }) {
             </select>
           </div>
         </div>
+
+        {context === 'agencia' && (
+          <div className="mb-3">
+            <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Cliente</label>
+            <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+              <option value="">Agencia interna</option>
+              {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {freq === 'semanal' && (
           <div className="mb-3">

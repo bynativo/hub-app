@@ -20,6 +20,8 @@ export function TaskDetail() {
   const msgsEndRef = useRef<HTMLDivElement>(null)
   const [editingSub, setEditingSub] = useState<number | null>(null)
   const [subTitle, setSubTitle] = useState('')
+  const [subStatus, setSubStatus] = useState('pendiente')
+  const [subDueDate, setSubDueDate] = useState('')
   const [subNotes, setSubNotes] = useState('')
   const [subLink, setSubLink] = useState('')
 
@@ -58,9 +60,9 @@ export function TaskDetail() {
 
   function buildSystemPrompt() {
     if (!task) return ''
-    return `Eres el agente de trabajo personal del usuario, en conversacion sobre una tarea especifica.
+    return `Eres el asistente de trabajo de Felipe. Se directo, practico y conciso.
 
-TAREA: ${task.title}
+TAREA ACTUAL: ${task.title}
 Contexto: ${ctxLabel(task.context)}
 Cliente: ${task.clients?.name || 'ninguno'}
 Proyecto: ${task.projects?.name || 'ninguno'}
@@ -71,20 +73,21 @@ Plan actual: ${task.plan?.length ? task.plan.join(' → ') : 'sin plan aun'}
 Draft email: ${task.draft_body ? 'existe borrador' : 'no hay borrador'}
 Status: ${task.status || 'Inbox'}
 
+Subtareas actuales: ${subtasks.length ? subtasks.map(s => `${s.done ? '✓' : '○'} ${s.title}${s.due_date ? ' ('+s.due_date+')' : ''}`).join(', ') : 'ninguna'}
+
+Otras tareas de Felipe con fecha proxima:
+${tasks.filter(t => !t.done && t.id !== task.id && t.due_date).sort((a, b) => (a.due_date || '').localeCompare(b.due_date || '')).slice(0, 8).map(t => `- "${t.title}" vence ${t.due_date} [${t.priority}]`).join('\n') || '- ninguna'}
+
 Canales: Gmail (agencia + personal) = envio directo. Outlook (banco) = solo copia manual, cortafuegos corporativo.
 
-Subtareas actuales: ${subtasks.length ? subtasks.map(s => `${s.done ? '✓' : '○'} ${s.title}`).join(', ') : 'ninguna'}
-Otras tareas con fecha proxima: ${tasks.filter(t => !t.done && t.id !== task.id && t.due_date).map(t => `"${t.title}" vence ${t.due_date}`).slice(0, 5).join('; ') || 'ninguna'}
-
 REGLAS:
-- Se directo y practico. No teorico.
-- Cuando sugieras subtareas, se especifico y realista, no generico
-- Cuando el usuario diga que hara algo para una fecha, calcula si es posible considerando sus otras tareas con due_date proximo y adviertele si hay conflicto de tiempo
-- Emails: tono humano y profesional, que NADIE note la IA
-- Si aprueba un email, dile que vaya a la pestana "Email"
-- Si propones reunion, incluye agenda con 5-6 puntos concretos
-- Espanol, directo y practico
-- Respuestas concisas, no mas de 3 parrafos a menos que se pida detalle`
+- Se directo, practico y conciso. No teorico ni idealista.
+- Cuando sugieras subtareas, se especifico y realista. No crees tareas que suenen bien pero no aporten valor real.
+- Cuando el usuario diga que hara algo para una fecha, revisa sus otras tareas con due_date proximo y advierte si hay conflicto de carga.
+- Cuando el usuario pida crear subtareas, crealas directamente en Supabase via la API y asigna fechas tentativas distribuidas hasta la fecha limite de la tarea principal.
+- Emails: tono humano y profesional, que NADIE note la IA. Si aprueba un email, dile que vaya a la pestana "Email".
+- Si propones reunion, incluye agenda con 5-6 puntos concretos.
+- Espanol. Respuestas concisas, no mas de 3 parrafos a menos que se pida detalle.`
   }
 
   async function handleChatSend() {
@@ -294,7 +297,7 @@ REGLAS:
                     <span
                       onClick={() => {
                         if (editingSub === s.id) { setEditingSub(null); return }
-                        setEditingSub(s.id); setSubTitle(s.title); setSubNotes(''); setSubLink('')
+                        setEditingSub(s.id); setSubTitle(s.title); setSubStatus(s.status || 'pendiente'); setSubDueDate(s.due_date || ''); setSubNotes(s.notes || ''); setSubLink(s.link_url || '')
                       }}
                       className={`cursor-pointer hover:text-claude transition-colors flex-1 ${s.done ? 'line-through text-gray-400' : ''}`}
                     >
@@ -307,6 +310,22 @@ REGLAS:
                         <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Titulo</label>
                         <input value={subTitle} onChange={e => setSubTitle(e.target.value)}
                           className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div>
+                          <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Estado</label>
+                          <select value={subStatus} onChange={e => setSubStatus(e.target.value)}
+                            className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none cursor-pointer">
+                            <option value="pendiente">Pendiente</option>
+                            <option value="en progreso">En progreso</option>
+                            <option value="hecho">Hecho</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Fecha tentativa</label>
+                          <input type="date" value={subDueDate} onChange={e => setSubDueDate(e.target.value)}
+                            className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
+                        </div>
                       </div>
                       <div className="mb-2">
                         <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Notas</label>
@@ -324,8 +343,9 @@ REGLAS:
                         <button onClick={() => setEditingSub(null)}
                           className="text-[11px] text-gray-400 px-2 py-1 cursor-pointer hover:text-gray-900">Cancelar</button>
                         <button onClick={async () => {
-                          await supabase.from('subtasks').update({ title: subTitle }).eq('id', s.id)
-                          setSubtasks(prev => prev.map(x => x.id === s.id ? { ...x, title: subTitle } : x))
+                          const updates = { title: subTitle, status: subStatus, due_date: subDueDate || null, notes: subNotes || null, link_url: subLink || null, done: subStatus === 'hecho' }
+                          await supabase.from('subtasks').update(updates).eq('id', s.id)
+                          setSubtasks(prev => prev.map(x => x.id === s.id ? { ...x, ...updates } : x))
                           setEditingSub(null)
                         }}
                           className="text-[11px] bg-claude text-white px-3 py-1 rounded-md cursor-pointer hover:bg-purple-700 transition-colors">

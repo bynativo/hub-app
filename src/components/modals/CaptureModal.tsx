@@ -68,22 +68,30 @@ export function CaptureModal({ onClose }: { onClose: () => void }) {
     setExtracting(true)
     setSuggestions([])
     try {
-      const reply = await callClaude(
-        [{ role: 'user', content: text.trim() }],
-        `Eres un asistente que extrae tareas de notas de reuniones o instrucciones verbales.
-Del texto que recibas, identifica cada tarea o accion concreta mencionada.
-Responde SOLO con JSON valido, sin markdown ni explicacion:
-{"tasks":[{"title":"descripcion concreta de la tarea","context":"banco|agencia|personal","priority":"alta|media|baja"}]}
-Reglas:
-- Cada tarea debe ser accionable y concreta
-- Si no puedes determinar el contexto, usa "agencia"
-- Si no puedes determinar la prioridad, usa "media"
-- Minimo 1 tarea, maximo 10`
-      )
+      const res = await fetch('https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `Extrae las tareas concretas de estas notas. Para cada una devuelve: titulo corto y practico, contexto (banco/agencia/personal), prioridad (alta/media/baja). Solo JSON: {"tareas":[{"titulo":"...","contexto":"...","prioridad":"..."}]}\n\nNotas:\n${text.trim()}` }],
+          system: 'Extrae tareas practicas y especificas. No inventes, solo extrae lo que esta explicito.',
+        }),
+      })
+      let reply: string
+      if (res.ok) {
+        const data = await res.json()
+        reply = data.reply || data.content?.[0]?.text || JSON.stringify(data)
+      } else {
+        // Fallback to Vercel proxy
+        reply = await callClaude(
+          [{ role: 'user', content: `Extrae las tareas concretas de estas notas. Para cada una devuelve: titulo corto y practico, contexto (banco/agencia/personal), prioridad (alta/media/baja). Solo JSON: {"tareas":[{"titulo":"...","contexto":"...","prioridad":"..."}]}\n\nNotas:\n${text.trim()}` }],
+          'Extrae tareas practicas y especificas. No inventes, solo extrae lo que esta explicito.'
+        )
+      }
       const cleaned = reply.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(cleaned)
-      setSuggestions((parsed.tasks || []).map((t: { title: string; context?: string; priority?: string }) => ({
-        title: t.title, context: t.context || 'agencia', priority: t.priority || 'media', selected: true,
+      const items = parsed.tareas || parsed.tasks || []
+      setSuggestions(items.map((t: any) => ({
+        title: t.titulo || t.title, context: t.contexto || t.context || 'agencia', priority: t.prioridad || t.priority || 'media', selected: true,
       })))
       setExtracted(true)
     } catch {
@@ -295,6 +303,15 @@ Reglas:
           {tab === 'notas' && (
             <>
               <p className="text-[13px] text-gray-400 mb-3">Escribe lo que te pidieron y Claude extrae las tareas</p>
+              <div className="mb-3">
+                <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Contexto de la reunion</label>
+                <select value={context} onChange={e => setContext(e.target.value)}
+                  className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+                  <option value="banco">Banco Falabella</option>
+                  <option value="agencia">Agencia</option>
+                  <option value="personal">Personal</option>
+                </select>
+              </div>
               <textarea value={meetingNotes} onChange={e => setMeetingNotes(e.target.value)}
                 className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-3 text-[13px] outline-none resize-y focus:border-claude/20 focus:bg-bg2 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.07)] leading-relaxed mb-4"
                 placeholder="Escribe las notas de la reunion o lo que te pidieron de palabra..." rows={10} autoFocus />
