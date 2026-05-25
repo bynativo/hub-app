@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { CaptureModal } from '../modals/CaptureModal'
 import { RecurrenteModal } from '../modals/RecurrenteModal'
 
 interface ClientForm {
@@ -20,12 +19,12 @@ export function ClientesView() {
   const recurrentes = useStore(s => s.recurrentes)
   const tasks = useStore(s => s.tasks)
   const loadAll = useStore(s => s.loadAll)
+  const openCapture = useStore(s => s.openCapture)
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [form, setForm] = useState<ClientForm>(EMPTY)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [captureOpen, setCaptureOpen] = useState(false)
   const [recurrenteOpen, setRecurrenteOpen] = useState(false)
 
   const agClients = clients.filter(c => c.context === 'agencia')
@@ -114,7 +113,7 @@ export function ClientesView() {
             </div>
             <div className="flex gap-2 shrink-0">
               <button
-                onClick={() => setCaptureOpen(true)}
+                onClick={() => openCapture({ context: 'agencia', clientId: selected.id })}
                 className="text-xs bg-claude/7 border border-claude/20 text-claude px-3 py-1.5 rounded-lg hover:bg-claude/15 transition-colors cursor-pointer"
               >
                 + Crear tarea
@@ -212,9 +211,6 @@ export function ClientesView() {
         </div>
       )}
 
-      {captureOpen && selected && (
-        <CaptureModal onClose={() => setCaptureOpen(false)} preselectContext="agencia" preselectClientId={selected.id} />
-      )}
       {recurrenteOpen && selected && (
         <RecurrenteModal onClose={() => setRecurrenteOpen(false)} preselectContext="agencia" preselectClientId={selected.id} />
       )}
