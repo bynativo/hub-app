@@ -88,6 +88,26 @@ export interface Subtask {
   created_at: string
 }
 
+export interface Checklist {
+  id: number
+  task_id: number
+  title: string
+  done: boolean
+  position: number
+  created_at: string
+}
+
+export interface Contact {
+  id: number
+  name: string
+  role: string | null
+  company: string | null
+  context: string | null
+  origin: string | null
+  email: string | null
+  created_at: string
+}
+
 export interface Thread {
   id: number
   task_id: number

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from './supabase'
 import { WAITING_STATES } from './constants'
-import type { Task, Project, Client, Recurrente, Presentation } from './types'
+import type { Task, Project, Client, Recurrente, Presentation, Contact } from './types'
 
 interface AppState {
   tasks: Task[]
@@ -9,6 +9,7 @@ interface AppState {
   clients: Client[]
   recurrentes: Recurrente[]
   presentations: Presentation[]
+  contacts: Contact[]
   loading: boolean
   activeView: string
   activeClientId: number | null
@@ -29,6 +30,7 @@ interface AppState {
   closeCapture: () => void
   toggleTask: (id: number) => Promise<void>
   updateTaskStatus: (id: number, status: string) => Promise<void>
+  updateTask: (id: number, patch: Partial<Task>) => Promise<void>
   openFollowup: (id: number) => void
   closeFollowup: () => void
   setFollowup: (id: number, at: string | null, type: string) => Promise<void>
@@ -40,6 +42,7 @@ export const useStore = create<AppState>((set, get) => ({
   clients: [],
   recurrentes: [],
   presentations: [],
+  contacts: [],
   loading: true,
   activeView: 'hoy',
   activeClientId: null,
@@ -53,12 +56,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true })
-    const [tc, pc, cc, rc, prc] = await Promise.all([
+    const [tc, pc, cc, rc, prc, ct] = await Promise.all([
       supabase.from('tasks').select('*,projects(name,color),clients(name,email)').order('created_at', { ascending: false }),
       supabase.from('projects').select('*,clients(name)').order('created_at', { ascending: false }),
       supabase.from('clients').select('*').eq('active', true).order('name'),
       supabase.from('recurrentes').select('*,clients(name)').eq('active', true),
       supabase.from('presentations').select('*').order('created_at', { ascending: false }),
+      supabase.from('contacts').select('*').order('name'),
     ])
     set({
       tasks: tc.data || [],
@@ -66,6 +70,7 @@ export const useStore = create<AppState>((set, get) => ({
       clients: cc.data || [],
       recurrentes: rc.data || [],
       presentations: prc.data || [],
+      contacts: ct.data || [],
       loading: false,
     })
   },
@@ -98,6 +103,11 @@ export const useStore = create<AppState>((set, get) => ({
     if (WAITING_STATES.includes(status) && !wasWaiting) {
       set({ pendingFollowupTaskId: id })
     }
+  },
+
+  updateTask: async (id, patch) => {
+    await supabase.from('tasks').update(patch).eq('id', id)
+    set({ tasks: get().tasks.map(t => t.id === id ? { ...t, ...patch } : t) })
   },
 
   openFollowup: (id) => set({ pendingFollowupTaskId: id }),
