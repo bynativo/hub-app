@@ -13,12 +13,18 @@ interface AppState {
   activeClientId: number | null
   currentTaskId: number | null
   detailOpen: boolean
+  captureOpen: boolean
+  captureClientId: number | null
+  captureContext: string | null
+  captureProjectId: number | null
 
   loadAll: () => Promise<void>
   setView: (view: string) => void
   setActiveClient: (id: number | null) => void
   openDetail: (id: number) => void
   closeDetail: () => void
+  openCapture: (opts?: { context?: string; clientId?: number | null; projectId?: number | null }) => void
+  closeCapture: () => void
   toggleTask: (id: number) => Promise<void>
   updateTaskStatus: (id: number, status: string) => Promise<void>
 }
@@ -30,10 +36,14 @@ export const useStore = create<AppState>((set, get) => ({
   recurrentes: [],
   presentations: [],
   loading: true,
-  activeView: 'dashboard',
+  activeView: 'hoy',
   activeClientId: null,
   currentTaskId: null,
   detailOpen: false,
+  captureOpen: false,
+  captureClientId: null,
+  captureContext: null,
+  captureProjectId: null,
 
   loadAll: async () => {
     set({ loading: true })
@@ -59,6 +69,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   openDetail: (id) => set({ currentTaskId: id, detailOpen: true }),
   closeDetail: () => set({ detailOpen: false, currentTaskId: null }),
+
+  openCapture: (opts) => set({
+    captureOpen: true,
+    captureContext: opts?.context ?? null,
+    captureClientId: opts?.clientId ?? null,
+    captureProjectId: opts?.projectId ?? null,
+  }),
+  closeCapture: () => set({ captureOpen: false, captureContext: null, captureClientId: null, captureProjectId: null }),
 
   toggleTask: async (id) => {
     await supabase.from('tasks').update({ done: true }).eq('id', id)

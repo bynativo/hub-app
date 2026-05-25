@@ -6,21 +6,36 @@ import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
-import { ClientesView } from './components/dashboard/ClientesView'
 import { SeguimientoView } from './components/dashboard/SeguimientoView'
+import { ClientesView } from './components/dashboard/ClientesView'
 import { TaskDetail } from './components/tasks/TaskDetail'
 import { PresentationsView } from './components/presentations/PresentationsView'
 import { PresentationDetail } from './components/presentations/PresentationDetail'
 import { GrillaView } from './components/grilla/GrillaView'
 import { CaptureModal } from './components/modals/CaptureModal'
 
+function Placeholder({ title, note }: { title: string; note: string }) {
+  return (
+    <div className="animate-fade-in p-5">
+      <h1 className="font-serif text-[26px] font-light mb-0.5">{title}</h1>
+      <p className="text-gray-500 text-[13px] mb-6">{note}</p>
+      <div className="bg-bg2 border border-dashed border-black/13 rounded-xl p-10 text-center text-gray-400 text-[13px]">
+        En construcción · se implementa en un componente posterior del rediseño
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
   const loading = useStore(s => s.loading)
   const activeView = useStore(s => s.activeView)
   const detailOpen = useStore(s => s.detailOpen)
+  const captureOpen = useStore(s => s.captureOpen)
+  const captureContext = useStore(s => s.captureContext)
+  const captureClientId = useStore(s => s.captureClientId)
+  const closeCapture = useStore(s => s.closeCapture)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
-  const [captureOpen, setCaptureOpen] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -37,16 +52,24 @@ export default function App() {
 
   function renderView() {
     switch (activeView) {
-      case 'dashboard': return <Dashboard />
-      case 'banco': return <ContextView context="banco" />
-      case 'agencia': return <ContextView context="agencia" />
-      case 'personal': return <ContextView context="personal" />
-      case 'proyectos': return <ProjectsView onOpenPres={setOpenPresId} />
-      case 'recurrentes': return <RecurrentesView />
-      case 'clientes': return <ClientesView />
+      // General
+      case 'hoy': return <Dashboard />
+      case 'semana': return <Placeholder title="Esta semana" note="Tareas con vencimiento en los próximos 7 días" />
       case 'seguimiento': return <SeguimientoView />
-      case 'presentaciones': return <PresentationsView onOpen={setOpenPresId} />
-      case 'grilla': return <GrillaView />
+      case 'recurrentes': return <RecurrentesView />
+      case 'contactos': return <Placeholder title="Contactos" note="CRM global de contactos" />
+      // Banco Falabella
+      case 'banco-tareas': return <ContextView context="banco" />
+      case 'banco-proyectos': return <ProjectsView onOpenPres={setOpenPresId} />
+      case 'banco-presentaciones': return <PresentationsView onOpen={setOpenPresId} />
+      case 'banco-grilla': return <GrillaView />
+      // Agencia
+      case 'agencia-tareas': return <ContextView context="agencia" />
+      case 'agencia-clientes': return <ClientesView />
+      case 'agencia-equipo': return <Placeholder title="Equipo" note="Equipo de agencia (contactos internos)" />
+      case 'agencia-presentaciones': return <PresentationsView onOpen={setOpenPresId} />
+      // Personal
+      case 'personal-tareas': return <ContextView context="personal" />
       default: return <Dashboard />
     }
   }
@@ -54,7 +77,7 @@ export default function App() {
   return (
     <>
       <div className="h-screen flex flex-col overflow-hidden">
-        <Topbar onCapture={() => setCaptureOpen(true)} />
+        <Topbar />
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main
@@ -68,7 +91,13 @@ export default function App() {
 
       {detailOpen && <TaskDetail />}
 
-      {captureOpen && <CaptureModal onClose={() => setCaptureOpen(false)} />}
+      {captureOpen && (
+        <CaptureModal
+          onClose={closeCapture}
+          preselectContext={captureContext ?? undefined}
+          preselectClientId={captureClientId}
+        />
+      )}
 
       {openPresId !== null && (
         <PresentationDetail presId={openPresId} onClose={() => setOpenPresId(null)} />

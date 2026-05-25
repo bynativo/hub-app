@@ -11,6 +11,29 @@ export function fmtDue(due: string | null): { text: string; urgent: boolean } | 
   return { text: `${d.getDate()}/${d.getMonth() + 1}`, urgent: false }
 }
 
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function todayISO(): string {
+  return localISO(new Date())
+}
+
+export function tomorrowISO(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return localISO(d)
+}
+
+// Dias desde hoy hasta `due` (negativo = vencida). null si no hay fecha.
+export function daysUntil(due: string | null): number | null {
+  if (!due) return null
+  const d = new Date(due + 'T00:00:00')
+  const td = new Date()
+  td.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - td.getTime()) / 86400000)
+}
+
 export function getGreeting(): string {
   const h = new Date().getHours()
   if (h < 12) return 'Buenos dias'
