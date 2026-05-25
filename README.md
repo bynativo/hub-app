@@ -50,61 +50,53 @@ App de gestion de trabajo personal para contextos multiples: banco, agencia de p
 
 ---
 
-## Funcionalidades implementadas
+## Funcionalidades implementadas (rediseño v9)
 
-### Dashboard
-- Vista principal con tareas agrupadas por prioridad (urgente / esta semana / proximamente)
-- Stats cards: total activo, banco, agencia, personal
-- Panel de Claude con quick prompts y chat libre
+Reconstrucción completa en 11 componentes (rama `redesign`). Detalle por componente:
 
-### Navegacion por contexto
-- **Banco Falabella** — tareas bancarias (Outlook copia manual)
-- **Agencia** — tareas de agencia con sub-navegacion por cliente
-- **Personal** — proyectos propios
-- **Seguimiento** — tareas delegadas con alerta de follow-up
+### 1. Sidebar + layout
+- Botón **Capturar** destacado arriba (estado global en el store).
+- Grupos fijos: **General** (Hoy, Esta semana, Seguimiento, Recurrentes, Contactos), **Banco Falabella** (Tareas, Proyectos, Presentaciones, Grilla mayo), **Agencia** (Tareas, Clientes, Equipo, Presentaciones), **Personal** (Tareas). Contadores en vivo.
 
-### Vista Kanban (Dashboard)
-- Toggle Lista / Kanban en el dashboard
-- Columnas por status segun contexto activo (banco / agencia / personal), selector de contexto
-- Drag & drop nativo de tarjetas entre columnas; el status se persiste en Supabase (`updateTaskStatus`)
+### 2. Dashboard Hoy + toggle Lista/Kanban
+- Secciones **Hoy** (vence hoy), **Mañana** (vence mañana), **Seguimiento** (estados de espera).
+- Kanban universal de 4 columnas: **Por hacer / En curso / Esperando / Cerrado** (agrupan los estados de todos los contextos). Drag & drop nativo que setea un status apropiado al contexto y persiste en Supabase.
 
-### Clientes (modulo de agencia)
-- Vista "Clientes" en el sidebar con tarjetas (nombre, contacto/rol, color)
-- Panel de detalle con campos editables: nombre, contacto, rol, alcance del servicio, URL propuesta, carpeta Drive → guardados en `clients`
-- Seccion "Tareas recurrentes" del cliente + boton "+ Nueva recurrente" (pre-selecciona el cliente)
-- Boton "+ Crear tarea" que abre Capturar con el cliente pre-seleccionado
+### 3. Modal Capturar unificado (3 tabs)
+- **Tarea directa**: tipo independiente / subtarea de… (`parent_task_id`) / parte de proyecto (selecciona o crea proyecto); contexto + cliente, prioridad, origen, fecha, toggle "tarea de contenido", descripción.
+- **Reunión / Notas**: extracción con Claude que clasifica cada tarea (independiente/con_subtareas/proyecto/recurrente); aprobación por checkbox.
+- **Micrófono**: Web Speech API → mismo flujo de extracción.
 
-### Panel de detalle de tarea
-- **Tab Chat** — conversacion con Claude con contexto completo de la tarea (titulo, cliente, proyecto, prioridad, origen, notas, plan). Quick actions: plan de ataque, redactar email, ver riesgos, update equipo
-- **Tab Info** — categorias, plan de abordaje, subtareas (crear con "+ Nueva subtarea", editar titulo/estado/fecha tentativa/horas estimadas/notas/enlace, toggle done), hilos vinculados
-- **Tab Email** — visualizacion de borrador (para/cc/asunto/cuerpo) con badge de estado
-- **Tab Reunion** — titulo, duracion, agenda
-- **Tab Slide** — slide vinculada desde presentacion
-- Barra de estados por contexto (Inbox → Trabajando → Delegado → etc.)
+### 4. Chat con Claude en el dashboard
+- Botón flotante. Claude recibe la carga actual + clientes + proyectos, pide solo lo que falta, advierte sobrecarga y crea la tarea/recurrente vía un bloque de acción `crear` que el front ejecuta en Supabase.
 
-### Presentaciones
-- Listado con filtro por contexto (banco/agencia)
-- Vista de presentacion con filmstrip vertical (navegacion por flechas)
-- Documento de slide con header KV color, dual status, fechas, info, idea/insight
-- Panel de edicion: plataformas, tipo de contenido, estados, campos de texto, links
-- Aprobacion e integracion en grilla
+### 5. Estados por contexto + alarmas de seguimiento
+- Estados por contexto (`ESTADOS_FLOW`/`ESTADOS_PAUSA`). Al pasar a un estado "Esperando" aparece el modal de alarma (4h / mañana 9:00 / lunes 8:00 / fecha / sin) → guarda `followup_at` + `followup_type`.
+- Vista Seguimiento con acciones: redactar seguimiento con Claude, marcar respondido, posponer.
 
-### Slides — Dual status
-- **Produccion** (🎬): Pendiente → En grabacion → En edicion → Entregado a CM
-- **CM/Calendario RRSS** (📅): Pendiente de contenido → Listo para programar → Programado → Publicado
+### 6. Vista de tarea con tabs
+- **Info** (editable, status por contexto que dispara la alarma, "delegado a" desde contactos), **Subtareas** (`parent_task_id`, expandibles), **Checklist** (tabla `checklists`), **Chat** (crea subtareas con fechas distribuidas), **Email** (borrador con Claude), **Slide** (si `task_type=contenido`).
 
-### Grilla / Calendario de publicaciones
-- Timeline agrupado por fecha
-- Filtro por contexto (banco/agencia) y plataforma (IG Feed, IG Story, IG Reels, TikTok, YouTube, YT Shorts, Facebook, X, Pauta)
-- Deteccion de superposicion: badge de conflicto cuando hay multiples piezas en la misma plataforma el mismo dia
-- Metadata por pieza: tipo, campana, producto, equipo, status prod/cm
+### 7. Proyectos
+- Vista por contexto con progreso (tareas hechas/total), estado, cliente. Detalle con tareas vinculadas + "Nueva tarea" preseleccionada. "+ Nuevo proyecto" (`projects.status`).
 
-### Chat con Claude (API real)
-- Serverless function en `/api/chat` (Vercel) → Anthropic API
-- API key server-side, nunca expuesta al frontend
-- System prompt dinamico con contexto completo de tareas o tarea individual
-- Typing indicator animado
-- Historial de conversacion (ultimos 12 mensajes)
+### 8. Clientes (agencia)
+- Tarjetas + detalle editable (contacto/rol, alcance, propuesta, Drive). Recurrentes vinculadas + "Nueva recurrente" y "Crear tarea" preseleccionando el cliente.
+
+### 9. CRM Contactos
+- Grilla global con badge de contexto (Banco/Agencia/Personal/Red) y origen; buscador; "+ Nuevo contacto" (tabla `contacts`). "Equipo" = misma vista filtrada a agencia.
+
+### 10. Recurrentes globales
+- Lista de todas las recurrentes con punto de color por contexto + modal de creación.
+
+### 11. Slide de contenido
+- Header: nº, título KV, 2 status (🎬 Producción / 📅 CM), equipo, **redes**, **formato** (con `colab_nombre` si Colab).
+- **3 fechas** (Grabación / Entrega / Publicación) con reglas (≥24h) y alertas; fecha por red (`fechas_por_plataforma`).
+- **Body 2 col**: Info + Visual (referencia y contenido final 9:16 con preview de feed).
+- **Guión** con versiones (si `tiene_guion`); **3 aprobaciones secuenciales** (popup con nombre, Aprobar/Rechazar/Enviar feedback → crea tarea de revisión); **links** copiables (presentación / slide / aprobación).
+
+### Chat con Claude (infra)
+- Front usa `callClaudeProxy`: edge function de Supabase primero, fallback a `/api/chat` (Vercel, con la API key). Ver pendiente del proxy más abajo.
 
 ---
 
@@ -160,22 +152,30 @@ hub-app/
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── Topbar.tsx
-│   │   │   └── Sidebar.tsx
+│   │   │   └── Sidebar.tsx        # nueva estructura de grupos + Capturar
 │   │   ├── dashboard/
-│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Dashboard.tsx      # Hoy/Mañana/Seguimiento + toggle
+│   │   │   ├── KanbanBoard.tsx    # 4 columnas universales + DnD
+│   │   │   ├── ClaudeChat.tsx     # chat flotante que crea en Supabase
 │   │   │   ├── ContextView.tsx
 │   │   │   ├── ProjectsView.tsx
 │   │   │   ├── RecurrentesView.tsx
 │   │   │   ├── ClientesView.tsx
-│   │   │   ├── KanbanBoard.tsx
+│   │   │   ├── ContactsView.tsx   # CRM / Equipo
 │   │   │   └── SeguimientoView.tsx
 │   │   ├── tasks/
 │   │   │   ├── TaskItem.tsx
 │   │   │   ├── TaskList.tsx
-│   │   │   └── TaskDetail.tsx
+│   │   │   └── TaskDetail.tsx     # tabs Info/Subtareas/Checklist/Chat/Email/Slide
+│   │   ├── modals/
+│   │   │   ├── CaptureModal.tsx   # 3 tabs con jerarquía
+│   │   │   ├── FollowupModal.tsx  # alarma de seguimiento
+│   │   │   ├── RecurrenteModal.tsx
+│   │   │   ├── NewProjectModal.tsx
+│   │   │   └── NewContactModal.tsx
 │   │   ├── presentations/
 │   │   │   ├── PresentationsView.tsx
-│   │   │   └── PresentationDetail.tsx
+│   │   │   └── PresentationDetail.tsx  # editor de slide completo (11a/b/c)
 │   │   └── grilla/
 │   │       └── GrillaView.tsx
 │   ├── App.tsx
@@ -231,11 +231,26 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **Claude model ID** — la API key del proyecto tiene acceso a `claude-sonnet-4-6`. Otros model IDs como `claude-sonnet-4-20250514` o `claude-3-5-sonnet-20241022` no estan disponibles para esta key.
 - **Serverless proxy** — `/api/chat` (Vercel function) hace proxy a Anthropic API para mantener la key server-side. No se usa SDK, es fetch directo.
 - **Supabase anon key publica** — hardcodeada en frontend, protegida por RLS. Pendiente migrar a Supabase Auth para RLS basado en `auth.uid()`.
-- **Estados agencia con acentos** — los datos reales en `tasks.status` usan `En ejecución` y `En revisión (cliente)` (con tildes y parentesis). Los constantes `ESTADOS` / `STATUS_ICON` / `STATUS_COLOR` se alinearon a esos valores exactos (sesion 2); deben coincidir caracter por caracter con la DB o las tarjetas no aparecen en su columna Kanban ni reciben icono/color.
+- **Estados agencia con acentos** — los datos reales en `tasks.status` usan `En ejecución` y `En revisión cliente`. Los constantes `ESTADOS` / `STATUS_ICON` / `STATUS_COLOR` deben coincidir caracter por caracter con la DB o las tarjetas no aparecen en su columna Kanban ni reciben icono/color.
+- **claude-proxy de Supabase sin API key (PENDIENTE)** — el edge function `…/functions/v1/claude-proxy` responde 500 "API key not configured". En producción el chat/extracción funcionan por el fallback a Vercel `/api/chat`; en dev local no. Para resolver: setear `ANTHROPIC_API_KEY` como secret del edge function.
+- **PostgREST schema cache** — tras una migración DDL, el cache del REST puede quedar desactualizado unos segundos; se mitiga con `NOTIFY pgrst, 'reload schema'` al final de la migración.
+- **Subtareas vía `parent_task_id`** — las subtareas son tareas completas auto-referenciadas; la tabla legacy `subtasks` quedó sin uso en el UI del rediseño. Checklist usa la tabla `checklists` (columna `title`).
 
 ---
 
 ## Changelog
+
+### 2026-05-25 — Sesion 3: Rediseño completo (v9)
+
+Reconstrucción del hub en 11 componentes, en la rama `redesign` (prod intacta hasta el merge). Cada componente verificado en navegador (Playwright) y commiteado por separado.
+
+**Componentes:** 1) sidebar+layout · 2) dashboard Hoy/Mañana/Seguimiento + Kanban universal · 3) modal Capturar con jerarquía · 4) chat Claude que crea en Supabase · 5) estados por contexto + alarmas de seguimiento · 6) vista de tarea con 6 tabs · 7) proyectos · 8) clientes agencia · 9) CRM contactos + equipo · 10) recurrentes globales · 11) editor de slide (11a base/esquema, 11b fechas+body, 11c guión+aprobaciones+links).
+
+**Migraciones aplicadas a producción:** `tasks.parent_task_id`, `tasks.followup_at`/`followup_type`, `projects.status`, tabla `contacts`, RLS en `checklists`/`contacts`, y en `slides`: `redes`, `formato`, `colab_nombre`, `tiene_guion`, `fechas_por_plataforma`, `guion_versiones`, `aprobaciones`.
+
+**Tipos nuevos:** `Contact`, `Checklist`; campos nuevos en `Task` (`parent_task_id`, `followup_at`, `followup_type`), `Project` (`status`), `Slide` (redes/formato/colab/guion/aprobaciones/etc.), `Client`.
+
+**Decisiones:** rama `redesign` + auto-deploy solo desde main (prod no se rompe a medias); migraciones a prod a medida que cada componente las necesita; subtareas vía `parent_task_id`.
 
 ### 2026-05-24 — Sesion 2: Fechas, modulo Clientes y Kanban
 
