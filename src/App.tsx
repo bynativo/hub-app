@@ -62,7 +62,7 @@ export default function App() {
       case 'contactos': return <Placeholder title="Contactos" note="CRM global de contactos" />
       // Banco Falabella
       case 'banco-tareas': return <ContextView context="banco" />
-      case 'banco-proyectos': return <ProjectsView onOpenPres={setOpenPresId} />
+      case 'banco-proyectos': return <ProjectsView context="banco" onOpenPres={setOpenPresId} />
       case 'banco-presentaciones': return <PresentationsView onOpen={setOpenPresId} />
       case 'banco-grilla': return <GrillaView />
       // Agencia

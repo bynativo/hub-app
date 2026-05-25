@@ -24,6 +24,7 @@ export interface Project {
   due_date: string | null
   email: string | null
   color: string | null
+  status: string | null
   created_at: string
   presentation_url: string | null
   presentation_type: string | null
