@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { RecurrenteModal } from '../modals/RecurrenteModal'
+import { QuickClientModal } from '../modals/QuickClientModal'
 
 interface ClientForm {
   name: string
@@ -26,6 +27,7 @@ export function ClientesView() {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [recurrenteOpen, setRecurrenteOpen] = useState(false)
+  const [newClientOpen, setNewClientOpen] = useState(false)
 
   const agClients = clients.filter(c => c.context === 'agencia')
   const selected = clients.find(c => c.id === selectedId) || null
@@ -72,8 +74,16 @@ export function ClientesView() {
 
   return (
     <div className="animate-fade-in p-5">
-      <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#0d9488' }}>Clientes</h1>
-      <p className="text-gray-500 text-[13px] mb-5">{agClients.length} clientes de agencia</p>
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#0d9488' }}>Clientes</h1>
+          <p className="text-gray-500 text-[13px]">{agClients.length} clientes de agencia</p>
+        </div>
+        <button onClick={() => setNewClientOpen(true)}
+          className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
+          + Nuevo cliente
+        </button>
+      </div>
 
       <div className="grid grid-cols-2 gap-2.5">
         {agClients.map(c => {
@@ -89,7 +99,10 @@ export function ClientesView() {
             >
               <div className="flex items-center gap-2.5 mb-1.5">
                 <div className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
-                <div className="text-[15px] font-medium">{c.name}</div>
+                <div className="text-[15px] font-medium flex-1">{c.name}</div>
+                {c.tipo === 'prospecto'
+                  ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">prospecto</span>
+                  : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success">activo</span>}
               </div>
               <div className="text-[13px] text-gray-500 pl-[22px]">
                 {c.contact_name || <span className="text-gray-400 italic">Sin contacto</span>}
@@ -213,6 +226,9 @@ export function ClientesView() {
 
       {recurrenteOpen && selected && (
         <RecurrenteModal onClose={() => setRecurrenteOpen(false)} preselectContext="agencia" preselectClientId={selected.id} />
+      )}
+      {newClientOpen && (
+        <QuickClientModal onClose={() => setNewClientOpen(false)} onCreated={id => setSelectedId(id)} />
       )}
     </div>
   )

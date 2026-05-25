@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
+import { QuickClientModal } from './QuickClientModal'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CaptureTab = 'tarea' | 'notas' | 'micro'
@@ -79,6 +80,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [isContent, setIsContent] = useState(false)
   const [desc, setDesc] = useState('')
   const [saving, setSaving] = useState(false)
+  const [quickClientOpen, setQuickClientOpen] = useState(false)
 
   const activeTasks = tasks.filter(t => !t.done)
   const ctxProjects = projects.filter(p => p.context === context)
@@ -334,7 +336,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
               {context === 'agencia' && (
                 <div className="mb-3">
-                  <label className={labelCls}>Cliente</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Cliente</label>
+                    <button type="button" onClick={() => setQuickClientOpen(true)}
+                      className="text-[11px] text-claude hover:underline cursor-pointer">+ Crear cliente rápido</button>
+                  </div>
                   <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
                     <option value="">Agencia interna</option>
                     {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -462,6 +468,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
           )}
         </div>
       </div>
+
+      {quickClientOpen && (
+        <QuickClientModal onClose={() => setQuickClientOpen(false)} onCreated={id => { setContext('agencia'); setClientId(id) }} />
+      )}
     </div>
   )
 }

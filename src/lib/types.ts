@@ -12,6 +12,8 @@ export interface Client {
   proposal_url: string | null
   drive_folder_url: string | null
   is_internal: boolean | null
+  tipo: string | null
+  es_agencia_interna: boolean | null
 }
 
 export interface Project {
