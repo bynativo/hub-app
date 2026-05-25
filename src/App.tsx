@@ -8,6 +8,7 @@ import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
 import { SeguimientoView } from './components/dashboard/SeguimientoView'
 import { ClientesView } from './components/dashboard/ClientesView'
+import { ContactsView } from './components/dashboard/ContactsView'
 import { TaskDetail } from './components/tasks/TaskDetail'
 import { PresentationsView } from './components/presentations/PresentationsView'
 import { PresentationDetail } from './components/presentations/PresentationDetail'
@@ -59,7 +60,7 @@ export default function App() {
       case 'semana': return <Placeholder title="Esta semana" note="Tareas con vencimiento en los próximos 7 días" />
       case 'seguimiento': return <SeguimientoView />
       case 'recurrentes': return <RecurrentesView />
-      case 'contactos': return <Placeholder title="Contactos" note="CRM global de contactos" />
+      case 'contactos': return <ContactsView />
       // Banco Falabella
       case 'banco-tareas': return <ContextView context="banco" />
       case 'banco-proyectos': return <ProjectsView context="banco" onOpenPres={setOpenPresId} />
@@ -68,7 +69,7 @@ export default function App() {
       // Agencia
       case 'agencia-tareas': return <ContextView context="agencia" />
       case 'agencia-clientes': return <ClientesView />
-      case 'agencia-equipo': return <Placeholder title="Equipo" note="Equipo de agencia (contactos internos)" />
+      case 'agencia-equipo': return <ContactsView context="agencia" title="Equipo" />
       case 'agencia-presentaciones': return <PresentationsView onOpen={setOpenPresId} />
       // Personal
       case 'personal-tareas': return <ContextView context="personal" />
