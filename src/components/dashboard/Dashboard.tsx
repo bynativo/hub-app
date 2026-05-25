@@ -4,6 +4,7 @@ import { getGreeting, todayISO, tomorrowISO } from '../../lib/helpers'
 import { WAITING_STATES } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
+import { ClaudeChat } from './ClaudeChat'
 
 function SectionHeader({ icon, label, count }: { icon: string; label: string; count: number }) {
   return (
@@ -66,6 +67,8 @@ export function Dashboard() {
           <TaskList tasks={seguimiento} emptyText="Nada esperando respuesta" />
         </div>
       )}
+
+      <ClaudeChat />
     </div>
   )
 }
