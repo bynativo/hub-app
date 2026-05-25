@@ -4,12 +4,16 @@ import { useStore } from '../../lib/store'
 
 const DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
 
-export function RecurrenteModal({ onClose }: { onClose: () => void }) {
+export function RecurrenteModal({ onClose, preselectContext, preselectClientId }: {
+  onClose: () => void
+  preselectContext?: string
+  preselectClientId?: number | null
+}) {
   const loadAll = useStore(s => s.loadAll)
   const clients = useStore(s => s.clients)
   const [title, setTitle] = useState('')
-  const [context, setContext] = useState('banco')
-  const [clientId, setClientId] = useState<number | null>(null)
+  const [context, setContext] = useState(preselectContext ?? 'banco')
+  const [clientId, setClientId] = useState<number | null>(preselectClientId ?? null)
   const agClients = clients.filter(c => c.context === 'agencia')
   const [freq, setFreq] = useState('mensual')
   const [dayOfMonth, setDayOfMonth] = useState('1')

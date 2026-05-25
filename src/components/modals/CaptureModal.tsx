@@ -13,18 +13,23 @@ interface SuggestedTask {
   selected: boolean
 }
 
-export function CaptureModal({ onClose }: { onClose: () => void }) {
+export function CaptureModal({ onClose, preselectContext, preselectClientId }: {
+  onClose: () => void
+  preselectContext?: string
+  preselectClientId?: number | null
+}) {
   const loadAll = useStore(s => s.loadAll)
   const clients = useStore(s => s.clients)
   const [tab, setTab] = useState<CaptureTab>('tarea')
 
   // -- Tab Tarea --
   const [title, setTitle] = useState('')
-  const [context, setContext] = useState('banco')
+  const [context, setContext] = useState(preselectContext ?? 'banco')
   const [priority, setPriority] = useState('media')
   const [origin, setOrigin] = useState('propia')
-  const [clientId, setClientId] = useState<number | null>(null)
+  const [clientId, setClientId] = useState<number | null>(preselectClientId ?? null)
   const [isContent, setIsContent] = useState(false)
+  const [dueDate, setDueDate] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -40,6 +45,7 @@ export function CaptureModal({ onClose }: { onClose: () => void }) {
       origin,
       client_id: context === 'agencia' ? clientId : null,
       task_type: isContent ? 'contenido' : 'independiente',
+      due_date: dueDate || null,
       notes: notes.trim() || null,
       status: 'Inbox',
       done: false,
@@ -268,6 +274,12 @@ export function CaptureModal({ onClose }: { onClose: () => void }) {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="mb-3">
+                <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Fecha limite</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                  className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer focus:border-claude/20 focus:bg-bg2 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.07)]" />
               </div>
 
               {/* Toggle contenido */}

@@ -6,6 +6,7 @@ import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
+import { ClientesView } from './components/dashboard/ClientesView'
 import { SeguimientoView } from './components/dashboard/SeguimientoView'
 import { TaskDetail } from './components/tasks/TaskDetail'
 import { PresentationsView } from './components/presentations/PresentationsView'
@@ -42,6 +43,7 @@ export default function App() {
       case 'personal': return <ContextView context="personal" />
       case 'proyectos': return <ProjectsView onOpenPres={setOpenPresId} />
       case 'recurrentes': return <RecurrentesView />
+      case 'clientes': return <ClientesView />
       case 'seguimiento': return <SeguimientoView />
       case 'presentaciones': return <PresentationsView onOpen={setOpenPresId} />
       case 'grilla': return <GrillaView />

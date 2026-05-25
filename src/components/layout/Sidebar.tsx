@@ -42,6 +42,7 @@ export function Sidebar() {
       <div className="font-mono text-[10px] text-gray-400 tracking-wider uppercase px-3.5 pb-1 pt-2.5">Principal</div>
       <NavItem label="Dashboard" color="#a09d98" view="dashboard" count={active.length} />
       <NavItem label="Proyectos" color="#7c3aed" view="proyectos" count={projects.length} />
+      <NavItem label="Clientes" color="#0d9488" view="clientes" count={agClients.length} />
       <NavItem label="Recurrentes" color="#0d9488" view="recurrentes" />
 
       <div className="h-px bg-black/7 mx-2.5 my-1.5" />

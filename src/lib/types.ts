@@ -6,6 +6,12 @@ export interface Client {
   color: string | null
   active: boolean
   created_at: string
+  contact_name: string | null
+  contact_role: string | null
+  service_scope: string | null
+  proposal_url: string | null
+  drive_folder_url: string | null
+  is_internal: boolean | null
 }
 
 export interface Project {
@@ -59,6 +65,8 @@ export interface Task {
   delegated_to: string | null
   last_followup_at: string | null
   followup_notes: string | null
+  estimated_hours: number | null
+  kanban_order: number | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }
@@ -71,6 +79,7 @@ export interface Subtask {
   position: number
   status: string | null
   due_date: string | null
+  estimated_hours: number | null
   notes: string | null
   link_url: string | null
   created_at: string

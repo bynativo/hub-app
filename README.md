@@ -63,9 +63,20 @@ App de gestion de trabajo personal para contextos multiples: banco, agencia de p
 - **Personal** — proyectos propios
 - **Seguimiento** — tareas delegadas con alerta de follow-up
 
+### Vista Kanban (Dashboard)
+- Toggle Lista / Kanban en el dashboard
+- Columnas por status segun contexto activo (banco / agencia / personal), selector de contexto
+- Drag & drop nativo de tarjetas entre columnas; el status se persiste en Supabase (`updateTaskStatus`)
+
+### Clientes (modulo de agencia)
+- Vista "Clientes" en el sidebar con tarjetas (nombre, contacto/rol, color)
+- Panel de detalle con campos editables: nombre, contacto, rol, alcance del servicio, URL propuesta, carpeta Drive → guardados en `clients`
+- Seccion "Tareas recurrentes" del cliente + boton "+ Nueva recurrente" (pre-selecciona el cliente)
+- Boton "+ Crear tarea" que abre Capturar con el cliente pre-seleccionado
+
 ### Panel de detalle de tarea
 - **Tab Chat** — conversacion con Claude con contexto completo de la tarea (titulo, cliente, proyecto, prioridad, origen, notas, plan). Quick actions: plan de ataque, redactar email, ver riesgos, update equipo
-- **Tab Info** — categorias, plan de abordaje, subtareas (toggle done), hilos vinculados
+- **Tab Info** — categorias, plan de abordaje, subtareas (crear con "+ Nueva subtarea", editar titulo/estado/fecha tentativa/horas estimadas/notas/enlace, toggle done), hilos vinculados
 - **Tab Email** — visualizacion de borrador (para/cc/asunto/cuerpo) con badge de estado
 - **Tab Reunion** — titulo, duracion, agenda
 - **Tab Slide** — slide vinculada desde presentacion
@@ -120,7 +131,7 @@ App de gestion de trabajo personal para contextos multiples: banco, agencia de p
 
 ### Features de producto
 - [ ] Modal de captura de tarea (procesar con Claude → auto-categorizar + plan + borrador)
-- [ ] Vista Kanban (drag & drop por estado)
+- [x] Vista Kanban (drag & drop por estado) — implementado en Dashboard (sesion 2)
 - [ ] Modo foco (plan del dia generado por Claude)
 - [ ] Busqueda global en memoria (Supabase full-text)
 - [ ] Notas y reuniones (grabacion → transcripcion → extraccion de tareas)
@@ -155,6 +166,8 @@ hub-app/
 │   │   │   ├── ContextView.tsx
 │   │   │   ├── ProjectsView.tsx
 │   │   │   ├── RecurrentesView.tsx
+│   │   │   ├── ClientesView.tsx
+│   │   │   ├── KanbanBoard.tsx
 │   │   │   └── SeguimientoView.tsx
 │   │   ├── tasks/
 │   │   │   ├── TaskItem.tsx
@@ -218,10 +231,24 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **Claude model ID** — la API key del proyecto tiene acceso a `claude-sonnet-4-6`. Otros model IDs como `claude-sonnet-4-20250514` o `claude-3-5-sonnet-20241022` no estan disponibles para esta key.
 - **Serverless proxy** — `/api/chat` (Vercel function) hace proxy a Anthropic API para mantener la key server-side. No se usa SDK, es fetch directo.
 - **Supabase anon key publica** — hardcodeada en frontend, protegida por RLS. Pendiente migrar a Supabase Auth para RLS basado en `auth.uid()`.
+- **Estados agencia con acentos** — los datos reales en `tasks.status` usan `En ejecución` y `En revisión (cliente)` (con tildes y parentesis). Los constantes `ESTADOS` / `STATUS_ICON` / `STATUS_COLOR` se alinearon a esos valores exactos (sesion 2); deben coincidir caracter por caracter con la DB o las tarjetas no aparecen en su columna Kanban ni reciben icono/color.
 
 ---
 
 ## Changelog
+
+### 2026-05-24 — Sesion 2: Fechas, modulo Clientes y Kanban
+
+**Hecho:**
+1. **Fechas en tareas y subtareas** — date picker `due_date` en el modal Capturar (tarea); en el modal de subtarea (TaskDetail) `due_date` + nuevo campo `estimated_hours`, mas boton "+ Nueva subtarea". Migracion: `subtasks.estimated_hours numeric DEFAULT 1`.
+2. **Selector cliente en recurrentes** — verificado (ya existia): al elegir contexto Agencia aparece selector de cliente + "Agencia interna", guarda `client_id`. Se anadieron props `preselectContext` / `preselectClientId` al `RecurrenteModal` y `CaptureModal`.
+3. **Modulo de Clientes** — nueva vista `ClientesView` con tarjetas + panel de detalle editable (contacto, rol, alcance, URLs), seccion de recurrentes del cliente y botones "+ Nueva recurrente" / "+ Crear tarea" pre-seleccionando el cliente. Nuevo item "Clientes" en el sidebar.
+4. **Vista Kanban** — toggle Lista/Kanban en Dashboard, columnas por status del contexto, drag & drop nativo que persiste `status` en Supabase (`KanbanBoard`).
+5. **Fix** — alineados los constantes de estado agencia (`En ejecución`, `En revisión (cliente)`) con los valores reales de la DB.
+
+**Tipos:** `Subtask.estimated_hours`, `Task.estimated_hours` + `Task.kanban_order`, y campos de `Client` (`contact_name`, `contact_role`, `service_scope`, `proposal_url`, `drive_folder_url`, `is_internal`).
+
+**Verificado con Playwright:** capturas de cada punto (modal fecha, editor subtarea, modal recurrente con cliente, vista Clientes + detalle, Kanban banco/agencia) y prueba end-to-end de drag & drop (status persistido en Supabase y revertido).
 
 ### 2026-05-20 — Sesion 1: Reescritura completa
 

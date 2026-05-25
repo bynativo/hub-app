@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 import { useStore } from '../../lib/store'
-import { getGreeting, ctxLabel } from '../../lib/helpers'
+import { getGreeting, ctxLabel, ctxColor } from '../../lib/helpers'
 import { callClaude } from '../../lib/claude'
 import { TaskList } from '../tasks/TaskList'
+import { KanbanBoard } from './KanbanBoard'
 
 function StatCard({ label, value, color, borderColor }: { label: string; value: number; color?: string; borderColor?: string }) {
   return (
@@ -37,6 +38,8 @@ export function Dashboard() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [mode, setMode] = useState<'list' | 'kanban'>('list')
+  const [kanbanCtx, setKanbanCtx] = useState('banco')
   const msgsEndRef = useRef<HTMLDivElement>(null)
 
   function buildSystem() {
@@ -92,6 +95,42 @@ REGLAS:
         <StatCard label="Propios" value={personal.length} color="#d97706" borderColor="rgba(217,119,6,0.2)" />
       </div>
 
+      {/* Vista toggle */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
+          {(['list', 'kanban'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
+                mode === m ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {m === 'list' ? 'Lista' : 'Kanban'}
+            </button>
+          ))}
+        </div>
+        {mode === 'kanban' && (
+          <div className="flex gap-1.5">
+            {['banco', 'agencia', 'personal'].map(c => (
+              <button
+                key={c}
+                onClick={() => setKanbanCtx(c)}
+                className={`text-xs px-3 py-1 rounded-lg border transition-all cursor-pointer ${
+                  kanbanCtx === c ? 'font-medium' : 'border-black/7 bg-bg3 text-gray-400 hover:text-gray-600'
+                }`}
+                style={kanbanCtx === c ? { color: ctxColor(c), borderColor: ctxColor(c), background: ctxColor(c) + '12' } : {}}
+              >
+                {ctxLabel(c)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {mode === 'kanban' ? (
+        <KanbanBoard context={kanbanCtx} />
+      ) : (
       <div className="grid grid-cols-[1fr_360px] gap-4 items-start">
         <div>
           {/* Hoy */}
@@ -184,6 +223,7 @@ REGLAS:
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }

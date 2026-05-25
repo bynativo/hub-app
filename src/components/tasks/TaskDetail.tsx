@@ -22,6 +22,7 @@ export function TaskDetail() {
   const [subTitle, setSubTitle] = useState('')
   const [subStatus, setSubStatus] = useState('pendiente')
   const [subDueDate, setSubDueDate] = useState('')
+  const [subHours, setSubHours] = useState('')
   const [subNotes, setSubNotes] = useState('')
   const [subLink, setSubLink] = useState('')
 
@@ -56,6 +57,21 @@ export function TaskDetail() {
   async function toggleSubtask(id: number, done: boolean) {
     await supabase.from('subtasks').update({ done: !done }).eq('id', id)
     setSubtasks(prev => prev.map(s => s.id === id ? { ...s, done: !done } : s))
+  }
+
+  async function addSubtask() {
+    if (!task) return
+    const { data } = await supabase.from('subtasks').insert({
+      task_id: task.id,
+      title: 'Nueva subtarea',
+      status: 'pendiente',
+      position: subtasks.length,
+      done: false,
+    }).select().single()
+    if (!data) return
+    setSubtasks(prev => [...prev, data])
+    setEditingSub(data.id)
+    setSubTitle(data.title); setSubStatus('pendiente'); setSubDueDate(''); setSubHours(''); setSubNotes(''); setSubLink('')
   }
 
   function buildSystemPrompt() {
@@ -282,7 +298,13 @@ REGLAS:
 
             {/* Subtasks */}
             <div className="mb-4">
-              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">Subtareas</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Subtareas</div>
+                <button onClick={addSubtask}
+                  className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors">
+                  + Nueva subtarea
+                </button>
+              </div>
               {subtasks.length ? subtasks.map(s => (
                 <div key={s.id}>
                   <div className="flex items-center gap-2 py-1.5 border-b border-black/7 text-[13px]">
@@ -297,12 +319,22 @@ REGLAS:
                     <span
                       onClick={() => {
                         if (editingSub === s.id) { setEditingSub(null); return }
-                        setEditingSub(s.id); setSubTitle(s.title); setSubStatus(s.status || 'pendiente'); setSubDueDate(s.due_date || ''); setSubNotes(s.notes || ''); setSubLink(s.link_url || '')
+                        setEditingSub(s.id); setSubTitle(s.title); setSubStatus(s.status || 'pendiente'); setSubDueDate(s.due_date || ''); setSubHours(s.estimated_hours != null ? String(s.estimated_hours) : ''); setSubNotes(s.notes || ''); setSubLink(s.link_url || '')
                       }}
                       className={`cursor-pointer hover:text-claude transition-colors flex-1 ${s.done ? 'line-through text-gray-400' : ''}`}
                     >
                       {s.title}
                     </span>
+                    {s.due_date && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400 shrink-0">
+                        {s.due_date.slice(5).replace('-', '/')}
+                      </span>
+                    )}
+                    {s.estimated_hours != null && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400 shrink-0">
+                        {s.estimated_hours}h
+                      </span>
+                    )}
                   </div>
                   {editingSub === s.id && (
                     <div className="bg-bg3 border border-black/7 rounded-lg p-3 my-1.5 animate-fade-in">
@@ -311,7 +343,7 @@ REGLAS:
                         <input value={subTitle} onChange={e => setSubTitle(e.target.value)}
                           className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
                       </div>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="grid grid-cols-3 gap-2 mb-2">
                         <div>
                           <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Estado</label>
                           <select value={subStatus} onChange={e => setSubStatus(e.target.value)}
@@ -325,6 +357,12 @@ REGLAS:
                           <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Fecha tentativa</label>
                           <input type="date" value={subDueDate} onChange={e => setSubDueDate(e.target.value)}
                             className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Horas est.</label>
+                          <input type="number" min="0" step="0.5" value={subHours} onChange={e => setSubHours(e.target.value)}
+                            className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20"
+                            placeholder="1" />
                         </div>
                       </div>
                       <div className="mb-2">
@@ -343,7 +381,7 @@ REGLAS:
                         <button onClick={() => setEditingSub(null)}
                           className="text-[11px] text-gray-400 px-2 py-1 cursor-pointer hover:text-gray-900">Cancelar</button>
                         <button onClick={async () => {
-                          const updates = { title: subTitle, status: subStatus, due_date: subDueDate || null, notes: subNotes || null, link_url: subLink || null, done: subStatus === 'hecho' }
+                          const updates = { title: subTitle, status: subStatus, due_date: subDueDate || null, estimated_hours: subHours ? Number(subHours) : null, notes: subNotes || null, link_url: subLink || null, done: subStatus === 'hecho' }
                           await supabase.from('subtasks').update(updates).eq('id', s.id)
                           setSubtasks(prev => prev.map(x => x.id === s.id ? { ...x, ...updates } : x))
                           setEditingSub(null)

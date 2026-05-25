@@ -21,20 +21,20 @@ export const ORIGIN_LABELS: Record<string, string> = {
 
 export const ESTADOS: Record<string, string[]> = {
   banco: ['Inbox', 'Trabajando', 'Planificando', 'Delegado', 'Bloqueado'],
-  agencia: ['Inbox', 'Propuesta', 'En ejecucion', 'En revision cliente', 'Delegado', 'Cerrado'],
+  agencia: ['Inbox', 'Propuesta', 'En ejecución', 'En revisión (cliente)', 'Delegado', 'Cerrado'],
   personal: ['Inbox', 'Trabajando', 'En pausa', 'Delegado'],
 }
 
 export const STATUS_ICON: Record<string, string> = {
   Inbox: '○', Trabajando: '▶', Planificando: '◈', Delegado: '→',
-  Bloqueado: '✕', Propuesta: '◎', 'En ejecucion': '▶',
-  'En revision cliente': '⌛', Cerrado: '✓', 'En pausa': '‖',
+  Bloqueado: '✕', Propuesta: '◎', 'En ejecución': '▶',
+  'En revisión (cliente)': '⌛', Cerrado: '✓', 'En pausa': '‖',
 }
 
 export const STATUS_COLOR: Record<string, string> = {
   Inbox: '#6b7280', Trabajando: '#2563eb', Planificando: '#7c3aed',
   Delegado: '#d97706', Bloqueado: '#dc2626', Propuesta: '#7c3aed',
-  'En ejecucion': '#2563eb', 'En revision cliente': '#d97706',
+  'En ejecución': '#2563eb', 'En revisión (cliente)': '#d97706',
   Cerrado: '#16a34a', 'En pausa': '#6b7280',
 }
 
