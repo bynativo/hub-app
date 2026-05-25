@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS } from '../../lib/constants'
+import { addDaysISO } from '../../lib/helpers'
 import type { Slide } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
@@ -17,6 +18,42 @@ const CM_CSS: Record<string, string> = {
   'Listo para programar': 'bg-purple-600/10 text-purple-600 border-purple-600/20',
   Programado: 'bg-blue-600/10 text-blue-600 border-blue-600/20',
   Publicado: 'bg-green-700/15 text-green-700 border-green-700/30',
+}
+
+function isImageUrl(u?: string | null) {
+  return !!u && /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(u)
+}
+
+function VisualFrame({ label, url, feedRed }: { label: string; url?: string | null; feedRed?: string }) {
+  const redMeta = feedRed ? REDES.find(x => x.v === feedRed) : undefined
+  return (
+    <div className="flex-1 min-w-0">
+      <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">{label}</div>
+      <div className="rounded-lg overflow-hidden border border-black/10 bg-bg2 shadow-sm">
+        {feedRed && (
+          <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-black/7">
+            <div className="w-4 h-4 rounded-full" style={{ background: (redMeta?.color || '#333') }} />
+            <span className="text-[10px] font-medium">{redMeta?.label || feedRed}</span>
+          </div>
+        )}
+        <div className="aspect-[9/16] bg-bg4 flex items-center justify-center relative">
+          {isImageUrl(url) ? (
+            <img src={url!} alt={label} className="w-full h-full object-cover" />
+          ) : url ? (
+            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] text-claude px-2 text-center break-all hover:underline">Ver ↗</a>
+          ) : (
+            <span className="text-[10px] text-gray-400">Sin {label.toLowerCase()}</span>
+          )}
+        </div>
+        {feedRed && (
+          <div className="px-2 py-1.5">
+            <div className="h-1.5 bg-bg4 rounded-full w-3/4 mb-1" />
+            <div className="h-1.5 bg-bg4 rounded-full w-1/2" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function PresentationDetail({ presId, onClose }: { presId: number; onClose: () => void }) {
@@ -61,6 +98,29 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   const kv = pres.kv_color || '#16a34a'
   const slide = slides[activeIdx]
   const prodOpts = PROD_STATUS[pres.context] || PROD_STATUS.banco
+
+  // --- Reglas de fechas (11b) ---
+  const pub = slide?.fecha_publicacion || ''
+  const entrega = slide?.fecha_validacion || ''
+  const grab = slide?.fecha_filmacion || ''
+  const maxEntrega = pub ? addDaysISO(pub, -1) : ''       // entrega >=24h antes de pub
+  const maxGrab = entrega ? addDaysISO(entrega, -1) : ''  // grabación >=24h antes de entrega
+  const entregaBad = !!(pub && entrega && entrega > maxEntrega)
+  const grabBad = !!(entrega && grab && grab > maxGrab)
+  const platDates = (slide?.fechas_por_plataforma || {}) as Record<string, string>
+
+  async function setPub(v: string) {
+    if (!slide) return
+    const patch: Partial<Slide> = { fecha_publicacion: v || null }
+    if (v && !entrega) patch.fecha_validacion = addDaysISO(v, -1) // entrega auto = pub - 24h, editable
+    await updateRaw(slide.id, patch)
+  }
+  async function setPlatDate(red: string, v: string) {
+    if (!slide) return
+    const next = { ...platDates }
+    if (v) next[red] = v; else delete next[red]
+    await updateRaw(slide.id, { fechas_por_plataforma: next })
+  }
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -175,55 +235,68 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                 </div>
               </div>
 
-              {/* Dates */}
-              <div className="grid grid-cols-3 border-t border-black/7">
-                {[
-                  { label: '🎬 Filmacion', field: 'fecha_filmacion' as const },
-                  { label: 'Validacion', field: 'fecha_validacion' as const },
-                  { label: '📅 Publicacion CM', field: 'fecha_publicacion' as const },
-                ].map((d, i) => {
-                  const val = slide[d.field]
-                  const fmtDate = val ? new Date(val + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' }) : null
-                  return (
-                    <div key={d.field} className={`p-2.5 ${i < 2 ? 'border-r border-black/7' : ''}`}>
-                      <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-0.5">{d.label}</div>
-                      <div className={`text-[13px] font-medium ${fmtDate ? '' : 'text-gray-400 font-normal text-xs'}`}>
-                        {fmtDate || 'TBD'}
-                      </div>
+              {/* Dates bar (editable, con reglas) */}
+              <div className="border-t border-black/7">
+                <div className="grid grid-cols-3">
+                  <div className="p-2.5 border-r border-black/7">
+                    <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">🎬 Grabación</div>
+                    <input type="date" value={grab} max={maxGrab || undefined} onChange={e => updateRaw(slide.id, { fecha_filmacion: e.target.value || null })}
+                      className={`w-full bg-bg3 border rounded-md px-2 py-1 text-xs outline-none ${grabBad ? 'border-danger text-danger' : 'border-black/7'}`} />
+                    {grabBad && <div className="text-[10px] text-danger mt-1">Máx {maxGrab} (24h antes de entrega)</div>}
+                  </div>
+                  <div className="p-2.5 border-r border-black/7">
+                    <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">📤 Entrega a CM</div>
+                    <input type="date" value={entrega} max={maxEntrega || undefined} onChange={e => updateRaw(slide.id, { fecha_validacion: e.target.value || null })}
+                      className={`w-full bg-bg3 border rounded-md px-2 py-1 text-xs outline-none ${entregaBad ? 'border-danger text-danger' : 'border-black/7'}`} />
+                    {entregaBad && <div className="text-[10px] text-danger mt-1">Máx {maxEntrega} (24h antes de pub)</div>}
+                  </div>
+                  <div className="p-2.5">
+                    <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">📅 Publicación</div>
+                    <input type="date" value={pub} onChange={e => setPub(e.target.value)}
+                      className="w-full bg-bg3 border border-black/7 rounded-md px-2 py-1 text-xs outline-none" />
+                  </div>
+                </div>
+                {(slide.redes || []).length > 0 && (
+                  <div className="px-2.5 pb-2.5 pt-1 border-t border-black/7 bg-bg3/50">
+                    <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1.5">Fecha por red (opcional)</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(slide.redes || []).map(rv => {
+                        const meta = REDES.find(x => x.v === rv)
+                        return (
+                          <div key={rv} className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: (meta?.color || '#333') + '14', color: meta?.color || '#333' }}>{meta?.label || rv}</span>
+                            <input type="date" value={platDates[rv] || ''} onChange={e => setPlatDate(rv, e.target.value)}
+                              className="bg-bg2 border border-black/7 rounded-md px-1.5 py-0.5 text-[11px] outline-none" />
+                          </div>
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                )}
               </div>
 
-              {/* Body 2-col */}
+              {/* Body 2-col: Info + Visual */}
               <div className="grid grid-cols-2 border-t border-black/7">
                 {/* Info col */}
                 <div className="border-r border-black/7">
-                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg4">Informacion</div>
+                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg4">Información</div>
                   {[
-                    { k: 'Campana', v: slide.campana },
-                    { k: 'Tipo', v: (slide.tipo_contenido || '—').toUpperCase() },
-                    { k: 'Canales', v: (slide.canales || []).map(c => c.toUpperCase()).join(' / ') || '—' },
-                    { k: 'Perfil', v: slide.perfil_rostro || 'No aplica' },
-                    { k: 'Responsable', v: slide.responsable },
+                    { k: 'Campaña', v: (slide as Record<string, any>)['campaña'] || (slide as Record<string, any>)['campaña_nombre'] || '' },
+                    { k: 'Formato', v: slide.formato || '' },
+                    { k: 'Redes', v: (slide.redes || []).map(r => REDES.find(x => x.v === r)?.label || r).join(' · ') },
+                    { k: 'Responsable', v: slide.responsable || '' },
                   ].filter(r => r.v).map(row => (
-                    <div key={row.k} className="flex border-b border-black/7 last:border-0">
+                    <div key={row.k} className="flex border-b border-black/7">
                       <div className="text-[11px] text-gray-400 p-2 w-24 shrink-0 font-mono">{row.k}</div>
                       <div className="text-xs p-2 flex-1 leading-snug">{row.v}</div>
                     </div>
                   ))}
-                </div>
-                {/* Idea col */}
-                <div className="bg-bg3">
-                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg5">Idea</div>
                   <div className="p-3">
-                    {slide.idea_descripcion ? (
+                    {slide.idea_descripcion && (
                       <>
                         <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">Concepto</div>
                         <div className="text-xs text-gray-500 leading-relaxed">{slide.idea_descripcion}</div>
                       </>
-                    ) : (
-                      <div className="text-xs text-gray-400">Sin descripcion.</div>
                     )}
                     {slide.insight && (
                       <div className="bg-claude/7 border border-claude/20 rounded-lg p-2.5 mt-2.5 text-xs leading-relaxed">
@@ -231,6 +304,14 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                         {slide.insight}
                       </div>
                     )}
+                  </div>
+                </div>
+                {/* Visual col */}
+                <div className="bg-bg3">
+                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg5">Visual</div>
+                  <div className="p-3 flex gap-3">
+                    <VisualFrame label="Referencia" url={slide.link_referencia} />
+                    <VisualFrame label="Contenido final" url={slide.contenido_url_externo || slide.contenido_url_interno} feedRed={(slide.redes || [])[0]} />
                   </div>
                 </div>
               </div>
@@ -402,6 +483,20 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                     className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20"
                     placeholder="Solo si aporta al concepto"
                   />
+                </div>
+              </div>
+
+              <div className="p-3.5 border-b border-black/7">
+                <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Visual</div>
+                <div className="mb-2">
+                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">URL referencia (9:16)</span>
+                  <input defaultValue={slide.link_referencia || ''} onBlur={e => updateField(slide.id, 'link_referencia', e.target.value)}
+                    className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 font-mono" placeholder="https://… imagen o link" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">URL contenido final (9:16)</span>
+                  <input defaultValue={slide.contenido_url_externo || ''} onBlur={e => updateField(slide.id, 'contenido_url_externo', e.target.value)}
+                    className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 font-mono" placeholder="https://… imagen o link" />
                 </div>
               </div>
 

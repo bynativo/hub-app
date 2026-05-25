@@ -19,6 +19,13 @@ export function todayISO(): string {
   return localISO(new Date())
 }
 
+// Suma (o resta, con n negativo) días a una fecha ISO YYYY-MM-DD.
+export function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return localISO(d)
+}
+
 export function tomorrowISO(): string {
   const d = new Date()
   d.setDate(d.getDate() + 1)
