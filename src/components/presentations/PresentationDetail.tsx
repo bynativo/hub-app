@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
-import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS } from '../../lib/constants'
+import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS } from '../../lib/constants'
 import type { Slide } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
@@ -50,6 +50,11 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   async function updateField(slideId: number, field: string, value: string) {
     await supabase.from('slides').update({ [field]: value }).eq('id', slideId)
     setSlides(prev => prev.map(s => s.id === slideId ? { ...s, [field]: value } : s))
+  }
+
+  async function updateRaw(slideId: number, patch: Partial<Slide>) {
+    await supabase.from('slides').update(patch).eq('id', slideId)
+    setSlides(prev => prev.map(s => s.id === slideId ? { ...s, ...patch } : s))
   }
 
   if (!pres) return null
@@ -146,6 +151,27 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                       </span>
                     ))}
                   </div>
+                  {(slide.formato || (slide.redes && slide.redes.length > 0)) && (
+                    <div className="flex gap-1.5 items-center flex-wrap mt-1.5">
+                      {slide.formato && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-bg4 text-gray-600 border border-black/7">
+                          {slide.formato}{slide.formato === 'Colab' && slide.colab_nombre ? ` · ${slide.colab_nombre}` : ''}
+                        </span>
+                      )}
+                      {(slide.redes || []).map(rv => {
+                        const meta = REDES.find(x => x.v === rv)
+                        return (
+                          <span key={rv} className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                                style={{ background: (meta?.color || '#333') + '14', color: meta?.color || '#333' }}>
+                            {meta?.label || rv}
+                          </span>
+                        )
+                      })}
+                      {slide.tiene_guion && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-claude/10 text-claude">📝 con guión</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -233,6 +259,47 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
         <div className="overflow-y-auto bg-bg2">
           {slide && (
             <>
+              <div className="p-3.5 border-b border-black/7">
+                <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Redes y formato</div>
+                <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Redes</span>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {REDES.map(r => {
+                    const sel = (slide.redes || []).includes(r.v)
+                    return (
+                      <span key={r.v}
+                        onClick={() => {
+                          const next = sel ? (slide.redes || []).filter(x => x !== r.v) : [...(slide.redes || []), r.v]
+                          updateRaw(slide.id, { redes: next })
+                        }}
+                        className={`text-[11px] font-mono px-2.5 py-1 rounded-[5px] border cursor-pointer transition-all ${sel ? 'font-semibold' : 'border-black/7 text-gray-400 bg-bg3 hover:border-black/13'}`}
+                        style={sel ? { background: r.color + '20', borderColor: r.color, color: r.color } : {}}>
+                        {r.label}
+                      </span>
+                    )
+                  })}
+                </div>
+                <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Formato</span>
+                <select value={slide.formato || ''} onChange={e => updateRaw(slide.id, { formato: e.target.value || null })}
+                  className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none cursor-pointer">
+                  <option value="">Sin definir</option>
+                  {FORMATOS.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+                {slide.formato === 'Colab' && (
+                  <input defaultValue={slide.colab_nombre || ''} onBlur={e => updateRaw(slide.id, { colab_nombre: e.target.value || null })}
+                    placeholder="Nombre del colaborador" className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 mt-2" />
+                )}
+                {slide.formato === 'Carrusel' && (
+                  <div className="text-[10px] text-gray-400 mt-2">El slider de múltiples archivos del carrusel se gestiona en el body (paso 11b).</div>
+                )}
+                <div className="flex items-center gap-2 mt-3">
+                  <button onClick={() => updateRaw(slide.id, { tiene_guion: !slide.tiene_guion })}
+                    className={`w-9 h-5 rounded-full relative transition-colors ${slide.tiene_guion ? 'bg-claude' : 'bg-bg4'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${slide.tiene_guion ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                  <span className="text-xs">Tiene guión <span className="text-gray-400">(habilita aprobación de guión)</span></span>
+                </div>
+              </div>
+
               <div className="p-3.5 border-b border-black/7">
                 <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Plataformas y tipo</div>
                 <div className="flex flex-wrap gap-1.5 mb-3">

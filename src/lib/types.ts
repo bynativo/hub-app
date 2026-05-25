@@ -175,6 +175,11 @@ export interface Slide {
   grilla_slot_confirmed: boolean
   campana_nombre: string | null
   producto: string | null
+  redes: string[] | null
+  formato: string | null
+  colab_nombre: string | null
+  tiene_guion: boolean | null
+  fechas_por_plataforma: Record<string, string> | null
   presentations?: Presentation | null
 }
 

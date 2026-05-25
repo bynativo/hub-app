@@ -88,6 +88,17 @@ export const TIPO_META: Record<string, { label: string }> = {
   texto: { label: 'Texto' },
 }
 
+// Redes a nivel de slide (más simple que PLAT_META, que es por formato de plataforma)
+export const REDES: { v: string; label: string; color: string }[] = [
+  { v: 'ig', label: 'IG', color: '#e1306c' },
+  { v: 'tiktok', label: 'TikTok', color: '#111111' },
+  { v: 'youtube', label: 'YouTube', color: '#ff0000' },
+  { v: 'facebook', label: 'Facebook', color: '#1877f2' },
+  { v: 'x', label: 'X', color: '#111111' },
+]
+
+export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab']
+
 export const PROD_STATUS: Record<string, string[]> = {
   banco: ['Pendiente', 'En grabacion', 'En edicion', 'Entregado a CM'],
   agencia: ['Pendiente', 'En produccion', 'Entregado al cliente'],
