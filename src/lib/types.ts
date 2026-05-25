@@ -180,6 +180,8 @@ export interface Slide {
   colab_nombre: string | null
   tiene_guion: boolean | null
   fechas_por_plataforma: Record<string, string> | null
+  guion_versiones: { v: number; texto: string; fecha: string }[] | null
+  aprobaciones: Record<string, { estado: string; nombre: string; fecha: string; feedback?: string }> | null
   presentations?: Presentation | null
 }
 

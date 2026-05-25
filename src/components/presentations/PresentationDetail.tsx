@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS } from '../../lib/constants'
-import { addDaysISO } from '../../lib/helpers'
+import { addDaysISO, todayISO } from '../../lib/helpers'
 import type { Slide } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
@@ -58,10 +58,16 @@ function VisualFrame({ label, url, feedRed }: { label: string; url?: string | nu
 
 export function PresentationDetail({ presId, onClose }: { presId: number; onClose: () => void }) {
   const { presentations } = useStore()
+  const loadAll = useStore(s => s.loadAll)
   const pres = presentations.find(p => p.id === presId)
   const [slides, setSlides] = useState<Slide[]>([])
   const [activeIdx, setActiveIdx] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [approvalKey, setApprovalKey] = useState<string | null>(null)
+  const [approverName, setApproverName] = useState('')
+  const [feedbackMode, setFeedbackMode] = useState(false)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [newGuion, setNewGuion] = useState('')
 
   useEffect(() => {
     loadSlides()
@@ -121,6 +127,52 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     if (v) next[red] = v; else delete next[red]
     await updateRaw(slide.id, { fechas_por_plataforma: next })
   }
+
+  // --- Aprobaciones (11c) ---
+  const aprob = (slide?.aprobaciones || {}) as Record<string, { estado: string; nombre: string; fecha: string; feedback?: string }>
+  const tieneGuion = !!slide?.tiene_guion
+  const ideaOk = aprob.idea?.estado === 'aprobado'
+  const guionOk = aprob.guion?.estado === 'aprobado'
+  const enabledApproval: Record<string, boolean> = {
+    idea: true,
+    guion: tieneGuion && ideaOk,
+    contenido: tieneGuion ? guionOk : ideaOk,
+  }
+
+  function openApproval(key: string) {
+    if (!enabledApproval[key]) return
+    setApprovalKey(key); setApproverName(''); setFeedbackText(''); setFeedbackMode(false)
+  }
+  async function submitApproval(action: 'aprobar' | 'rechazar' | 'feedback') {
+    if (!slide || !approvalKey || !approverName.trim()) return
+    const entry = {
+      estado: action === 'aprobar' ? 'aprobado' : 'rechazado',
+      nombre: approverName.trim(), fecha: todayISO(),
+      ...(action === 'feedback' ? { feedback: feedbackText.trim() } : {}),
+    }
+    const patch: Partial<Slide> = { aprobaciones: { ...aprob, [approvalKey]: entry } }
+    if (approvalKey === 'contenido' && action === 'aprobar') patch.is_aprobada = true
+    await updateRaw(slide.id, patch)
+    if (action === 'feedback' && feedbackText.trim()) {
+      await supabase.from('tasks').insert({
+        title: `Revisión: ${slide.title}`, context: pres!.context, status: 'Inbox', priority: 'alta',
+        origin: 'reunion', task_type: 'contenido', done: false,
+        notes: `Feedback de ${approverName.trim()} (aprobación ${approvalKey}): ${feedbackText.trim()}`,
+        delegated_to: slide.responsable || null, cats: [], plan: [], meeting_agenda: [],
+        slide_idea: slide.title, slide_number: slide.position,
+      })
+      await loadAll()
+    }
+    setApprovalKey(null)
+  }
+  async function addGuionVersion() {
+    if (!slide || !newGuion.trim()) return
+    const versions = [...(slide.guion_versiones || []), { v: (slide.guion_versiones?.length || 0) + 1, texto: newGuion.trim(), fecha: todayISO() }]
+    await updateRaw(slide.id, { guion_versiones: versions })
+    setNewGuion('')
+  }
+
+  const shareBase = 'https://hub-app-seven.vercel.app'
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -316,6 +368,26 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                 </div>
               </div>
 
+              {/* Aprobaciones */}
+              <div className="border-t border-black/7 px-3.5 py-2.5">
+                <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1.5">Aprobaciones secuenciales</div>
+                <div className="flex gap-2 flex-wrap">
+                  {([{ k: 'idea', l: 'Idea' }, ...(tieneGuion ? [{ k: 'guion', l: 'Guión' }] : []), { k: 'contenido', l: 'Contenido final' }]).map(a => {
+                    const st = aprob[a.k]
+                    const en = enabledApproval[a.k]
+                    const color = st?.estado === 'aprobado' ? '#16a34a' : st?.estado === 'rechazado' ? '#dc2626' : '#6b7280'
+                    const locked = !en && !st
+                    return (
+                      <button key={a.k} disabled={locked} onClick={() => openApproval(a.k)}
+                        className={`text-[11px] font-mono px-2.5 py-1 rounded-full border transition-all ${locked ? 'opacity-50 cursor-not-allowed border-black/7 text-gray-400' : 'cursor-pointer hover:shadow-sm'}`}
+                        style={!locked ? { background: color + '14', borderColor: color + '40', color } : {}}>
+                        {locked ? '🔒 ' : st?.estado === 'aprobado' ? '✓ ' : st?.estado === 'rechazado' ? '✕ ' : '○ '}{a.l}{st?.nombre ? ` · ${st.nombre}` : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
               {/* Footer nav */}
               <div className="flex items-center justify-between p-2.5 border-t border-black/7 bg-bg3">
                 <button
@@ -500,6 +572,48 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                 </div>
               </div>
 
+              {slide.tiene_guion && (
+                <div className="p-3.5 border-b border-black/7">
+                  <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Guión · versiones</div>
+                  {(slide.guion_versiones || []).length ? (
+                    <div className="flex flex-col gap-1.5 mb-2">
+                      {(slide.guion_versiones || []).map(g => (
+                        <div key={g.v} className="bg-bg3 border border-black/7 rounded-lg p-2">
+                          <div className="text-[10px] font-mono text-claude mb-0.5">v{g.v} · {g.fecha}</div>
+                          <div className="text-xs text-gray-600 whitespace-pre-wrap leading-snug">{g.texto}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400 mb-2">Sin versiones todavía.</div>
+                  )}
+                  <textarea value={newGuion} onChange={e => setNewGuion(e.target.value)} rows={3}
+                    className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none resize-y focus:border-claude/20" placeholder="Pegá la nueva versión del guión…" />
+                  <button onClick={addGuionVersion} disabled={!newGuion.trim()}
+                    className="mt-1.5 w-full text-[11px] bg-claude/7 border border-claude/20 text-claude px-2 py-1.5 rounded-md cursor-pointer hover:bg-claude/15 disabled:opacity-40">
+                    + Agregar versión v{(slide.guion_versiones?.length || 0) + 1}
+                  </button>
+                </div>
+              )}
+
+              <div className="p-3.5 border-b border-black/7">
+                <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Links</div>
+                {[
+                  { l: 'Presentación completa', u: `${shareBase}/?pres=${pres.slug}` },
+                  { l: 'Slide específica', u: `${shareBase}/?slide=${slide.id}` },
+                  { l: 'Aprobación (sin login)', u: `${shareBase}/?aprobar=${slide.id}` },
+                ].map(link => (
+                  <div key={link.l} className="flex items-center gap-2 mb-1.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] text-gray-600">{link.l}</div>
+                      <div className="text-[10px] font-mono text-gray-400 truncate">{link.u}</div>
+                    </div>
+                    <button onClick={() => navigator.clipboard?.writeText(link.u)}
+                      className="text-[10px] text-claude bg-claude/7 border border-claude/20 px-2 py-1 rounded-md cursor-pointer hover:bg-claude/15 shrink-0">Copiar</button>
+                  </div>
+                ))}
+              </div>
+
               <div className="p-3.5">
                 {slide.is_aprobada ? (
                   <div className="text-xs bg-green-700/15 border border-green-700/30 text-green-700 px-3.5 py-2 rounded-lg text-center font-medium">
@@ -523,6 +637,42 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
           )}
         </div>
       </div>
+
+      {/* Popup de aprobación (sobre la slide) */}
+      {approvalKey && slide && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setApprovalKey(null) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[380px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">
+              Aprobación: {approvalKey === 'idea' ? 'Idea' : approvalKey === 'guion' ? 'Guión' : 'Contenido final'}
+            </div>
+            <p className="text-[12px] text-gray-400 mb-3">{slide.title}</p>
+            <input value={approverName} onChange={e => setApproverName(e.target.value)} autoFocus placeholder="Tu nombre"
+              className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20 mb-3" />
+            {feedbackMode && (
+              <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)} rows={3} placeholder="¿Qué hay que cambiar?"
+                className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none resize-y focus:border-claude/20 mb-3" />
+            )}
+            <div className="flex gap-2 justify-end flex-wrap">
+              {!feedbackMode ? (
+                <>
+                  <button onClick={() => submitApproval('aprobar')} disabled={!approverName.trim()}
+                    className="text-xs bg-success/10 border border-success/30 text-success px-3 py-2 rounded-lg cursor-pointer hover:bg-success/20 disabled:opacity-40">✓ Aprobar</button>
+                  <button onClick={() => submitApproval('rechazar')} disabled={!approverName.trim()}
+                    className="text-xs bg-danger/10 border border-danger/30 text-danger px-3 py-2 rounded-lg cursor-pointer hover:bg-danger/20 disabled:opacity-40">✕ Rechazar</button>
+                  <button onClick={() => setFeedbackMode(true)}
+                    className="text-xs bg-bg3 border border-black/7 text-gray-600 px-3 py-2 rounded-lg cursor-pointer hover:bg-bg4">✦ Enviar feedback</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setFeedbackMode(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-3 py-2 rounded-lg cursor-pointer">Volver</button>
+                  <button onClick={() => submitApproval('feedback')} disabled={!approverName.trim() || !feedbackText.trim()}
+                    className="text-xs bg-claude text-white px-3 py-2 rounded-lg cursor-pointer hover:bg-purple-700 disabled:opacity-40">Enviar → crea tarea de revisión</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
