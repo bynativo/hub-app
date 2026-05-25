@@ -13,6 +13,7 @@ import { PresentationsView } from './components/presentations/PresentationsView'
 import { PresentationDetail } from './components/presentations/PresentationDetail'
 import { GrillaView } from './components/grilla/GrillaView'
 import { CaptureModal } from './components/modals/CaptureModal'
+import { FollowupModal } from './components/modals/FollowupModal'
 
 function Placeholder({ title, note }: { title: string; note: string }) {
   return (
@@ -91,6 +92,8 @@ export default function App() {
       </div>
 
       {detailOpen && <TaskDetail />}
+
+      <FollowupModal />
 
       {captureOpen && (
         <CaptureModal

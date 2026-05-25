@@ -66,6 +66,8 @@ export interface Task {
   delegated_to: string | null
   last_followup_at: string | null
   followup_notes: string | null
+  followup_at: string | null
+  followup_type: string | null
   estimated_hours: number | null
   kanban_order: number | null
   projects?: { name: string; color: string | null } | null

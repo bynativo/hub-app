@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from './supabase'
+import { WAITING_STATES } from './constants'
 import type { Task, Project, Client, Recurrente, Presentation } from './types'
 
 interface AppState {
@@ -17,6 +18,7 @@ interface AppState {
   captureClientId: number | null
   captureContext: string | null
   captureProjectId: number | null
+  pendingFollowupTaskId: number | null
 
   loadAll: () => Promise<void>
   setView: (view: string) => void
@@ -27,6 +29,9 @@ interface AppState {
   closeCapture: () => void
   toggleTask: (id: number) => Promise<void>
   updateTaskStatus: (id: number, status: string) => Promise<void>
+  openFollowup: (id: number) => void
+  closeFollowup: () => void
+  setFollowup: (id: number, at: string | null, type: string) => Promise<void>
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -44,6 +49,7 @@ export const useStore = create<AppState>((set, get) => ({
   captureClientId: null,
   captureContext: null,
   captureProjectId: null,
+  pendingFollowupTaskId: null,
 
   loadAll: async () => {
     set({ loading: true })
@@ -84,7 +90,23 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateTaskStatus: async (id, status) => {
+    const prev = get().tasks.find(t => t.id === id)
     await supabase.from('tasks').update({ status }).eq('id', id)
     set({ tasks: get().tasks.map(t => t.id === id ? { ...t, status } : t) })
+    // Si la tarea entra a un estado "Esperando" (y no lo estaba), pedir alarma de seguimiento
+    const wasWaiting = prev ? WAITING_STATES.includes(prev.status) : false
+    if (WAITING_STATES.includes(status) && !wasWaiting) {
+      set({ pendingFollowupTaskId: id })
+    }
+  },
+
+  openFollowup: (id) => set({ pendingFollowupTaskId: id }),
+  closeFollowup: () => set({ pendingFollowupTaskId: null }),
+  setFollowup: async (id, at, type) => {
+    await supabase.from('tasks').update({ followup_at: at, followup_type: type }).eq('id', id)
+    set({
+      tasks: get().tasks.map(t => t.id === id ? { ...t, followup_at: at, followup_type: type } : t),
+      pendingFollowupTaskId: null,
+    })
   },
 }))
