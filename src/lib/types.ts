@@ -37,6 +37,7 @@ export interface Task {
   context: string
   client_id: number | null
   project_id: number | null
+  parent_task_id: number | null
   priority: string
   status: string
   task_type: string

@@ -34,6 +34,7 @@ export default function App() {
   const captureOpen = useStore(s => s.captureOpen)
   const captureContext = useStore(s => s.captureContext)
   const captureClientId = useStore(s => s.captureClientId)
+  const captureProjectId = useStore(s => s.captureProjectId)
   const closeCapture = useStore(s => s.closeCapture)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
@@ -96,6 +97,7 @@ export default function App() {
           onClose={closeCapture}
           preselectContext={captureContext ?? undefined}
           preselectClientId={captureClientId}
+          preselectProjectId={captureProjectId}
         />
       )}
 
