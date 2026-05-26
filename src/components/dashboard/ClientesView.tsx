@@ -19,6 +19,7 @@ export function ClientesView() {
   const clients = useStore(s => s.clients)
   const recurrentes = useStore(s => s.recurrentes)
   const tasks = useStore(s => s.tasks)
+  const projects = useStore(s => s.projects)
   const loadAll = useStore(s => s.loadAll)
   const openCapture = useStore(s => s.openCapture)
 
@@ -51,7 +52,11 @@ export function ClientesView() {
   }
 
   const clientRecurrentes = selected ? recurrentes.filter(r => r.client_id === selected.id) : []
+  const clientProjects = selected ? projects.filter(p => p.client_id === selected.id) : []
   const clientTaskCount = selected ? tasks.filter(t => t.client_id === selected.id && !t.done).length : 0
+
+  const activos = agClients.filter(c => c.tipo !== 'prospecto')
+  const prospectos = agClients.filter(c => c.tipo === 'prospecto')
 
   async function save() {
     if (!selected || !form.name.trim()) return
@@ -72,6 +77,34 @@ export function ClientesView() {
   const fieldCls = 'w-full bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.07)]'
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
+  const renderCard = (c: typeof clients[number]) => {
+    const color = c.color || '#0d9488'
+    return (
+      <div
+        key={c.id}
+        data-client-card
+        onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
+        className={`bg-bg2 border rounded-xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-px transition-all shadow-sm ${
+          selectedId === c.id ? 'border-claude/20 shadow-md' : 'border-black/7 hover:border-black/13'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <div className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
+          <div className="text-[15px] font-medium flex-1">{c.name}</div>
+          {c.tipo === 'prospecto'
+            ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">prospecto</span>
+            : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success">activo</span>}
+        </div>
+        <div className="text-[13px] text-gray-500 pl-[22px]">
+          {c.contact_name || <span className="text-gray-400 italic">Sin contacto</span>}
+          {c.contact_role && <span className="text-gray-400"> · {c.contact_role}</span>}
+        </div>
+      </div>
+    )
+  }
+
+  const sectionLabelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2'
+
   return (
     <div className="animate-fade-in p-5">
       <div className="flex items-start justify-between mb-5">
@@ -85,36 +118,21 @@ export function ClientesView() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        {agClients.map(c => {
-          const color = c.color || '#0d9488'
-          return (
-            <div
-              key={c.id}
-              data-client-card
-              onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
-              className={`bg-bg2 border rounded-xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-px transition-all shadow-sm ${
-                selectedId === c.id ? 'border-claude/20 shadow-md' : 'border-black/7 hover:border-black/13'
-              }`}
-            >
-              <div className="flex items-center gap-2.5 mb-1.5">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
-                <div className="text-[15px] font-medium flex-1">{c.name}</div>
-                {c.tipo === 'prospecto'
-                  ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">prospecto</span>
-                  : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success">activo</span>}
-              </div>
-              <div className="text-[13px] text-gray-500 pl-[22px]">
-                {c.contact_name || <span className="text-gray-400 italic">Sin contacto</span>}
-                {c.contact_role && <span className="text-gray-400"> · {c.contact_role}</span>}
-              </div>
-            </div>
-          )
-        })}
-        {!agClients.length && (
-          <div className="col-span-2 text-center py-7 text-gray-400 text-[13px]">Sin clientes de agencia</div>
-        )}
-      </div>
+      {!agClients.length ? (
+        <div className="text-center py-7 text-gray-400 text-[13px]">Sin clientes de agencia</div>
+      ) : (
+        <>
+          <div className={sectionLabelCls}>● Activos · {activos.length}</div>
+          {activos.length
+            ? <div className="grid grid-cols-2 gap-2.5">{activos.map(renderCard)}</div>
+            : <div className="text-xs text-gray-400">Sin clientes activos</div>}
+
+          <div className={sectionLabelCls + ' mt-5'}>○ Prospectos · {prospectos.length}</div>
+          {prospectos.length
+            ? <div className="grid grid-cols-2 gap-2.5">{prospectos.map(renderCard)}</div>
+            : <div className="text-xs text-gray-400">Sin prospectos</div>}
+        </>
+      )}
 
       {/* Detail panel */}
       {selected && (
@@ -192,6 +210,25 @@ export function ClientesView() {
                 {saving ? 'Guardando...' : dirty ? 'Guardar cambios' : 'Guardado'}
               </button>
             </div>
+
+            {/* Proyectos vinculados */}
+            <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">
+              Proyectos vinculados {clientProjects.length > 0 && <span className="text-gray-300">· {clientProjects.length}</span>}
+            </div>
+            {clientProjects.length ? (
+              <div className="flex flex-col gap-1.5 mb-5">
+                {clientProjects.map(p => (
+                  <div key={p.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-black/7 bg-bg3">
+                    <span className="text-[13px] flex-1">📁 {p.name}</span>
+                    {p.type && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">{p.type}</span>}
+                    {p.status && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{p.status}</span>}
+                    {p.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{p.due_date.slice(5).replace('-', '/')}</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-400 mb-5">Sin proyectos para este cliente</div>
+            )}
 
             {/* Recurrentes */}
             <div className="flex items-center justify-between mb-2">
