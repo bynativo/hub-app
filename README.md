@@ -240,10 +240,31 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **claude-proxy de Supabase (RESUELTO sesión 4)** — el edge function `…/functions/v1/claude-proxy` ya tiene el secret `ANTHROPIC_API_KEY` y devuelve `{ "text": ... }` 200 con `claude-sonnet-4-6`. El front (`callClaudeProxy`) lee `data.text`. El source vive versionado en `supabase/functions/claude-proxy/index.ts`. OJO: el secret y el código son independientes — editar/redeployar el function desde el dashboard de Supabase revierte el código (así se perdió el fix de modelo una vez); redeployar siempre desde el source del repo.
 - **PostgREST schema cache** — tras una migración DDL, el cache del REST puede quedar desactualizado unos segundos; se mitiga con `NOTIFY pgrst, 'reload schema'` al final de la migración.
 - **Subtareas vía `parent_task_id`** — las subtareas son tareas completas auto-referenciadas; la tabla legacy `subtasks` quedó sin uso en el UI del rediseño. Checklist usa la tabla `checklists` (columna `title`).
+- **`loadAll()` silencioso tras mutaciones** — el loader full-screen (`loading`) solo se muestra en la carga inicial (flag `initialized` en el store). Los refrescos tras crear/editar son silenciosos; si se volviera a poner `loading=true` en cada `loadAll`, App desmonta todo el árbol y resetea el estado local de los componentes (se cerraría el chat, modales, etc.).
+- **Columna `campaña` con ñ** — en `slides` la columna real es `campaña`/`campaña_nombre` (con ñ); acceder vía `(slide as Record<string, any>)['campaña']`, no `campana`.
+- **Colores de contexto** — convención de la app: banco azul (`#2563eb`), agencia teal (`#0d9488`), personal ámbar (`#d97706`). Usar `ctxColor()` para consistencia.
 
 ---
 
 ## Changelog
+
+### 2026-05-26 — Sesion 5: Plan de 11 puntos (2 → 12)
+
+Completado un plan de features punto por punto (commit + push + verificacion por screenshot en cada uno).
+
+**Migraciones aplicadas a produccion:** `tasks.es_recordatorio`/`recordatorio_at`; `projects.tipo_agencia`; `presentations.tipo`/`external_url`; `slides.es_texto`/`texto_contenido`/`media_url`/`carrusel_archivos`; `contacts.phone`.
+
+- **2. Dashboard:** total de horas estimadas al final de la seccion Hoy; estado vacio discreto para Mañana (la seccion Mañana ya existia).
+- **3. Recordatorios:** toggle "Es recordatorio" en Capturar (fecha+hora) → `es_recordatorio`/`recordatorio_at`, status `Recordatorio` (no pasa por Inbox); aparecen en Seguimiento, destacados al vencer; posponer obliga nueva fecha. Excluidos de listas por contexto.
+- **4. Estimado de tiempo:** selector 0.5/1/1.5/2/3/4/6/8h en tab Info → `estimated_hours`; badge "⏱ Xh" en la tarjeta; `fmtHoras` en helpers.
+- **5. Clientes:** secciones Activos/Prospectos; seccion "Proyectos vinculados" en el panel (lo demas ya existia).
+- **6. Proyectos:** `tipo_agencia` (Marca / Proyecto puntual / Presupuesto nuevo cliente), selector en agencia + badge en lista.
+- **7. Presentaciones:** vista por contexto; agencia en carpetas por cliente + Agencia interna; `NewPresentationModal` con tipos; slides de texto (`es_texto`); asignar tarea de contenido a presentacion desde el tab Slide.
+- **8. Grilla:** separada por contexto (sin toggle mezclado); ruta + nav `agencia-grilla`; selector de cliente en agencia; filtro por red (incl. LinkedIn); alerta de superposicion misma fecha + misma red.
+- **9. Slide de contenido:** body reorganizado a (Info+Visual) | (Idea+Guion); carrusel con `carrusel_archivos` como slider; fix de la columna real `campaña` (con ñ).
+- **10. CRM Contactos:** campo `phone` en modal y tarjeta (vista global, badges, origen y buscador ya existian).
+- **11. Recurrentes:** filtro por contexto (lista global, punto de color y modal ya existian).
+- **12. Chat con Claude:** verificado end-to-end (crea tareas/recurrentes en Supabase con la carga actual inyectada). **Fix:** `loadAll()` ya no muestra el loader full-screen en cada refresco (flag `initialized`) — antes desmontaba el arbol y reseteaba el estado (p. ej. cerraba el chat) en cada mutacion.
 
 ### 2026-05-26 — Sesion 4: Chat de Claude operativo (proxy Supabase)
 
