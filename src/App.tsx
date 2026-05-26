@@ -64,13 +64,13 @@ export default function App() {
       // Banco Falabella
       case 'banco-tareas': return <ContextView context="banco" />
       case 'banco-proyectos': return <ProjectsView context="banco" onOpenPres={setOpenPresId} />
-      case 'banco-presentaciones': return <PresentationsView onOpen={setOpenPresId} />
+      case 'banco-presentaciones': return <PresentationsView context="banco" onOpen={setOpenPresId} />
       case 'banco-grilla': return <GrillaView />
       // Agencia
       case 'agencia-tareas': return <ContextView context="agencia" />
       case 'agencia-clientes': return <ClientesView />
       case 'agencia-equipo': return <ContactsView context="agencia" title="Equipo" />
-      case 'agencia-presentaciones': return <PresentationsView onOpen={setOpenPresId} />
+      case 'agencia-presentaciones': return <PresentationsView context="agencia" onOpen={setOpenPresId} />
       // Personal
       case 'personal-tareas': return <ContextView context="personal" />
       default: return <Dashboard />

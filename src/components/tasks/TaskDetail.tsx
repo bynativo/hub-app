@@ -4,7 +4,8 @@ import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { ctxLabel, fmtHoras } from '../../lib/helpers'
-import type { Checklist, Task } from '../../lib/types'
+import { NewPresentationModal } from '../modals/NewPresentationModal'
+import type { Checklist, Task, Slide } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Tab = 'info' | 'subtareas' | 'checklist' | 'chat' | 'email' | 'slide'
@@ -106,6 +107,8 @@ function SubtaskRow({ sub }: { sub: Task }) {
 export function TaskDetail() {
   const tasks = useStore(s => s.tasks)
   const contacts = useStore(s => s.contacts)
+  const presentations = useStore(s => s.presentations)
+  const setView = useStore(s => s.setView)
   const currentTaskId = useStore(s => s.currentTaskId)
   const closeDetail = useStore(s => s.closeDetail)
   const openDetail = useStore(s => s.openDetail)
@@ -116,6 +119,9 @@ export function TaskDetail() {
   const task = tasks.find(t => t.id === currentTaskId)
   const [tab, setTab] = useState<Tab>('info')
   const [checklists, setChecklists] = useState<Checklist[]>([])
+  const [linkedSlide, setLinkedSlide] = useState<Slide | null>(null)
+  const [newPresOpen, setNewPresOpen] = useState(false)
+  const [assignPresId, setAssignPresId] = useState<number | ''>('')
 
   // Info edits
   const [title, setTitle] = useState('')
@@ -153,6 +159,8 @@ export function TaskDetail() {
     setDirty(false)
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). ¿En qué te ayudo? Puedo crear subtareas con fechas distribuidas hasta su entrega.` }])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
+    supabase.from('slides').select('*').eq('task_id', task.id).limit(1).then(({ data }) => setLinkedSlide((data?.[0] as Slide) || null))
+    setAssignPresId('')
   }, [currentTaskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, chatLoading])
@@ -278,6 +286,16 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
     } finally {
       setEmailLoading(false)
     }
+  }
+
+  async function assignToPresentation(presId: number) {
+    if (!task) return
+    const { count } = await supabase.from('slides').select('id', { count: 'exact', head: true }).eq('presentation_id', presId)
+    const { data, error } = await supabase.from('slides').insert({
+      presentation_id: presId, title: task.title, task_id: task.id, position: (count || 0) + 1,
+    }).select().single()
+    if (error || !data) { alert('Error: ' + error?.message); return }
+    setLinkedSlide(data as Slide)
   }
 
   const fieldCls = 'w-full bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20'
@@ -523,14 +541,34 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
 
         {/* SLIDE */}
         {tab === 'slide' && (
-          <div className="animate-fade-in">
-            {task.slide_idea || task.slide_number ? (
+          <div className="animate-fade-in flex flex-col gap-3">
+            {linkedSlide ? (
               <div className="bg-bg2 border border-black/7 rounded-[10px] p-3.5">
-                <div className="font-medium text-gray-900 mb-1">{task.slide_idea || 'Slide vinculada'}</div>
-                <div className="text-xs text-gray-400">Slide #{task.slide_number ?? '—'} · {task.content_format || 'formato sin definir'}</div>
+                <div className="text-[11px] font-mono text-gray-400 uppercase mb-1">Vinculada a presentación</div>
+                <div className="font-medium text-gray-900 mb-0.5">{presentations.find(p => p.id === linkedSlide.presentation_id)?.title || 'Presentación'}</div>
+                <div className="text-xs text-gray-400 mb-2.5">Slide: {linkedSlide.title}</div>
+                <button onClick={() => { setView(task.context === 'banco' ? 'banco-presentaciones' : 'agencia-presentaciones'); closeDetail() }}
+                  className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">Ir a Presentaciones →</button>
               </div>
             ) : (
-              <div className="text-center py-7 text-gray-400 text-[13px]">Tarea de contenido. El editor completo de slide se gestiona en Presentaciones.</div>
+              <>
+                <div className="text-[13px] text-gray-500">Asigná esta tarea de contenido a una presentación o creá una nueva.</div>
+                <div className="flex gap-2">
+                  <select value={assignPresId} onChange={e => setAssignPresId(e.target.value ? Number(e.target.value) : '')} className={fieldCls + ' flex-1'}>
+                    <option value="">Elegí una presentación…</option>
+                    {presentations.filter(p => p.context === task.context).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                  </select>
+                  <button onClick={() => assignPresId && assignToPresentation(Number(assignPresId))} disabled={!assignPresId}
+                    className="text-xs bg-claude text-white px-3 py-2 rounded-lg cursor-pointer hover:bg-purple-700 disabled:opacity-40 shrink-0">Asignar</button>
+                </div>
+                <button onClick={() => setNewPresOpen(true)}
+                  className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1.5 rounded-md cursor-pointer hover:bg-claude/15 w-fit">+ Crear nueva presentación</button>
+              </>
+            )}
+            {newPresOpen && (
+              <NewPresentationModal onClose={() => setNewPresOpen(false)}
+                defaultContext={task.context} defaultClientId={task.client_id}
+                onCreated={(id) => assignToPresentation(id)} />
             )}
           </div>
         )}

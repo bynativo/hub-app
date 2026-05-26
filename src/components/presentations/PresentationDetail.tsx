@@ -100,6 +100,17 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     setSlides(prev => prev.map(s => s.id === slideId ? { ...s, ...patch } : s))
   }
 
+  async function addSlide(esTexto: boolean) {
+    const nextPos = (slides[slides.length - 1]?.position || slides.length) + 1
+    const { data, error } = await supabase.from('slides').insert({
+      presentation_id: presId, position: nextPos,
+      title: esTexto ? 'Sección de texto' : 'Nueva idea', es_texto: esTexto,
+    }).select().single()
+    if (error || !data) { alert('Error creando slide: ' + error?.message); return }
+    setSlides(prev => [...prev, data as Slide])
+    setActiveIdx(slides.length)
+  }
+
   if (!pres) return null
   const kv = pres.kv_color || '#16a34a'
   const slide = slides[activeIdx]
@@ -222,6 +233,11 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
             </div>
           ))}
         </div>
+
+        <div className="p-2.5 border-t border-black/7 flex flex-col gap-1.5 shrink-0">
+          <button onClick={() => addSlide(false)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-1.5 rounded-md cursor-pointer hover:bg-claude/15">+ Idea de contenido</button>
+          <button onClick={() => addSlide(true)} className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2 py-1.5 rounded-md cursor-pointer hover:bg-bg4">+ Slide de texto</button>
+        </div>
       </div>
 
       {/* Main area */}
@@ -232,6 +248,27 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
             <div className="text-center py-12 text-gray-400">Cargando...</div>
           ) : !slide ? (
             <div className="text-center py-12 text-gray-400">Sin ideas aun. Agrega la primera.</div>
+          ) : slide.es_texto ? (
+            <div className="bg-bg2 border border-black/7 rounded-[14px] overflow-hidden shadow-md max-w-[700px] mx-auto">
+              <div className="flex items-stretch">
+                <div className="w-[5px] shrink-0" style={{ background: kv }} />
+                <div className="flex-1 p-5">
+                  <div className="text-[10px] font-mono text-gray-400 mb-1">#{slide.position || activeIdx + 1} · 📄 Sección de texto</div>
+                  <div className="text-2xl font-medium leading-snug mb-3" style={{ color: kv }}>{slide.title}</div>
+                  {slide.texto_contenido && <div className="text-[14px] text-gray-700 leading-relaxed whitespace-pre-wrap mb-4">{slide.texto_contenido}</div>}
+                  {slide.media_url && (
+                    isImageUrl(slide.media_url)
+                      ? <img src={slide.media_url} alt="" className="rounded-lg border border-black/10 max-h-[420px] w-full object-contain bg-bg3" />
+                      : <a href={slide.media_url} target="_blank" rel="noreferrer" className="inline-block text-[12px] text-claude bg-claude/7 border border-claude/20 px-3 py-1.5 rounded-md hover:bg-claude/15 break-all">▶ Ver media ↗</a>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-2.5 border-t border-black/7 bg-bg3">
+                <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} className="text-xs text-gray-400 px-2 py-1 rounded-md border border-black/7 bg-bg2 hover:bg-bg4 hover:text-gray-900 cursor-pointer transition-colors">← Anterior</button>
+                <span className="font-mono text-[11px] text-gray-400">{activeIdx + 1} / {slides.length}</span>
+                <button onClick={() => setActiveIdx(i => Math.min(slides.length - 1, i + 1))} className="text-xs text-gray-400 px-2 py-1 rounded-md border border-black/7 bg-bg2 hover:bg-bg4 hover:text-gray-900 cursor-pointer transition-colors">Siguiente →</button>
+              </div>
+            </div>
           ) : (
             <div className="bg-bg2 border border-black/7 rounded-[14px] overflow-hidden shadow-md max-w-[700px] mx-auto">
               {/* Header */}
@@ -410,7 +447,23 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
 
         {/* Edit panel */}
         <div className="overflow-y-auto bg-bg2">
-          {slide && (
+          {slide && slide.es_texto && (
+            <div className="p-3.5">
+              <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Slide de texto</div>
+              <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Título</span>
+              <input defaultValue={slide.title} onBlur={e => updateField(slide.id, 'title', e.target.value)}
+                className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 mb-3" />
+              <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Contenido (texto enriquecido)</span>
+              <textarea defaultValue={slide.texto_contenido || ''} onBlur={e => updateField(slide.id, 'texto_contenido', e.target.value)} rows={10}
+                className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none resize-y focus:border-claude/20 mb-3 leading-relaxed"
+                placeholder="Intro, estrategia, contexto… (se respetan los saltos de línea)" />
+              <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Imagen / video (URL)</span>
+              <input defaultValue={slide.media_url || ''} onBlur={e => updateField(slide.id, 'media_url', e.target.value)}
+                className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 font-mono" placeholder="https://… imagen o link de video" />
+              <p className="text-[10px] text-gray-400 mt-2">Las imágenes se previsualizan en la slide; otros links se muestran como botón.</p>
+            </div>
+          )}
+          {slide && !slide.es_texto && (
             <>
               <div className="p-3.5 border-b border-black/7">
                 <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Redes y formato</div>

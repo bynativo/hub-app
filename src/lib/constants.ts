@@ -104,6 +104,9 @@ export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estáti
 // Tipos de proyecto de agencia
 export const TIPO_AGENCIA = ['Marca', 'Proyecto puntual', 'Presupuesto nuevo cliente']
 
+// Tipos de presentación
+export const TIPO_PRESENTACION = ['Grilla mensual', 'Propuesta de campaña', 'General (link externo)']
+
 export const PROD_STATUS: Record<string, string[]> = {
   banco: ['Pendiente', 'En grabacion', 'En edicion', 'Entregado a CM'],
   agencia: ['Pendiente', 'En produccion', 'Entregado al cliente'],

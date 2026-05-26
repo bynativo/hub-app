@@ -137,6 +137,8 @@ export interface Presentation {
   kv_color: string
   month_label: string | null
   share_enabled: boolean
+  tipo: string | null
+  external_url: string | null
   created_at: string
   updated_at: string
 }
@@ -187,6 +189,9 @@ export interface Slide {
   fechas_por_plataforma: Record<string, string> | null
   guion_versiones: { v: number; texto: string; fecha: string }[] | null
   aprobaciones: Record<string, { estado: string; nombre: string; fecha: string; feedback?: string }> | null
+  es_texto: boolean
+  texto_contenido: string | null
+  media_url: string | null
   presentations?: Presentation | null
 }
 
