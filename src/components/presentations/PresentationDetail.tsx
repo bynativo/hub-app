@@ -364,14 +364,14 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                 )}
               </div>
 
-              {/* Body 2-col: Info + Visual */}
+              {/* Body 2-col: (Info + Visual) | (Idea + Guión) */}
               <div className="grid grid-cols-2 border-t border-black/7">
-                {/* Info col */}
+                {/* Izquierda: Info + Visual */}
                 <div className="border-r border-black/7">
                   <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg4">Información</div>
                   {[
                     { k: 'Campaña', v: (slide as Record<string, any>)['campaña'] || (slide as Record<string, any>)['campaña_nombre'] || '' },
-                    { k: 'Formato', v: slide.formato || '' },
+                    { k: 'Formato', v: slide.formato ? `${slide.formato}${slide.formato === 'Colab' && slide.colab_nombre ? ` · ${slide.colab_nombre}` : ''}` : '' },
                     { k: 'Redes', v: (slide.redes || []).map(r => REDES.find(x => x.v === r)?.label || r).join(' · ') },
                     { k: 'Responsable', v: slide.responsable || '' },
                   ].filter(r => r.v).map(row => (
@@ -380,13 +380,34 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                       <div className="text-xs p-2 flex-1 leading-snug">{row.v}</div>
                     </div>
                   ))}
+                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-t border-black/7 bg-bg4">Visual</div>
                   <div className="p-3">
-                    {slide.idea_descripcion && (
-                      <>
-                        <div className="text-[9px] font-mono text-gray-400 uppercase tracking-wider mb-1">Concepto</div>
-                        <div className="text-xs text-gray-500 leading-relaxed">{slide.idea_descripcion}</div>
-                      </>
+                    {slide.formato === 'Carrusel' && (slide.carrusel_archivos || []).filter(Boolean).length > 0 ? (
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {(slide.carrusel_archivos || []).filter(Boolean).map((u, i) => (
+                          <div key={i} className="shrink-0 w-[88px]">
+                            <div className="text-[9px] font-mono text-gray-400 mb-1">#{i + 1}</div>
+                            <div className="aspect-[9/16] rounded-md overflow-hidden border border-black/10 bg-bg4 flex items-center justify-center">
+                              {isImageUrl(u) ? <img src={u} alt="" className="w-full h-full object-cover" /> : <a href={u} target="_blank" rel="noreferrer" className="text-[10px] text-claude px-1 text-center break-all hover:underline">Ver ↗</a>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex gap-3">
+                        <VisualFrame label="Referencia" url={slide.link_referencia} />
+                        <VisualFrame label="Contenido final" url={slide.contenido_url_externo || slide.contenido_url_interno} feedRed={(slide.redes || [])[0]} />
+                      </div>
                     )}
+                  </div>
+                </div>
+                {/* Derecha: Idea + Guión */}
+                <div className="bg-bg3">
+                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg5">Idea</div>
+                  <div className="p-3">
+                    {slide.idea_descripcion
+                      ? <div className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">{slide.idea_descripcion}</div>
+                      : <div className="text-[11px] text-gray-400 italic">Sin concepto todavía.</div>}
                     {slide.insight && (
                       <div className="bg-claude/7 border border-claude/20 rounded-lg p-2.5 mt-2.5 text-xs leading-relaxed">
                         <div className="text-[9px] font-mono text-claude font-semibold mb-0.5 uppercase tracking-wider">💡 Insight</div>
@@ -394,14 +415,22 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                       </div>
                     )}
                   </div>
-                </div>
-                {/* Visual col */}
-                <div className="bg-bg3">
-                  <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-black/7 bg-bg5">Visual</div>
-                  <div className="p-3 flex gap-3">
-                    <VisualFrame label="Referencia" url={slide.link_referencia} />
-                    <VisualFrame label="Contenido final" url={slide.contenido_url_externo || slide.contenido_url_interno} feedRed={(slide.redes || [])[0]} />
-                  </div>
+                  {slide.tiene_guion && (
+                    <>
+                      <div className="text-[9px] font-mono text-gray-400 uppercase tracking-widest px-3 py-2 border-b border-t border-black/7 bg-bg5">
+                        Guión{(slide.guion_versiones || []).length > 0 ? ` · v${(slide.guion_versiones || []).length}` : ''}
+                      </div>
+                      <div className="p-3">
+                        {(slide.guion_versiones || []).length ? (
+                          <div className="bg-bg2 border border-black/7 rounded-lg p-2.5 text-xs text-gray-600 whitespace-pre-wrap leading-relaxed max-h-[220px] overflow-y-auto">
+                            {(slide.guion_versiones || [])[(slide.guion_versiones || []).length - 1].texto}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-gray-400 italic">Sin guión todavía. Agregá una versión en el panel derecho.</div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -495,7 +524,20 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                     placeholder="Nombre del colaborador" className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 mt-2" />
                 )}
                 {slide.formato === 'Carrusel' && (
-                  <div className="text-[10px] text-gray-400 mt-2">El slider de múltiples archivos del carrusel se gestiona en el body (paso 11b).</div>
+                  <div className="mt-2">
+                    <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Archivos del carrusel (slider)</span>
+                    {(slide.carrusel_archivos || []).map((u, i) => (
+                      <div key={i} className="flex gap-1.5 mb-1">
+                        <input defaultValue={u} placeholder="https://… imagen o link"
+                          onBlur={e => { const next = [...(slide.carrusel_archivos || [])]; next[i] = e.target.value; updateRaw(slide.id, { carrusel_archivos: next }) }}
+                          className="flex-1 bg-bg3 border border-black/7 rounded-md px-2 py-1 text-[11px] outline-none font-mono focus:border-claude/20" />
+                        <button onClick={() => updateRaw(slide.id, { carrusel_archivos: (slide.carrusel_archivos || []).filter((_, j) => j !== i) })}
+                          className="text-[11px] text-danger px-1.5 cursor-pointer hover:bg-danger/10 rounded">✕</button>
+                      </div>
+                    ))}
+                    <button onClick={() => updateRaw(slide.id, { carrusel_archivos: [...(slide.carrusel_archivos || []), ''] })}
+                      className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-1 rounded-md cursor-pointer hover:bg-claude/15 mt-1">+ Agregar archivo</button>
+                  </div>
                 )}
                 <div className="flex items-center gap-2 mt-3">
                   <button onClick={() => updateRaw(slide.id, { tiene_guion: !slide.tiene_guion })}

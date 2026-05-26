@@ -192,6 +192,7 @@ export interface Slide {
   es_texto: boolean
   texto_contenido: string | null
   media_url: string | null
+  carrusel_archivos: string[] | null
   presentations?: Presentation | null
 }
 
