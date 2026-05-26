@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { getGreeting, todayISO, tomorrowISO } from '../../lib/helpers'
+import { getGreeting, todayISO, tomorrowISO, fmtHoras } from '../../lib/helpers'
 import { WAITING_STATES } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
-
-function fmtHoras(h: number): string {
-  return `${h % 1 === 0 ? h : h.toFixed(1)}h`
-}
 
 function SectionHeader({ icon, label, count }: { icon: string; label: string; count: number }) {
   return (

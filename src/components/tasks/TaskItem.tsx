@@ -1,5 +1,5 @@
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 
@@ -73,6 +73,10 @@ export function TaskItem({ task }: { task: Task }) {
                  color={due.urgent ? '#dc2626' : '#6b6860'}>
               {due.text}
             </Tag>
+          )}
+
+          {task.estimated_hours != null && (
+            <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">⏱ {fmtHoras(task.estimated_hours)}</Tag>
           )}
 
           {(task.cats || []).slice(0, 2).map(c => (

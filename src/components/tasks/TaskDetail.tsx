@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
-import { ctxLabel } from '../../lib/helpers'
+import { ctxLabel, fmtHoras } from '../../lib/helpers'
 import type { Checklist, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -124,6 +124,7 @@ export function TaskDetail() {
   const [notes, setNotes] = useState('')
   const [delegatedTo, setDelegatedTo] = useState('')
   const [origin, setOrigin] = useState('propia')
+  const [estHours, setEstHours] = useState<number | null>(null)
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
@@ -148,6 +149,7 @@ export function TaskDetail() {
     setTab('info')
     setTitle(task.title); setPriority(task.priority); setDueDate(task.due_date || '')
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
+    setEstHours(task.estimated_hours)
     setDirty(false)
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). ¿En qué te ayudo? Puedo crear subtareas con fechas distribuidas hasta su entrega.` }])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
@@ -176,6 +178,7 @@ export function TaskDetail() {
     await updateTask(task.id, {
       title: title.trim() || task.title, priority, due_date: dueDate || null,
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
+      estimated_hours: estHours,
     })
     setSavingInfo(false); setDirty(false)
   }
@@ -348,6 +351,26 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
               <div>
                 <label className={labelCls}>Fecha de entrega</label>
                 <input type="date" value={dueDate} onChange={e => setInfo(setDueDate, e.target.value)} className={fieldCls} />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelCls}>Estimado de tiempo</label>
+              <div className="flex gap-1.5 flex-wrap">
+                {[0.5, 1, 1.5, 2, 3, 4, 6, 8].map(h => (
+                  <button key={h} onClick={() => setInfo(setEstHours, h)}
+                    className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                      estHours === h ? 'border-claude text-claude bg-claude/7 font-semibold' : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
+                    }`}>
+                    {fmtHoras(h)}
+                  </button>
+                ))}
+                <button onClick={() => setInfo(setEstHours, null)}
+                  className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                    estHours == null ? 'border-claude text-claude bg-claude/7 font-semibold' : 'bg-bg2 border-black/7 text-gray-400 hover:border-black/13'
+                  }`}>
+                  —
+                </button>
               </div>
             </div>
 
