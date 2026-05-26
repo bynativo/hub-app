@@ -10,12 +10,11 @@ function fmtHoras(h: number): string {
   return `${h % 1 === 0 ? h : h.toFixed(1)}h`
 }
 
-function SectionHeader({ icon, label, count, hours }: { icon: string; label: string; count: number; hours?: number }) {
+function SectionHeader({ icon, label, count }: { icon: string; label: string; count: number }) {
   return (
     <div className="flex items-center gap-2 mb-2.5 mt-5 first:mt-0">
       <span className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">{icon} {label}</span>
       {count > 0 && <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{count}</span>}
-      {hours ? <span className="font-mono text-[10px] text-claude bg-claude/10 px-1.5 rounded-full">{fmtHoras(hours)}</span> : null}
     </div>
   )
 }
@@ -39,7 +38,6 @@ export function Dashboard() {
       <p className="text-gray-500 text-[13px] mb-5">
         {active.length} tareas activas
         {hoy.length ? ` · ${hoy.length} para hoy` : ''}
-        {horasHoy > 0 ? ` · ${fmtHoras(horasHoy)} estimadas hoy` : ''}
         {seguimiento.length ? ` · ${seguimiento.length} en seguimiento` : ''}
       </p>
 
@@ -64,11 +62,18 @@ export function Dashboard() {
         <KanbanBoard />
       ) : (
         <div className="max-w-[900px]">
-          <SectionHeader icon="📌" label="Hoy" count={hoy.length} hours={horasHoy} />
+          <SectionHeader icon="📌" label="Hoy" count={hoy.length} />
           <TaskList tasks={hoy} emptyText="Nada vence hoy" />
+          {hoy.length > 0 && (
+            <div className="flex justify-end mt-1.5 pr-1">
+              <span className="font-mono text-[11px] text-gray-400">
+                Total estimado del día: <span className="text-claude font-medium">{fmtHoras(horasHoy)}</span>
+              </span>
+            </div>
+          )}
 
           <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
-          <TaskList tasks={manana} emptyText="Nada para mañana" />
+          <TaskList tasks={manana} emptyText="Nada para mañana" compactEmpty />
 
           <SectionHeader icon="⏳" label="Seguimiento" count={seguimiento.length} />
           <TaskList tasks={seguimiento} emptyText="Nada esperando respuesta" />
