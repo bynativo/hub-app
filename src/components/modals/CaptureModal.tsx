@@ -167,6 +167,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       requested_at: requestedAt || todayISO(),
       estimated_hours: estHours,
       notes: desc.trim() || null,
+      context_readme: desc.trim() || null,
       status: reminder ? 'Recordatorio' : 'Inbox',
       es_recordatorio: reminder,
       recordatorio_at: reminder ? new Date(reminderAt).toISOString() : null,
@@ -238,6 +239,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       due_date: s.due_date || null,
       requested_at: s.requested_at || todayISO(),
       estimated_hours: s.estimated_hours,
+      context_readme: meetingText.trim() || (images.length ? 'Extraído de imágenes adjuntas.' : null),
       status: 'Inbox', done: false, cats: [], plan: [], meeting_agenda: [], task_type: 'independiente',
     }))
     const recRows = selected.filter(s => s.tipo === 'recurrente').map(s => ({

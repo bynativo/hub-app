@@ -133,6 +133,8 @@ export function TaskDetail() {
   const [delegatedTo, setDelegatedTo] = useState('')
   const [origin, setOrigin] = useState('propia')
   const [estHours, setEstHours] = useState<number | null>(null)
+  const [contextReadme, setContextReadme] = useState('')
+  const [showContext, setShowContext] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
@@ -156,6 +158,7 @@ export function TaskDetail() {
     setTitle(task.title); setPriority(task.priority); setDueDate(task.due_date || '')
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
+    setContextReadme(task.context_readme || ''); setShowContext(false)
     setDirty(false)
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). ¿En qué te ayudo? Puedo crear subtareas con fechas distribuidas hasta su entrega.` }])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
@@ -217,7 +220,7 @@ Contexto: ${ctxLabel(task.context)} | Prioridad: ${task.priority} | Estado: ${ta
 Fecha límite: ${task.due_date || 'sin fecha'}
 Cliente: ${task.clients?.name || 'ninguno'}
 Notas: ${task.notes || 'ninguna'}
-
+${task.context_readme ? `\nCONTEXTO ACUMULADO DE LA TAREA:\n${task.context_readme}\n` : ''}
 SUBTAREAS ACTUALES:
 ${subs}
 
@@ -402,6 +405,23 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
             <div>
               <label className={labelCls}>Descripción</label>
               <textarea value={notes} onChange={e => setInfo(setNotes, e.target.value)} rows={4} className={fieldCls + ' resize-y'} placeholder="Detalles, quién pide, contexto…" />
+            </div>
+
+            {/* Contexto acumulado (context_readme) — colapsable, guarda al instante */}
+            <div className="border border-black/7 rounded-lg overflow-hidden">
+              <button onClick={() => setShowContext(s => !s)} className="w-full flex items-center justify-between px-3 py-2 bg-bg2 hover:bg-bg3 cursor-pointer">
+                <span className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">📄 Contexto {contextReadme ? '' : '· vacío'}</span>
+                <span className="text-[10px] text-gray-400">{showContext ? '▼' : '▶'}</span>
+              </button>
+              {showContext && (
+                <div className="p-3 border-t border-black/7">
+                  <textarea value={contextReadme} onChange={e => setContextReadme(e.target.value)}
+                    onBlur={() => { if (contextReadme !== (task.context_readme || '')) updateTask(task.id, { context_readme: contextReadme || null }) }}
+                    rows={5} className={fieldCls + ' resize-y'}
+                    placeholder="Contexto acumulado: de qué se trata, quién pide, historial. Claude lo usa como contexto en el chat de esta tarea." />
+                  <div className="text-[10px] text-gray-400 mt-1">Se guarda al salir del campo. El chat de la tarea lo usa como contexto y lo actualiza al pegar contenido.</div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end">
