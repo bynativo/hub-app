@@ -22,6 +22,7 @@ export function NewContactModal({ onClose, defaultContext = 'agencia' }: { onClo
   const [context, setContext] = useState(defaultContext)
   const [origin, setOrigin] = useState('manual')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -29,7 +30,7 @@ export function NewContactModal({ onClose, defaultContext = 'agencia' }: { onClo
     setSaving(true)
     const { error } = await supabase.from('contacts').insert({
       name: name.trim(), role: role.trim() || null, company: company.trim() || null,
-      context, origin, email: email.trim() || null,
+      context, origin, email: email.trim() || null, phone: phone.trim() || null,
     })
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
     await loadAll()
@@ -76,9 +77,15 @@ export function NewContactModal({ onClose, defaultContext = 'agencia' }: { onClo
           </div>
         </div>
 
-        <div className="mb-4">
-          <label className={labelCls}>Email</label>
-          <input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls + ' font-mono text-xs'} placeholder="correo@empresa.com" />
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={labelCls}>Email</label>
+            <input value={email} onChange={e => setEmail(e.target.value)} type="email" className={inputCls + ' font-mono text-xs'} placeholder="correo@empresa.com" />
+          </div>
+          <div>
+            <label className={labelCls}>Teléfono</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} type="tel" className={inputCls + ' font-mono text-xs'} placeholder="+56 9 …" />
+          </div>
         </div>
 
         <div className="flex gap-2 justify-end">

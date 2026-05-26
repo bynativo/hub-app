@@ -62,6 +62,7 @@ export function ContactsView({ context, title = 'Contactos' }: { context?: strin
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: badge.color + '14', color: badge.color }}>{badge.label}</span>
                     {c.origin && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{ORIGIN_LABEL[c.origin] || c.origin}</span>}
                     {c.email && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400 truncate max-w-[160px]">{c.email}</span>}
+                    {c.phone && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">📞 {c.phone}</span>}
                   </div>
                 </div>
               </div>

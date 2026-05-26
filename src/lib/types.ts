@@ -111,6 +111,7 @@ export interface Contact {
   context: string | null
   origin: string | null
   email: string | null
+  phone: string | null
   created_at: string
 }
 
