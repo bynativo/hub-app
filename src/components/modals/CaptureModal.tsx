@@ -115,6 +115,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [priority, setPriority] = useState('media')
   const [origin, setOrigin] = useState('propia')
   const [dueDate, setDueDate] = useState('')
+  const [requestedAt, setRequestedAt] = useState(todayISO())
   const [isContent, setIsContent] = useState(false)
   const [estHours, setEstHours] = useState<number | null>(null)
   const [isReminder, setIsReminder] = useState(false)
@@ -163,6 +164,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       parent_task_id: reminder ? null : (tipo === 'subtarea' ? parentId : null),
       task_type: isContent ? 'contenido' : 'independiente',
       due_date: reminder ? null : (dueDate || null),
+      requested_at: requestedAt || todayISO(),
       estimated_hours: estHours,
       notes: desc.trim() || null,
       status: reminder ? 'Recordatorio' : 'Inbox',
@@ -479,9 +481,15 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               </div>
 
               {!isReminder && (
-                <div className="mb-3">
-                  <label className={labelCls}>Fecha de entrega</label>
-                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className={labelCls}>Fecha de entrega</label>
+                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>¿Cuándo te lo pidieron?</label>
+                    <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
+                  </div>
                 </div>
               )}
 

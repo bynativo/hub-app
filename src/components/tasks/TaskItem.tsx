@@ -97,6 +97,10 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
               <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">⏱ {fmtHoras(task.estimated_hours)}</Tag>
             )}
 
+            {task.requested_at && task.created_at && task.requested_at !== task.created_at.slice(0, 10) && (
+              <Tag bg="var(--color-bg4)" color="#6b6860">📨 {task.requested_at.slice(5).replace('-', '/')}</Tag>
+            )}
+
             {(task.cats || []).slice(0, 2).map(c => (
               <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400 border border-black/7">
                 #{c}
