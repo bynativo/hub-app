@@ -12,8 +12,10 @@ function freqDetail(r: { freq: string; day_of_month: string }) {
 export function RecurrentesView() {
   const recurrentes = useStore(s => s.recurrentes)
   const [modalOpen, setModalOpen] = useState(false)
+  const [ctxFilter, setCtxFilter] = useState('all')
 
-  const sorted = [...recurrentes].sort((a, b) => a.context.localeCompare(b.context) || a.title.localeCompare(b.title))
+  const base = ctxFilter === 'all' ? recurrentes : recurrentes.filter(r => r.context === ctxFilter)
+  const sorted = [...base].sort((a, b) => a.context.localeCompare(b.context) || a.title.localeCompare(b.title))
 
   return (
     <div className="animate-fade-in p-5">
@@ -26,6 +28,26 @@ export function RecurrentesView() {
           className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
           + Nueva recurrente
         </button>
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap items-center">
+        {[
+          { v: 'all', l: 'Todos' },
+          { v: 'banco', l: 'Banco Falabella' },
+          { v: 'agencia', l: 'Agencia' },
+          { v: 'personal', l: 'Personal' },
+        ].map(f => {
+          const active = ctxFilter === f.v
+          const color = f.v === 'all' ? '#7c3aed' : ctxColor(f.v)
+          return (
+            <button key={f.v} onClick={() => setCtxFilter(f.v)}
+              className={`flex items-center gap-1.5 text-xs px-3 py-1 rounded-lg border cursor-pointer transition-all ${active ? 'font-medium' : 'bg-bg3 border-black/7 text-gray-500 hover:bg-bg4'}`}
+              style={active ? { background: color + '12', borderColor: color + '33', color } : {}}>
+              {f.v !== 'all' && <span className="w-2 h-2 rounded-full" style={{ background: ctxColor(f.v) }} />}
+              {f.l}
+            </button>
+          )
+        })}
       </div>
 
       <div className="flex flex-col gap-2 max-w-[760px]">
