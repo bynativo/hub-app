@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
-import { fmtHoras } from '../../lib/helpers'
+import { fmtHoras, todayISO } from '../../lib/helpers'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CaptureTab = 'tarea' | 'notas' | 'micro'
@@ -14,33 +14,34 @@ interface Suggested {
   contexto: string
   tipo: string
   prioridad: string
+  due_date: string | null
+  requested_at: string | null
+  estimated_hours: number | null
+  origen: string
   selected: boolean
 }
 
 const PROXY_URL = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-proxy'
 
-const EXTRACT_SYSTEM = 'Extrae tareas practicas y especificas de notas o instrucciones. No inventes; solo extrae lo explicito. Clasifica el tipo de cada tarea.'
-function extractPrompt(text: string) {
-  return `Extrae las tareas concretas de estas notas. Para cada una indica: titulo corto y practico, contexto (banco/agencia/personal), tipo (independiente/con_subtareas/proyecto/recurrente) y prioridad (alta/media/baja).
-Responde SOLO JSON: {"tareas":[{"titulo":"...","contexto":"...","tipo":"...","prioridad":"..."}]}
+const EXTRACT_SYSTEM = 'Sos un asistente que extrae tareas accionables de notas, mensajes o imágenes (correos, WhatsApp, documentos). No inventes; solo lo explícito o claramente implícito. Devolvés SOLO JSON.'
 
-Notas:
-${text.trim()}`
+function extractPrompt(text: string) {
+  return `Hoy es ${todayISO()}. Extrae las tareas concretas. Para CADA tarea devolvé estos campos:
+- titulo: corto y práctico
+- contexto: banco | agencia | personal
+- tipo: independiente | con_subtareas | proyecto | recurrente
+- prioridad: alta | media | baja
+- due_date: fecha de entrega "YYYY-MM-DD" si se menciona o infiere, sino null
+- requested_at: fecha en que lo pidieron "YYYY-MM-DD" si se infiere (ej. fecha del correo), sino null
+- estimated_hours: estimación de esfuerzo, uno de 0.5,1,1.5,2,3,4,6,8
+- origen: gmail-agencia | whatsapp | reunion | propia
+
+Responde SOLO JSON: {"tareas":[{"titulo":"...","contexto":"...","tipo":"...","prioridad":"...","due_date":null,"requested_at":null,"estimated_hours":1,"origen":"..."}]}
+
+${text.trim() ? `Contenido:\n${text.trim()}` : ''}`
 }
 
-async function extractTasks(text: string): Promise<Suggested[]> {
-  let reply: string
-  const res = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: [{ role: 'user', content: extractPrompt(text) }], system: EXTRACT_SYSTEM }),
-  }).catch(() => null)
-  if (res && res.ok) {
-    const data = await res.json()
-    reply = data.reply || data.content?.[0]?.text || JSON.stringify(data)
-  } else {
-    reply = await callClaude([{ role: 'user', content: extractPrompt(text) }], EXTRACT_SYSTEM)
-  }
+function parseSuggested(reply: string): Suggested[] {
   const cleaned = reply.replace(/```json|```/g, '').trim()
   const parsed = JSON.parse(cleaned)
   const items = parsed.tareas || parsed.tasks || []
@@ -49,8 +50,43 @@ async function extractTasks(text: string): Promise<Suggested[]> {
     contexto: t.contexto || t.context || 'agencia',
     tipo: t.tipo || t.type || 'independiente',
     prioridad: t.prioridad || t.priority || 'media',
+    due_date: t.due_date || null,
+    requested_at: t.requested_at || null,
+    estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
+    origen: t.origen || t.origin || 'propia',
     selected: true,
   }))
+}
+
+// El edge function devuelve { text }; leemos eso primero.
+async function callProxy(content: any): Promise<string> {
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content }], system: EXTRACT_SYSTEM }),
+  })
+  if (!res.ok) throw new Error('proxy')
+  const data = await res.json()
+  return data.text || data.reply || data.content?.[0]?.text || ''
+}
+
+async function extractTasks(text: string): Promise<Suggested[]> {
+  let reply: string
+  try {
+    reply = await callProxy(extractPrompt(text))
+  } catch {
+    reply = await callClaude([{ role: 'user', content: extractPrompt(text) }], EXTRACT_SYSTEM)
+  }
+  return parseSuggested(reply)
+}
+
+// Extracción por visión: manda el prompt + imágenes (base64) al proxy.
+async function extractFromImages(images: { media_type: string; data: string }[], extraText: string): Promise<Suggested[]> {
+  const content = [
+    { type: 'text', text: extractPrompt(extraText || '(Las tareas están en las imágenes adjuntas: correos, WhatsApp o documentos.)') },
+    ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })),
+  ]
+  return parseSuggested(await callProxy(content))
 }
 
 export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId }: {
@@ -146,14 +182,43 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [suggestions, setSuggestions] = useState<Suggested[]>([])
   const [extracted, setExtracted] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
+  const [images, setImages] = useState<{ name: string; url: string; media_type: string; data: string; file: File }[]>([])
+
+  async function addImages(files: FileList | null) {
+    if (!files) return
+    const arr = await Promise.all(Array.from(files).map(f => new Promise<{ name: string; url: string; media_type: string; data: string; file: File }>(resolve => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string // data:<mime>;base64,XXXX
+        resolve({ name: f.name, url: result, media_type: f.type || 'image/png', data: result.split(',')[1] || '', file: f })
+      }
+      reader.readAsDataURL(f)
+    })))
+    setImages(prev => [...prev, ...arr])
+  }
 
   async function runExtract(text: string) {
     if (!text.trim()) return
     setExtracting(true); setSuggestions([])
     try {
-      const items = await extractTasks(text)
-      setSuggestions(items)
-      setExtracted(true)
+      setSuggestions(await extractTasks(text)); setExtracted(true)
+    } catch {
+      alert('Error extrayendo tareas. Intenta de nuevo.')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  // Extrae de notas y/o imágenes (visión)
+  async function handleExtract() {
+    const hasImages = images.length > 0
+    if (!meetingText.trim() && !hasImages) return
+    setExtracting(true); setSuggestions([])
+    try {
+      const items = hasImages
+        ? await extractFromImages(images.map(im => ({ media_type: im.media_type, data: im.data })), meetingText)
+        : await extractTasks(meetingText)
+      setSuggestions(items); setExtracted(true)
     } catch {
       alert('Error extrayendo tareas. Intenta de nuevo.')
     } finally {
@@ -166,21 +231,37 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     if (!selected.length) return
     setSavingNotes(true)
     const taskRows = selected.filter(s => s.tipo !== 'recurrente').map(s => ({
-      title: s.titulo, context: s.contexto, priority: s.prioridad, origin: 'reunion',
+      title: s.titulo, context: s.contexto, priority: s.prioridad, origin: s.origen || 'reunion',
       client_id: s.contexto === 'agencia' ? clientId : null,
+      due_date: s.due_date || null,
+      requested_at: s.requested_at || todayISO(),
+      estimated_hours: s.estimated_hours,
       status: 'Inbox', done: false, cats: [], plan: [], meeting_agenda: [], task_type: 'independiente',
     }))
     const recRows = selected.filter(s => s.tipo === 'recurrente').map(s => ({
       title: s.titulo, context: s.contexto, client_id: s.contexto === 'agencia' ? clientId : null,
       freq: 'mensual', day_of_month: '1', priority: s.prioridad, active: true, cats: [], time_minutes: 60,
     }))
+    let firstTaskId: number | null = null
     if (taskRows.length) {
-      const { error } = await supabase.from('tasks').insert(taskRows)
+      const { data, error } = await supabase.from('tasks').insert(taskRows).select('id')
       if (error) { alert('Error: ' + error.message); setSavingNotes(false); return }
+      firstTaskId = data?.[0]?.id ?? null
     }
     if (recRows.length) {
       const { error } = await supabase.from('recurrentes').insert(recRows)
       if (error) { alert('Error: ' + error.message); setSavingNotes(false); return }
+    }
+    // Guardar las imágenes como contexto (es_contexto=true), vinculadas a la primera tarea creada
+    if (images.length && firstTaskId) {
+      for (const im of images) {
+        const path = `${firstTaskId}/${Date.now()}-${im.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`
+        const up = await supabase.storage.from('capturas').upload(path, im.file, { contentType: im.media_type })
+        if (!up.error) {
+          const { data: pub } = supabase.storage.from('capturas').getPublicUrl(path)
+          await supabase.from('attachments').insert({ task_id: firstTaskId, name: im.name, url: pub.publicUrl, es_contexto: true, size_kb: Math.round(im.file.size / 1024) })
+        }
+      }
     }
     await loadAll()
     onClose()
@@ -252,6 +333,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                     {s.tipo}
                   </span>
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{s.prioridad}</span>
+                  {s.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">📅 {s.due_date.slice(5).replace('-', '/')}</span>}
+                  {s.requested_at && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">📨 {s.requested_at.slice(5).replace('-', '/')}</span>}
+                  {s.estimated_hours != null && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">⏱ {fmtHoras(s.estimated_hours)}</span>}
+                  {s.origen && s.origen !== 'propia' && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{s.origen}</span>}
                 </div>
               </div>
             </div>
@@ -449,9 +534,26 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
             <>
               {tab === 'notas' ? (
                 <>
-                  <p className="text-[13px] text-gray-400 mb-3">Escribe lo que te pidieron y Claude extrae y clasifica las tareas.</p>
+                  <p className="text-[13px] text-gray-400 mb-3">Pegá lo que te pidieron y/o subí imágenes (correos, WhatsApp, documentos). Claude extrae y clasifica las tareas con todos los campos.</p>
                   <textarea value={meetingText} onChange={e => setMeetingText(e.target.value)}
-                    className={inputCls + ' resize-y leading-relaxed mb-3'} placeholder="Notas de la reunión o lo que te pidieron…" rows={8} autoFocus />
+                    className={inputCls + ' resize-y leading-relaxed mb-3'} placeholder="Notas, correo pegado, o dejá vacío y subí imágenes…" rows={6} autoFocus />
+
+                  <div className="mb-3">
+                    <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Imágenes (opcional)</label>
+                    <input type="file" accept="image/*" multiple onChange={e => { addImages(e.target.files); e.target.value = '' }}
+                      className="text-[12px] text-gray-500 file:mr-2 file:text-[11px] file:bg-claude/7 file:text-claude file:border file:border-claude/20 file:rounded-md file:px-2 file:py-1 file:cursor-pointer" />
+                    {images.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-2">
+                        {images.map((im, i) => (
+                          <div key={i} className="relative">
+                            <img src={im.url} alt={im.name} className="w-16 h-16 object-cover rounded-md border border-black/10" />
+                            <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
+                              className="absolute -top-1.5 -right-1.5 bg-danger text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center cursor-pointer">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <>
@@ -475,9 +577,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               )}
 
               {tab === 'notas' && (
-                <button onClick={() => runExtract(meetingText)} disabled={!meetingText.trim() || extracting}
+                <button onClick={handleExtract} disabled={(!meetingText.trim() && !images.length) || extracting}
                   className="w-full text-xs bg-claude/7 border border-claude/20 text-claude px-4 py-2.5 rounded-lg hover:bg-claude/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed font-medium mb-4">
-                  {extracting ? 'Extrayendo…' : '✦ Extraer tareas con Claude'}
+                  {extracting ? 'Extrayendo…' : images.length ? `✦ Extraer de ${images.length} imagen(es)${meetingText.trim() ? ' + texto' : ''}` : '✦ Extraer tareas con Claude'}
                 </button>
               )}
 
