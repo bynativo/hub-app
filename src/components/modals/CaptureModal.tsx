@@ -132,7 +132,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
   // ===== Tabs Notas / Micro (extracción) =====
   const [meetingText, setMeetingText] = useState('')
-  const [extractContext, setExtractContext] = useState('agencia')
   const [extracting, setExtracting] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggested[]>([])
   const [extracted, setExtracted] = useState(false)
@@ -158,11 +157,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     setSavingNotes(true)
     const taskRows = selected.filter(s => s.tipo !== 'recurrente').map(s => ({
       title: s.titulo, context: s.contexto, priority: s.prioridad, origin: 'reunion',
-      client_id: s.contexto === 'agencia' ? clientIdForExtract() : null,
+      client_id: s.contexto === 'agencia' ? clientId : null,
       status: 'Inbox', done: false, cats: [], plan: [], meeting_agenda: [], task_type: 'independiente',
     }))
     const recRows = selected.filter(s => s.tipo === 'recurrente').map(s => ({
-      title: s.titulo, context: s.contexto, client_id: s.contexto === 'agencia' ? clientIdForExtract() : null,
+      title: s.titulo, context: s.contexto, client_id: s.contexto === 'agencia' ? clientId : null,
       freq: 'mensual', day_of_month: '1', priority: s.prioridad, active: true, cats: [], time_minutes: 60,
     }))
     if (taskRows.length) {
@@ -176,9 +175,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     await loadAll()
     onClose()
   }
-
-  const [extractClientId, setExtractClientId] = useState<number | null>(null)
-  function clientIdForExtract() { return extractClientId }
 
   // ===== Tab Micro =====
   const [recording, setRecording] = useState(false)
@@ -264,6 +260,30 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
           <button className={tabCls('micro')} onClick={() => setTab('micro')}>🎙 Micrófono</button>
         </div>
 
+        {/* Selectores compartidos por los 3 tabs */}
+        <div className="px-6 pt-4 pb-3 border-b border-black/7 grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Contexto</label>
+            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }} className={fieldCls}>
+              <option value="banco">Banco Falabella</option>
+              <option value="agencia">Agencia</option>
+              <option value="personal">Personal</option>
+            </select>
+          </div>
+          {context === 'agencia' && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Cliente</label>
+                <button type="button" onClick={() => setQuickClientOpen(true)} className="text-[11px] text-claude hover:underline cursor-pointer">+ Crear cliente rápido</button>
+              </div>
+              <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
+                <option value="">Agencia interna</option>
+                {agClients.map(c => <option key={c.id} value={c.id}>{c.name} · {c.tipo === 'prospecto' ? 'prospecto' : 'activo'}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+
         <div className="p-6">
           {tab === 'tarea' && (
             <>
@@ -315,38 +335,14 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className={labelCls}>Contexto</label>
-                  <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }} className={fieldCls}>
-                    <option value="banco">Banco Falabella</option>
-                    <option value="agencia">Agencia</option>
-                    <option value="personal">Personal</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Prioridad</label>
-                  <select value={priority} onChange={e => setPriority(e.target.value)} className={fieldCls}>
-                    <option value="alta">🔴 Alta</option>
-                    <option value="media">🟡 Media</option>
-                    <option value="baja">🟢 Baja</option>
-                  </select>
-                </div>
+              <div className="mb-3">
+                <label className={labelCls}>Prioridad</label>
+                <select value={priority} onChange={e => setPriority(e.target.value)} className={fieldCls}>
+                  <option value="alta">🔴 Alta</option>
+                  <option value="media">🟡 Media</option>
+                  <option value="baja">🟢 Baja</option>
+                </select>
               </div>
-
-              {context === 'agencia' && (
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Cliente</label>
-                    <button type="button" onClick={() => setQuickClientOpen(true)}
-                      className="text-[11px] text-claude hover:underline cursor-pointer">+ Crear cliente rápido</button>
-                  </div>
-                  <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
-                    <option value="">Agencia interna</option>
-                    {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-              )}
 
               <div className="mb-3">
                 <label className={labelCls}>Origen</label>
@@ -425,26 +421,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   </div>
                 </>
               )}
-
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className={labelCls}>Contexto</label>
-                  <select value={extractContext} onChange={e => { setExtractContext(e.target.value); setExtractClientId(null) }} className={fieldCls}>
-                    <option value="banco">Banco Falabella</option>
-                    <option value="agencia">Agencia</option>
-                    <option value="personal">Personal</option>
-                  </select>
-                </div>
-                {extractContext === 'agencia' && (
-                  <div>
-                    <label className={labelCls}>Cliente</label>
-                    <select value={extractClientId ?? ''} onChange={e => setExtractClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
-                      <option value="">Agencia interna</option>
-                      {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
 
               {tab === 'notas' && (
                 <button onClick={() => runExtract(meetingText)} disabled={!meetingText.trim() || extracting}
