@@ -4,6 +4,7 @@ import { Topbar } from './components/layout/Topbar'
 import { Sidebar } from './components/layout/Sidebar'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
+import { WeekView } from './components/dashboard/WeekView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
 import { SeguimientoView } from './components/dashboard/SeguimientoView'
@@ -15,18 +16,6 @@ import { PresentationDetail } from './components/presentations/PresentationDetai
 import { GrillaView } from './components/grilla/GrillaView'
 import { CaptureModal } from './components/modals/CaptureModal'
 import { FollowupModal } from './components/modals/FollowupModal'
-
-function Placeholder({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="animate-fade-in p-5">
-      <h1 className="font-serif text-[26px] font-light mb-0.5">{title}</h1>
-      <p className="text-gray-500 text-[13px] mb-6">{note}</p>
-      <div className="bg-bg2 border border-dashed border-black/13 rounded-xl p-10 text-center text-gray-400 text-[13px]">
-        En construcción · se implementa en un componente posterior del rediseño
-      </div>
-    </div>
-  )
-}
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -57,7 +46,8 @@ export default function App() {
     switch (activeView) {
       // General
       case 'hoy': return <Dashboard />
-      case 'semana': return <Placeholder title="Esta semana" note="Tareas con vencimiento en los próximos 7 días" />
+      case 'semana': return <WeekView range="esta" />
+      case 'proxima-semana': return <WeekView range="proxima" />
       case 'seguimiento': return <SeguimientoView />
       case 'recurrentes': return <RecurrentesView />
       case 'contactos': return <ContactsView />

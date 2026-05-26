@@ -32,6 +32,14 @@ export function tomorrowISO(): string {
   return localISO(d)
 }
 
+// Lunes a domingo de la próxima semana (ISO YYYY-MM-DD).
+export function nextWeekRange(): { from: string; to: string } {
+  const dow = new Date().getDay() // 0=dom..6=sab
+  const toMon = ((1 - dow + 7) % 7) || 7 // días hasta el próximo lunes (si hoy es lunes, +7)
+  const from = addDaysISO(todayISO(), toMon)
+  return { from, to: addDaysISO(from, 6) }
+}
+
 // Dias desde hoy hasta `due` (negativo = vencida). null si no hay fecha.
 export function daysUntil(due: string | null): number | null {
   if (!due) return null

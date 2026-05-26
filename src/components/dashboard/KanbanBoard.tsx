@@ -43,13 +43,15 @@ function KanbanCard({ task, onDragStart }: { task: Task; onDragStart: (id: numbe
   )
 }
 
-export function KanbanBoard() {
+export function KanbanBoard({ items }: { items?: Task[] } = {}) {
   const tasks = useStore(s => s.tasks)
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
 
-  const active = tasks.filter(t => !t.done && !t.parent_task_id)
+  // Si recibe `items` los usa; si no, todas las tareas activas (sin recordatorios,
+  // que viven en Seguimiento). Misma fuente que la vista Lista.
+  const active = items ?? tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio)
 
   function handleDragStart(id: number, e: React.DragEvent) {
     setDraggingId(id)

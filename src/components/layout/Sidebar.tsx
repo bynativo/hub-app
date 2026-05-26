@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { WAITING_STATES } from '../../lib/constants'
-import { todayISO, daysUntil } from '../../lib/helpers'
+import { todayISO, daysUntil, nextWeekRange } from '../../lib/helpers'
 
 const STORAGE_KEY = 'sidebar_collapsed'
 function loadCollapsed(): Record<string, boolean> {
@@ -72,6 +72,8 @@ export function Sidebar() {
     const d = daysUntil(t.due_date)
     return d !== null && d >= 0 && d <= 7
   }).length
+  const pw = nextWeekRange()
+  const proximaCount = active.filter(t => t.due_date && t.due_date >= pw.from && t.due_date <= pw.to).length
   const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length
 
   const ctxCount = (ctx: string) => active.filter(t => t.context === ctx && !t.es_recordatorio).length
@@ -92,6 +94,7 @@ export function Sidebar() {
       <GroupHeader label="General" />
       <NavItem label="Hoy" view="hoy" count={hoyCount} />
       <NavItem label="Esta semana" view="semana" count={semanaCount} />
+      <NavItem label="Próxima semana" view="proxima-semana" count={proximaCount} />
       <NavItem label="Seguimiento" view="seguimiento" count={seguimientoCount} />
       <NavItem label="Recurrentes" view="recurrentes" />
       <NavItem label="Contactos" view="contactos" />
