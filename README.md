@@ -243,10 +243,33 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **`loadAll()` silencioso tras mutaciones** — el loader full-screen (`loading`) solo se muestra en la carga inicial (flag `initialized` en el store). Los refrescos tras crear/editar son silenciosos; si se volviera a poner `loading=true` en cada `loadAll`, App desmonta todo el árbol y resetea el estado local de los componentes (se cerraría el chat, modales, etc.).
 - **Columna `campaña` con ñ** — en `slides` la columna real es `campaña`/`campaña_nombre` (con ñ); acceder vía `(slide as Record<string, any>)['campaña']`, no `campana`.
 - **Colores de contexto** — convención de la app: banco azul (`#2563eb`), agencia teal (`#0d9488`), personal ámbar (`#d97706`). Usar `ctxColor()` para consistencia.
+- **Validar con `npm run build`, NO solo `tsc --noEmit`** — el build real es `tsc -b && vite build` (lo que corre Vercel) y usa la config estricta de `tsconfig.app.json`; `tsc --noEmit` lee otra config y NO caza errores como casts inválidos (`TS2352`). Si el build falla, Vercel deja prod en el último build exitoso (silenciosamente). Siempre `npm run build` antes de pushear.
 
 ---
 
 ## Changelog
+
+### 2026-05-26 — Sesion 6: Bugs, vistas de semana y fix de build
+
+- **Vista Lista (dashboard):** ademas de Hoy/Mañana/Seguimiento ahora muestra
+  "Próximas" (con fecha futura) y "Sin fecha" → ninguna tarea activa queda
+  invisible (paridad con Kanban). El Kanban excluye recordatorios (viven en
+  Seguimiento) y acepta `items` para mostrar un subconjunto.
+- **Subtareas anidadas:** `TaskItem` despliega las subtareas con indent bajo la
+  tarea madre en todas las listas (un nivel), cada una clickeable.
+- **Modal de subtarea:** "+ Nueva subtarea" abre el `CaptureModal` completo con
+  `parent_task_id` precargado (tipo=subtarea). Se agrego "Estimado de tiempo" al
+  CaptureModal.
+- **Calendario RRSS:** "Grilla mayo"/"Grilla" del sidebar renombradas a
+  "Calendario RRSS" (banco y agencia); es el calendario unificado de todos los meses.
+- **Vistas de semana:** nuevo `WeekView` reutilizable. "Esta semana" (hoy→+7) y
+  "Próxima semana" (lunes→domingo siguiente), agrupadas por dia (dias vacios
+  ocultos), con toggle Lista/Kanban. Helper `nextWeekRange()`.
+- **FIX CRITICO de build:** un cast invalido en `GrillaView` (`TS2352`) rompia
+  `tsc -b && vite build` desde la sesion del punto 9 → **todos los deploys de
+  Vercel venian fallando** y prod quedo clavado en un build viejo (los puntos
+  9-12, los bugs y las vistas de semana nunca se habian publicado). Corregido;
+  prod al dia.
 
 ### 2026-05-26 — Sesion 5: Plan de 11 puntos (2 → 12)
 
