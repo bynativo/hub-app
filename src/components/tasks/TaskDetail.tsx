@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { ctxLabel } from '../../lib/helpers'
-import type { Checklist } from '../../lib/types'
+import type { Checklist, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Tab = 'info' | 'subtareas' | 'checklist' | 'chat' | 'email' | 'slide'
@@ -22,6 +22,87 @@ function parseAction(text: string): { json: any; clean: string } | null {
   return null
 }
 
+function SubtaskRow({ sub }: { sub: Task }) {
+  const updateTask = useStore(s => s.updateTask)
+  const toggleTask = useStore(s => s.toggleTask)
+  const openDetail = useStore(s => s.openDetail)
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState(sub.title)
+  const [status, setStatus] = useState(sub.status)
+  const [due, setDue] = useState(sub.due_date || '')
+  const [hours, setHours] = useState(sub.estimated_hours != null ? String(sub.estimated_hours) : '')
+  const [notes, setNotes] = useState(sub.notes || '')
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const states = ESTADOS[sub.context] || ESTADOS.banco
+  const mark = <T,>(setter: (v: T) => void, v: T) => { setter(v); setDirty(true) }
+
+  async function save() {
+    setSaving(true)
+    await updateTask(sub.id, {
+      title: title.trim() || sub.title, status, due_date: due || null,
+      estimated_hours: hours ? Number(hours) : null, notes: notes.trim() || null,
+    })
+    setSaving(false); setDirty(false)
+  }
+
+  const subField = 'w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20'
+  const subLabel = 'text-[10px] font-mono text-gray-400 uppercase block mb-1'
+
+  return (
+    <div className="rounded-lg border border-black/7 bg-bg2">
+      <div className="flex items-center gap-2 p-2.5">
+        <div onClick={() => toggleTask(sub.id)}
+          className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] ${sub.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'}`}>
+          {sub.done && '✓'}
+        </div>
+        <span onClick={() => setOpen(o => !o)} className={`text-[13px] flex-1 cursor-pointer hover:text-claude ${sub.done ? 'line-through text-gray-400' : ''}`}>{sub.title}</span>
+        {sub.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{sub.due_date.slice(5).replace('-', '/')}</span>}
+        {sub.estimated_hours != null && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{sub.estimated_hours}h</span>}
+        <span className="text-[10px]" style={{ color: STATUS_COLOR[sub.status] }}>{STATUS_ICON[sub.status]}</span>
+        <button onClick={() => setOpen(o => !o)} className="text-gray-400 hover:text-gray-900 cursor-pointer text-[11px] w-4">{open ? '▾' : '▸'}</button>
+        <button onClick={() => openDetail(sub.id)} title="Abrir como tarea" className="text-gray-400 hover:text-claude cursor-pointer text-[11px]">↗</button>
+      </div>
+
+      {open && (
+        <div className="border-t border-black/7 p-3 flex flex-col gap-2 bg-bg3">
+          <div>
+            <label className={subLabel}>Título</label>
+            <input value={title} onChange={e => mark(setTitle, e.target.value)} className={subField} />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className={subLabel}>Estado</label>
+              <select value={status} onChange={e => mark(setStatus, e.target.value)} className={subField + ' cursor-pointer'}>
+                {states.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={subLabel}>Fecha</label>
+              <input type="date" value={due} onChange={e => mark(setDue, e.target.value)} className={subField} />
+            </div>
+            <div>
+              <label className={subLabel}>Horas est.</label>
+              <input type="number" min="0" step="0.5" value={hours} onChange={e => mark(setHours, e.target.value)} className={subField} placeholder="1" />
+            </div>
+          </div>
+          <div>
+            <label className={subLabel}>Descripción</label>
+            <textarea value={notes} onChange={e => mark(setNotes, e.target.value)} rows={2} className={subField + ' resize-y'} placeholder="Detalles de la subtarea…" />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={save} disabled={!dirty || saving}
+              className="text-[11px] bg-claude text-white px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed">
+              {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function TaskDetail() {
   const tasks = useStore(s => s.tasks)
   const contacts = useStore(s => s.contacts)
@@ -30,7 +111,6 @@ export function TaskDetail() {
   const openDetail = useStore(s => s.openDetail)
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
   const updateTask = useStore(s => s.updateTask)
-  const toggleTask = useStore(s => s.toggleTask)
   const loadAll = useStore(s => s.loadAll)
 
   const task = tasks.find(t => t.id === currentTaskId)
@@ -310,7 +390,7 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
           <div className="animate-fade-in">
             <div className="flex items-center justify-between mb-2">
               <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Subtareas vinculadas</div>
-              <button onClick={() => setAddingSub(v => !v)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Agregar subtarea</button>
+              <button onClick={() => setAddingSub(v => !v)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Nueva subtarea</button>
             </div>
 
             {addingSub && (
@@ -327,17 +407,7 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
 
             {subtasks.length ? (
               <div className="flex flex-col gap-1.5">
-                {subtasks.map(s => (
-                  <div key={s.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-black/7 bg-bg2">
-                    <div onClick={() => toggleTask(s.id)}
-                      className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] ${s.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'}`}>
-                      {s.done && '✓'}
-                    </div>
-                    <span onClick={() => openDetail(s.id)} className={`text-[13px] flex-1 cursor-pointer hover:text-claude ${s.done ? 'line-through text-gray-400' : ''}`}>{s.title}</span>
-                    {s.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{s.due_date.slice(5).replace('-', '/')}</span>}
-                    <span className="text-[10px]" style={{ color: STATUS_COLOR[s.status] }}>{STATUS_ICON[s.status]}</span>
-                  </div>
-                ))}
+                {subtasks.map(s => <SubtaskRow key={s.id} sub={s} />)}
               </div>
             ) : (
               <div className="text-xs text-gray-400">Sin subtareas. Agregá una o pedíselas a Claude en el chat.</div>
