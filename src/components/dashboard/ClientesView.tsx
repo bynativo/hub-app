@@ -220,7 +220,7 @@ export function ClientesView() {
                 {clientProjects.map(p => (
                   <div key={p.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-black/7 bg-bg3">
                     <span className="text-[13px] flex-1">📁 {p.name}</span>
-                    {p.type && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">{p.type}</span>}
+                    {(p.tipo_agencia || p.type) && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {p.tipo_agencia || p.type}</span>}
                     {p.status && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{p.status}</span>}
                     {p.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{p.due_date.slice(5).replace('-', '/')}</span>}
                   </div>

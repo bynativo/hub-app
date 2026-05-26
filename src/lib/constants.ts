@@ -101,6 +101,9 @@ export const REDES: { v: string; label: string; color: string }[] = [
 
 export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab']
 
+// Tipos de proyecto de agencia
+export const TIPO_AGENCIA = ['Marca', 'Proyecto puntual', 'Presupuesto nuevo cliente']
+
 export const PROD_STATUS: Record<string, string[]> = {
   banco: ['Pendiente', 'En grabacion', 'En edicion', 'Entregado a CM'],
   agencia: ['Pendiente', 'En produccion', 'Entregado al cliente'],

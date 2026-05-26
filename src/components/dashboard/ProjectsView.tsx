@@ -63,6 +63,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
               <div className="flex gap-1.5 flex-wrap">
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded capitalize" style={{ background: stColor + '14', color: stColor }}>{p.status || 'activo'}</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: ctxColor(p.context) + '12', color: ctxColor(p.context) }}>{ctxLabel(p.context)}</span>
+                {p.tipo_agencia && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {p.tipo_agencia}</span>}
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{all.length} tareas · {pend} pendientes</span>
                 {p.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{p.clients.name}</span>}
                 {p.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {p.due_date.slice(5).replace('-', '/')}</span>}
@@ -81,6 +82,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
               {selected.description && <div className="text-[13px] text-gray-500 leading-relaxed mb-2">{selected.description}</div>}
               <div className="flex gap-1.5 flex-wrap">
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded capitalize" style={{ background: (STATUS_COLOR[selected.status || ''] || '#6b7280') + '14', color: STATUS_COLOR[selected.status || ''] || '#6b7280' }}>{selected.status || 'activo'}</span>
+                {selected.tipo_agencia && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {selected.tipo_agencia}</span>}
                 {selected.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{selected.clients.name}</span>}
                 {selected.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {selected.due_date}</span>}
               </div>

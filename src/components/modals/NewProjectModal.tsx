@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
+import { TIPO_AGENCIA } from '../../lib/constants'
 
 const STATUSES = ['activo', 'en pausa', 'cerrado']
 
@@ -15,6 +16,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [status, setStatus] = useState('activo')
+  const [tipoAgencia, setTipoAgencia] = useState(TIPO_AGENCIA[0])
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -23,6 +25,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
     const { error } = await supabase.from('projects').insert({
       name: name.trim(), context, client_id: context === 'agencia' ? clientId : null,
       description: description.trim() || null, due_date: dueDate || null, status, type: 'proyecto',
+      tipo_agencia: context === 'agencia' ? tipoAgencia : null,
     })
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
     await loadAll()
@@ -61,12 +64,20 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
         </div>
 
         {context === 'agencia' && (
-          <div className="mb-3">
-            <label className={labelCls}>Cliente</label>
-            <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
-              <option value="">Agencia interna</option>
-              {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className={labelCls}>Cliente</label>
+              <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
+                <option value="">Agencia interna</option>
+                {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Tipo de proyecto</label>
+              <select value={tipoAgencia} onChange={e => setTipoAgencia(e.target.value)} className={fieldCls}>
+                {TIPO_AGENCIA.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
           </div>
         )}
 

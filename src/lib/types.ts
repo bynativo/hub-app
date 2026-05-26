@@ -27,6 +27,7 @@ export interface Project {
   email: string | null
   color: string | null
   status: string | null
+  tipo_agencia: string | null
   created_at: string
   presentation_url: string | null
   presentation_type: string | null
