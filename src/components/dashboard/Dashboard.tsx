@@ -6,11 +6,16 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
 
-function SectionHeader({ icon, label, count }: { icon: string; label: string; count: number }) {
+function fmtHoras(h: number): string {
+  return `${h % 1 === 0 ? h : h.toFixed(1)}h`
+}
+
+function SectionHeader({ icon, label, count, hours }: { icon: string; label: string; count: number; hours?: number }) {
   return (
     <div className="flex items-center gap-2 mb-2.5 mt-5 first:mt-0">
       <span className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">{icon} {label}</span>
       {count > 0 && <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{count}</span>}
+      {hours ? <span className="font-mono text-[10px] text-claude bg-claude/10 px-1.5 rounded-full">{fmtHoras(hours)}</span> : null}
     </div>
   )
 }
@@ -26,6 +31,7 @@ export function Dashboard() {
   const hoy = active.filter(t => t.due_date === today)
   const manana = active.filter(t => t.due_date === tomorrow)
   const seguimiento = active.filter(t => WAITING_STATES.includes(t.status))
+  const horasHoy = hoy.reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
 
   return (
     <div className="animate-fade-in p-5">
@@ -33,6 +39,7 @@ export function Dashboard() {
       <p className="text-gray-500 text-[13px] mb-5">
         {active.length} tareas activas
         {hoy.length ? ` · ${hoy.length} para hoy` : ''}
+        {horasHoy > 0 ? ` · ${fmtHoras(horasHoy)} estimadas hoy` : ''}
         {seguimiento.length ? ` · ${seguimiento.length} en seguimiento` : ''}
       </p>
 
@@ -57,7 +64,7 @@ export function Dashboard() {
         <KanbanBoard />
       ) : (
         <div className="max-w-[900px]">
-          <SectionHeader icon="📌" label="Hoy" count={hoy.length} />
+          <SectionHeader icon="📌" label="Hoy" count={hoy.length} hours={horasHoy} />
           <TaskList tasks={hoy} emptyText="Nada vence hoy" />
 
           <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
