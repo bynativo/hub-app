@@ -11,6 +11,7 @@ interface AppState {
   presentations: Presentation[]
   contacts: Contact[]
   loading: boolean
+  initialized: boolean
   activeView: string
   activeClientId: number | null
   currentTaskId: number | null
@@ -44,6 +45,7 @@ export const useStore = create<AppState>((set, get) => ({
   presentations: [],
   contacts: [],
   loading: true,
+  initialized: false,
   activeView: 'hoy',
   activeClientId: null,
   currentTaskId: null,
@@ -55,7 +57,9 @@ export const useStore = create<AppState>((set, get) => ({
   pendingFollowupTaskId: null,
 
   loadAll: async () => {
-    set({ loading: true })
+    // Solo el loader de pantalla completa en la carga inicial; los refrescos
+    // tras una mutación son silenciosos (no desmontan el árbol ni resetean estado).
+    if (!get().initialized) set({ loading: true })
     const [tc, pc, cc, rc, prc, ct] = await Promise.all([
       supabase.from('tasks').select('*,projects(name,color),clients(name,email)').order('created_at', { ascending: false }),
       supabase.from('projects').select('*,clients(name)').order('created_at', { ascending: false }),
@@ -72,6 +76,7 @@ export const useStore = create<AppState>((set, get) => ({
       presentations: prc.data || [],
       contacts: ct.data || [],
       loading: false,
+      initialized: true,
     })
   },
 
