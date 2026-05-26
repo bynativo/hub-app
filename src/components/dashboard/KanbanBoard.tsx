@@ -49,7 +49,7 @@ export function KanbanBoard() {
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
 
-  const active = tasks.filter(t => !t.done)
+  const active = tasks.filter(t => !t.done && !t.parent_task_id)
 
   function handleDragStart(id: number, e: React.DragEvent) {
     setDraggingId(id)

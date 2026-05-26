@@ -39,7 +39,7 @@ function GroupHeader({ label, color }: { label: string; color?: string }) {
 export function Sidebar() {
   const tasks = useStore(s => s.tasks)
   const openCapture = useStore(s => s.openCapture)
-  const active = tasks.filter(t => !t.done)
+  const active = tasks.filter(t => !t.done && !t.parent_task_id)
 
   const today = todayISO()
   const hoyCount = active.filter(t => t.due_date === today).length

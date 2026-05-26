@@ -19,7 +19,7 @@ export function Dashboard() {
   const tasks = useStore(s => s.tasks)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
-  const active = tasks.filter(t => !t.done)
+  const active = tasks.filter(t => !t.done && !t.parent_task_id)
   const today = todayISO()
   const tomorrow = tomorrowISO()
 

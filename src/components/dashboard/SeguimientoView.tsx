@@ -101,7 +101,7 @@ function FollowupCard({ task }: { task: Task }) {
 
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
-  const waiting = tasks.filter(t => !t.done && WAITING_STATES.includes(t.status))
+  const waiting = tasks.filter(t => !t.done && !t.parent_task_id && WAITING_STATES.includes(t.status))
   // Ordenar: con alarma vencida primero, luego por followup_at, luego sin recordatorio
   const sorted = [...waiting].sort((a, b) => {
     const av = a.followup_at ? new Date(a.followup_at).getTime() : Infinity
