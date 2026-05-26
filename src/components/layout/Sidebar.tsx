@@ -113,6 +113,7 @@ export function Sidebar() {
           <NavItem label="Clientes" view="agencia-clientes" indent />
           <NavItem label="Equipo" view="agencia-equipo" indent />
           <NavItem label="Presentaciones" view="agencia-presentaciones" indent />
+          <NavItem label="Grilla" view="agencia-grilla" indent />
         </>
       )}
 

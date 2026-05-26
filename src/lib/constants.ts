@@ -97,6 +97,7 @@ export const REDES: { v: string; label: string; color: string }[] = [
   { v: 'youtube', label: 'YouTube', color: '#ff0000' },
   { v: 'facebook', label: 'Facebook', color: '#1877f2' },
   { v: 'x', label: 'X', color: '#111111' },
+  { v: 'linkedin', label: 'LinkedIn', color: '#0a66c2' },
 ]
 
 export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab']

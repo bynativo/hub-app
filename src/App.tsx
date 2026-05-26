@@ -65,12 +65,13 @@ export default function App() {
       case 'banco-tareas': return <ContextView context="banco" />
       case 'banco-proyectos': return <ProjectsView context="banco" onOpenPres={setOpenPresId} />
       case 'banco-presentaciones': return <PresentationsView context="banco" onOpen={setOpenPresId} />
-      case 'banco-grilla': return <GrillaView />
+      case 'banco-grilla': return <GrillaView context="banco" />
       // Agencia
       case 'agencia-tareas': return <ContextView context="agencia" />
       case 'agencia-clientes': return <ClientesView />
       case 'agencia-equipo': return <ContactsView context="agencia" title="Equipo" />
       case 'agencia-presentaciones': return <PresentationsView context="agencia" onOpen={setOpenPresId} />
+      case 'agencia-grilla': return <GrillaView context="agencia" />
       // Personal
       case 'personal-tareas': return <ContextView context="personal" />
       default: return <Dashboard />
