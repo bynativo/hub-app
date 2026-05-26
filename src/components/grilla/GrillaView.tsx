@@ -153,7 +153,7 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
                           {s.presentations?.client_id && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{clients.find(c => c.id === s.presentations!.client_id)?.name || 'cliente'}</span>
                           )}
-                          {(s as Record<string, unknown>)['campaña_nombre'] ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{String((s as Record<string, unknown>)['campaña_nombre'])}</span> : null}
+                          {(s as unknown as Record<string, unknown>)['campaña_nombre'] ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{String((s as unknown as Record<string, unknown>)['campaña_nombre'])}</span> : null}
                           {hasConflict && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-danger/10 text-danger">⚠ Misma red este día</span>}
                         </div>
                       </div>
