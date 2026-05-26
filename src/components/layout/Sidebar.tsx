@@ -1,6 +1,12 @@
+import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { WAITING_STATES } from '../../lib/constants'
 import { todayISO, daysUntil } from '../../lib/helpers'
+
+const STORAGE_KEY = 'sidebar_collapsed'
+function loadCollapsed(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { return {} }
+}
 
 function NavItem({ label, view, count, indent }: { label: string; view: string; count?: number; indent?: boolean }) {
   const activeView = useStore(s => s.activeView)
@@ -36,10 +42,29 @@ function GroupHeader({ label, color }: { label: string; color?: string }) {
   )
 }
 
+function CollapsibleHeader({ label, color, open, onToggle }: { label: string; color: string; open: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} className="w-full flex items-center gap-1.5 px-3.5 pb-1 pt-3.5 cursor-pointer group">
+      {color && <div className="w-[7px] h-[7px] rounded-full" style={{ background: color }} />}
+      <span className="font-mono text-[10px] text-gray-400 tracking-wider uppercase group-hover:text-gray-600 transition-colors">{label}</span>
+      <span className="ml-auto text-[9px] text-gray-400 group-hover:text-gray-600">{open ? '▾' : '▸'}</span>
+    </button>
+  )
+}
+
 export function Sidebar() {
   const tasks = useStore(s => s.tasks)
   const openCapture = useStore(s => s.openCapture)
   const active = tasks.filter(t => !t.done && !t.parent_task_id)
+
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed)
+  function toggle(key: string) {
+    setCollapsed(prev => {
+      const next = { ...prev, [key]: !prev[key] }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
 
   const today = todayISO()
   const hoyCount = active.filter(t => t.due_date === today).length
@@ -53,7 +78,7 @@ export function Sidebar() {
 
   return (
     <aside className="w-[230px] shrink-0 bg-bg2 border-r border-black/7 overflow-y-auto py-3 shadow-sm flex flex-col">
-      {/* Capturar destacado */}
+      {/* Capturar destacado (siempre visible) */}
       <div className="px-3 pb-1">
         <button
           onClick={() => openCapture()}
@@ -63,6 +88,7 @@ export function Sidebar() {
         </button>
       </div>
 
+      {/* General (siempre visible) */}
       <GroupHeader label="General" />
       <NavItem label="Hoy" view="hoy" count={hoyCount} />
       <NavItem label="Esta semana" view="semana" count={semanaCount} />
@@ -70,20 +96,30 @@ export function Sidebar() {
       <NavItem label="Recurrentes" view="recurrentes" />
       <NavItem label="Contactos" view="contactos" />
 
-      <GroupHeader label="Banco Falabella" color="#2563eb" />
-      <NavItem label="Tareas" view="banco-tareas" count={ctxCount('banco')} indent />
-      <NavItem label="Proyectos" view="banco-proyectos" indent />
-      <NavItem label="Presentaciones" view="banco-presentaciones" indent />
-      <NavItem label="Grilla mayo" view="banco-grilla" indent />
+      <CollapsibleHeader label="Banco Falabella" color="#2563eb" open={!collapsed.banco} onToggle={() => toggle('banco')} />
+      {!collapsed.banco && (
+        <>
+          <NavItem label="Tareas" view="banco-tareas" count={ctxCount('banco')} indent />
+          <NavItem label="Proyectos" view="banco-proyectos" indent />
+          <NavItem label="Presentaciones" view="banco-presentaciones" indent />
+          <NavItem label="Grilla mayo" view="banco-grilla" indent />
+        </>
+      )}
 
-      <GroupHeader label="Agencia" color="#0d9488" />
-      <NavItem label="Tareas" view="agencia-tareas" count={ctxCount('agencia')} indent />
-      <NavItem label="Clientes" view="agencia-clientes" indent />
-      <NavItem label="Equipo" view="agencia-equipo" indent />
-      <NavItem label="Presentaciones" view="agencia-presentaciones" indent />
+      <CollapsibleHeader label="Agencia" color="#0d9488" open={!collapsed.agencia} onToggle={() => toggle('agencia')} />
+      {!collapsed.agencia && (
+        <>
+          <NavItem label="Tareas" view="agencia-tareas" count={ctxCount('agencia')} indent />
+          <NavItem label="Clientes" view="agencia-clientes" indent />
+          <NavItem label="Equipo" view="agencia-equipo" indent />
+          <NavItem label="Presentaciones" view="agencia-presentaciones" indent />
+        </>
+      )}
 
-      <GroupHeader label="Personal" color="#d97706" />
-      <NavItem label="Tareas" view="personal-tareas" count={ctxCount('personal')} indent />
+      <CollapsibleHeader label="Personal" color="#d97706" open={!collapsed.personal} onToggle={() => toggle('personal')} />
+      {!collapsed.personal && (
+        <NavItem label="Tareas" view="personal-tareas" count={ctxCount('personal')} indent />
+      )}
     </aside>
   )
 }
