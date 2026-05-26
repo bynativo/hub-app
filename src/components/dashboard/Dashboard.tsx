@@ -28,6 +28,13 @@ export function Dashboard() {
   const seguimiento = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status))
   const horasHoy = hoy.reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
 
+  // El resto de las tareas activas (ni hoy, ni mañana, ni en seguimiento) para que
+  // ninguna quede invisible en la vista Lista — misma fuente que el Kanban.
+  const segIds = new Set(seguimiento.map(t => t.id))
+  const resto = active.filter(t => !t.es_recordatorio && !segIds.has(t.id) && t.due_date !== today && t.due_date !== tomorrow)
+  const proximas = resto.filter(t => t.due_date).sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
+  const sinFecha = resto.filter(t => !t.due_date)
+
   return (
     <div className="animate-fade-in p-5">
       <h1 className="font-serif text-[26px] font-light mb-0.5">{getGreeting()}</h1>
@@ -73,6 +80,20 @@ export function Dashboard() {
 
           <SectionHeader icon="⏳" label="Seguimiento" count={seguimiento.length} />
           <TaskList tasks={seguimiento} emptyText="Nada esperando respuesta" />
+
+          {proximas.length > 0 && (
+            <>
+              <SectionHeader icon="📅" label="Próximas" count={proximas.length} />
+              <TaskList tasks={proximas} />
+            </>
+          )}
+
+          {sinFecha.length > 0 && (
+            <>
+              <SectionHeader icon="📥" label="Sin fecha" count={sinFecha.length} />
+              <TaskList tasks={sinFecha} />
+            </>
+          )}
         </div>
       )}
 

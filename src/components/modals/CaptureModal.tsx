@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
+import { fmtHoras } from '../../lib/helpers'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CaptureTab = 'tarea' | 'notas' | 'micro'
@@ -52,11 +53,12 @@ async function extractTasks(text: string): Promise<Suggested[]> {
   }))
 }
 
-export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId }: {
+export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId }: {
   onClose: () => void
   preselectContext?: string
   preselectClientId?: number | null
   preselectProjectId?: number | null
+  preselectParentId?: number | null
 }) {
   const loadAll = useStore(s => s.loadAll)
   const clients = useStore(s => s.clients)
@@ -68,8 +70,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
   // ===== Tab Tarea =====
   const [title, setTitle] = useState('')
-  const [tipo, setTipo] = useState<TipoTarea>(preselectProjectId ? 'proyecto' : 'independiente')
-  const [parentId, setParentId] = useState<number | null>(null)
+  const [tipo, setTipo] = useState<TipoTarea>(preselectParentId ? 'subtarea' : preselectProjectId ? 'proyecto' : 'independiente')
+  const [parentId, setParentId] = useState<number | null>(preselectParentId ?? null)
   const [projectId, setProjectId] = useState<number | '' | '__new__'>(preselectProjectId ?? '')
   const [newProject, setNewProject] = useState('')
   const [context, setContext] = useState(preselectContext ?? 'banco')
@@ -78,6 +80,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [origin, setOrigin] = useState('propia')
   const [dueDate, setDueDate] = useState('')
   const [isContent, setIsContent] = useState(false)
+  const [estHours, setEstHours] = useState<number | null>(null)
   const [isReminder, setIsReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
   const [desc, setDesc] = useState('')
@@ -124,6 +127,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       parent_task_id: reminder ? null : (tipo === 'subtarea' ? parentId : null),
       task_type: isContent ? 'contenido' : 'independiente',
       due_date: reminder ? null : (dueDate || null),
+      estimated_hours: estHours,
       notes: desc.trim() || null,
       status: reminder ? 'Recordatorio' : 'Inbox',
       es_recordatorio: reminder,
@@ -395,6 +399,26 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
                 </div>
               )}
+
+              <div className="mb-3">
+                <label className={labelCls}>Estimado de tiempo</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[0.5, 1, 1.5, 2, 3, 4, 6, 8].map(h => (
+                    <button key={h} type="button" onClick={() => setEstHours(h)}
+                      className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                        estHours === h ? 'border-claude/20 text-claude bg-claude/7 font-semibold' : 'border-black/7 text-gray-500 bg-bg3 hover:bg-bg4'
+                      }`}>
+                      {fmtHoras(h)}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setEstHours(null)}
+                    className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                      estHours == null ? 'border-claude/20 text-claude bg-claude/7 font-semibold' : 'border-black/7 text-gray-400 bg-bg3 hover:bg-bg4'
+                    }`}>
+                    —
+                  </button>
+                </div>
+              </div>
 
               <div className="mb-3 flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
                 <button onClick={() => setIsContent(!isContent)} className={`w-10 h-5 rounded-full relative transition-colors ${isContent ? 'bg-claude' : 'bg-bg4'}`}>

@@ -11,12 +11,16 @@ function Tag({ children, bg, color }: { children: React.ReactNode; bg: string; c
   )
 }
 
-export function TaskItem({ task }: { task: Task }) {
+export function TaskItem({ task, nested = false }: { task: Task; nested?: boolean }) {
   const { toggleTask, openDetail } = useStore()
+  const allTasks = useStore(s => s.tasks)
   const due = fmtDue(task.due_date)
   const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
+  // Subtareas (un nivel) para anidar bajo la madre; las anidadas no vuelven a anidar.
+  const children = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done)
 
   return (
+    <div>
     <div
       onClick={() => openDetail(task.id)}
       className={`flex items-start gap-2.5 p-3 bg-bg2 border border-black/7 rounded-[10px] cursor-pointer transition-all shadow-sm hover:border-black/13 hover:shadow-md hover:-translate-y-px ${
@@ -93,6 +97,12 @@ export function TaskItem({ task }: { task: Task }) {
       >
         →
       </div>
+    </div>
+      {children.length > 0 && (
+        <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/15 pl-2.5">
+          {children.map(c => <TaskItem key={c.id} task={c} nested />)}
+        </div>
+      )}
     </div>
   )
 }

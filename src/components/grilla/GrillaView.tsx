@@ -66,7 +66,7 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
 
   return (
     <div className="animate-fade-in p-5">
-      <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: accent }}>Grilla · {ctxLabel(context)}</h1>
+      <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: accent }}>Calendario RRSS · {ctxLabel(context)}</h1>
       <p className="text-gray-500 text-[13px] mb-4">Calendario de publicaciones · {filtered.length} piezas programadas</p>
 
       {/* Selector de cliente (solo agencia) */}

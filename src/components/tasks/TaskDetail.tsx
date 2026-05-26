@@ -5,6 +5,7 @@ import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { ctxLabel, fmtHoras } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
+import { CaptureModal } from '../modals/CaptureModal'
 import type { Checklist, Task, Slide } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -134,10 +135,8 @@ export function TaskDetail() {
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
-  // Subtask add
-  const [addingSub, setAddingSub] = useState(false)
-  const [subTitle, setSubTitle] = useState('')
-  const [subDate, setSubDate] = useState('')
+  // Subtask add: usa el CaptureModal completo con parent_task_id precargado
+  const [subModalOpen, setSubModalOpen] = useState(false)
 
   // Chat
   const [messages, setMessages] = useState<Msg[]>([])
@@ -189,19 +188,6 @@ export function TaskDetail() {
       estimated_hours: estHours,
     })
     setSavingInfo(false); setDirty(false)
-  }
-
-  // ---- Subtareas ----
-  async function addSubtask() {
-    if (!task || !subTitle.trim()) return
-    await supabase.from('tasks').insert({
-      title: subTitle.trim(), context: task.context, client_id: task.client_id,
-      parent_task_id: task.id, project_id: task.project_id,
-      priority: 'media', origin: 'propia', status: 'Inbox', done: false,
-      due_date: subDate || null, task_type: 'independiente', cats: [], plan: [], meeting_agenda: [],
-    })
-    setSubTitle(''); setSubDate(''); setAddingSub(false)
-    await loadAll()
   }
 
   // ---- Checklist ----
@@ -431,20 +417,8 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
           <div className="animate-fade-in">
             <div className="flex items-center justify-between mb-2">
               <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Subtareas vinculadas</div>
-              <button onClick={() => setAddingSub(v => !v)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Nueva subtarea</button>
+              <button onClick={() => setSubModalOpen(true)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Nueva subtarea</button>
             </div>
-
-            {addingSub && (
-              <div className="bg-bg3 border border-black/7 rounded-lg p-3 mb-2 flex flex-col gap-2">
-                <input value={subTitle} onChange={e => setSubTitle(e.target.value)} autoFocus placeholder="Título de la subtarea"
-                  className="bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
-                <div className="flex gap-2">
-                  <input type="date" value={subDate} onChange={e => setSubDate(e.target.value)}
-                    className="flex-1 bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
-                  <button onClick={addSubtask} disabled={!subTitle.trim()} className="text-[11px] bg-claude text-white px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40">Crear</button>
-                </div>
-              </div>
-            )}
 
             {subtasks.length ? (
               <div className="flex flex-col gap-1.5">
@@ -573,6 +547,11 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
           </div>
         )}
       </div>
+
+      {subModalOpen && (
+        <CaptureModal onClose={() => setSubModalOpen(false)}
+          preselectContext={task.context} preselectClientId={task.client_id} preselectParentId={task.id} />
+      )}
     </div>
   )
 }
