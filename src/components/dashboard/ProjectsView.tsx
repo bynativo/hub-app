@@ -15,13 +15,13 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
 
   const projects = context ? allProjects.filter(p => p.context === context) : allProjects
   const selected = projects.find(p => p.id === selectedId)
-  const selectedTasks = selected ? tasks.filter(t => t.project_id === selected.id) : []
+  const selectedTasks = selected ? tasks.filter(t => t.project_id === selected.id && !t.parent_task_id) : []
   const selectedPres = selected ? presentations.find(pr => pr.project_id === selected.id) : null
 
   const accent = context ? ctxColor(context) : '#7c3aed'
 
   function getPct(projId: number) {
-    const all = tasks.filter(t => t.project_id === projId)
+    const all = tasks.filter(t => t.project_id === projId && !t.parent_task_id)
     if (!all.length) return 0
     return Math.round(all.filter(t => t.done).length / all.length * 100)
   }
@@ -42,7 +42,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
       <div className="grid gap-2.5">
         {projects.map(p => {
           const pct = getPct(p.id)
-          const all = tasks.filter(t => t.project_id === p.id)
+          const all = tasks.filter(t => t.project_id === p.id && !t.parent_task_id)
           const pend = all.filter(t => !t.done).length
           const stColor = STATUS_COLOR[p.status || ''] || '#6b7280'
           return (
