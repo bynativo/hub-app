@@ -135,6 +135,8 @@ export function TaskDetail() {
   const [estHours, setEstHours] = useState<number | null>(null)
   const [contextReadme, setContextReadme] = useState('')
   const [showContext, setShowContext] = useState(false)
+  const [suggestedHours, setSuggestedHours] = useState<number | null>(null)
+  const [suggesting, setSuggesting] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
@@ -159,6 +161,7 @@ export function TaskDetail() {
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
+    setSuggestedHours(null)
     setDirty(false)
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). ¿En qué te ayudo? Puedo crear subtareas con fechas distribuidas hasta su entrega.` }])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
@@ -192,6 +195,32 @@ export function TaskDetail() {
       estimated_hours: estHours,
     })
     setSavingInfo(false); setDirty(false)
+  }
+
+  async function suggestEstimate() {
+    if (!task) return
+    setSuggesting(true)
+    try {
+      const similar = tasks.filter(t => t.context === task.context && t.id !== task.id && t.estimated_hours != null)
+      const avg = similar.length ? similar.reduce((s, t) => s + (t.estimated_hours || 0), 0) / similar.length : null
+      const prompt = `Estimá cuántas horas de trabajo lleva esta tarea. Respondé SOLO un número de esta lista: 0.5, 1, 1.5, 2, 3, 4, 6, 8.
+Tarea: ${title}
+Contexto: ${ctxLabel(task.context)}
+Descripción: ${notes || '(sin descripción)'}
+${contextReadme ? `Contexto: ${contextReadme}` : ''}
+${avg ? `Referencia: el promedio de tareas similares de este contexto es ${avg.toFixed(1)}h.` : ''}`
+      const reply = await callClaudeProxy([{ role: 'user', content: prompt }], 'Sos un estimador de esfuerzo. Devolvés SOLO un número de horas, sin texto.')
+      const m = reply.match(/[0-9]+(?:\.[0-9]+)?/)
+      if (m) {
+        const allowed = [0.5, 1, 1.5, 2, 3, 4, 6, 8]
+        const n = parseFloat(m[0])
+        setSuggestedHours(allowed.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a, allowed[0]))
+      }
+    } catch {
+      alert('No se pudo sugerir el estimado (proxy de Claude).')
+    } finally {
+      setSuggesting(false)
+    }
   }
 
   // ---- Checklist ----
@@ -379,6 +408,21 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
                   }`}>
                   —
                 </button>
+              </div>
+              <div className="mt-2">
+                {suggestedHours == null ? (
+                  <button onClick={suggestEstimate} disabled={suggesting}
+                    className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 disabled:opacity-40">
+                    {suggesting ? 'Pensando…' : '✦ Sugerir con Claude'}
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-2 text-[11px] bg-claude/7 border border-claude/20 text-claude px-2.5 py-1 rounded-md">
+                    Claude sugiere: <span className="font-semibold">{fmtHoras(suggestedHours)}</span>
+                    <button onClick={async () => { await updateTask(task.id, { estimated_hours: suggestedHours }); setEstHours(suggestedHours); setSuggestedHours(null) }}
+                      className="text-success hover:opacity-70 cursor-pointer" title="Aceptar">✓</button>
+                    <button onClick={() => setSuggestedHours(null)} className="text-gray-400 hover:text-danger cursor-pointer" title="Descartar">✕</button>
+                  </div>
+                )}
               </div>
             </div>
 
