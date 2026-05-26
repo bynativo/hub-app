@@ -15,7 +15,7 @@ App de gestion de trabajo personal para contextos multiples: banco, agencia de p
 | Estilos | Tailwind CSS v4 |
 | Estado | Zustand |
 | Base de datos | Supabase (PostgreSQL + RLS) |
-| API Claude | Vercel Serverless Functions → Anthropic API (claude-sonnet-4-6) |
+| API Claude | Supabase Edge Function `claude-proxy` (primario) + Vercel Serverless `/api/chat` (fallback) → Anthropic API (claude-sonnet-4-6) |
 | Deploy | Vercel (auto-deploy desde GitHub main) |
 
 ---
@@ -96,7 +96,8 @@ Reconstrucción completa en 11 componentes (rama `redesign`). Detalle por compon
 - **Guión** con versiones (si `tiene_guion`); **3 aprobaciones secuenciales** (popup con nombre, Aprobar/Rechazar/Enviar feedback → crea tarea de revisión); **links** copiables (presentación / slide / aprobación).
 
 ### Chat con Claude (infra)
-- Front usa `callClaudeProxy`: edge function de Supabase primero, fallback a `/api/chat` (Vercel, con la API key). Ver pendiente del proxy más abajo.
+- Front usa `callClaudeProxy`: edge function de Supabase primero (`{ text }`), fallback a `/api/chat` (Vercel, `{ reply }`). El edge function tiene el secret `ANTHROPIC_API_KEY` y usa `claude-sonnet-4-6` — operativo en local y prod (sesión 4).
+- `callClaude` (usado por Capturar/Notas) va directo a `/api/chat`, por lo que esas dos features solo funcionan en prod (vite dev no sirve la serverless de Vercel).
 
 ---
 
@@ -148,7 +149,7 @@ hub-app/
 │   │   ├── types.ts          # TypeScript interfaces
 │   │   ├── constants.ts      # Colores, estados, plataformas, categorias
 │   │   ├── helpers.ts        # Formateo de fechas, labels
-│   │   └── claude.ts         # Helper para llamar /api/chat
+│   │   └── claude.ts         # callClaudeProxy (Supabase edge fn) + callClaude (/api/chat)
 │   ├── components/
 │   │   ├── layout/
 │   │   │   ├── Topbar.tsx
@@ -181,6 +182,10 @@ hub-app/
 │   ├── App.tsx
 │   ├── main.tsx
 │   └── index.css
+├── supabase/
+│   └── functions/
+│       └── claude-proxy/
+│           └── index.ts     # edge function proxy → Anthropic (claude-sonnet-4-6)
 ├── index.html
 ├── vite.config.ts
 ├── tsconfig.json
@@ -232,13 +237,25 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **Serverless proxy** — `/api/chat` (Vercel function) hace proxy a Anthropic API para mantener la key server-side. No se usa SDK, es fetch directo.
 - **Supabase anon key publica** — hardcodeada en frontend, protegida por RLS. Pendiente migrar a Supabase Auth para RLS basado en `auth.uid()`.
 - **Estados agencia con acentos** — los datos reales en `tasks.status` usan `En ejecución` y `En revisión cliente`. Los constantes `ESTADOS` / `STATUS_ICON` / `STATUS_COLOR` deben coincidir caracter por caracter con la DB o las tarjetas no aparecen en su columna Kanban ni reciben icono/color.
-- **claude-proxy de Supabase sin API key (PENDIENTE)** — el edge function `…/functions/v1/claude-proxy` responde 500 "API key not configured". En producción el chat/extracción funcionan por el fallback a Vercel `/api/chat`; en dev local no. Para resolver: setear `ANTHROPIC_API_KEY` como secret del edge function.
+- **claude-proxy de Supabase (RESUELTO sesión 4)** — el edge function `…/functions/v1/claude-proxy` ya tiene el secret `ANTHROPIC_API_KEY` y devuelve `{ "text": ... }` 200 con `claude-sonnet-4-6`. El front (`callClaudeProxy`) lee `data.text`. El source vive versionado en `supabase/functions/claude-proxy/index.ts`. OJO: el secret y el código son independientes — editar/redeployar el function desde el dashboard de Supabase revierte el código (así se perdió el fix de modelo una vez); redeployar siempre desde el source del repo.
 - **PostgREST schema cache** — tras una migración DDL, el cache del REST puede quedar desactualizado unos segundos; se mitiga con `NOTIFY pgrst, 'reload schema'` al final de la migración.
 - **Subtareas vía `parent_task_id`** — las subtareas son tareas completas auto-referenciadas; la tabla legacy `subtasks` quedó sin uso en el UI del rediseño. Checklist usa la tabla `checklists` (columna `title`).
 
 ---
 
 ## Changelog
+
+### 2026-05-26 — Sesion 4: Chat de Claude operativo (proxy Supabase)
+
+Desbloqueado el chat de Claude. De los 3 pendientes de infra anotados, 2 ya estaban resueltos al revisar el estado real (push a GitHub reautenticado con token en keychain; rediseño de la rama `redesign` ya integrado en `main` y pusheado). El bloqueo real era el edge function `claude-proxy`, con tres capas:
+
+1. **Sin API key** → el usuario seteó el secret `ANTHROPIC_API_KEY` en Supabase.
+2. **Modelo equivocado** → el function usaba `claude-sonnet-4-20250514` (la key responde 404 a ese modelo); redeployado a `claude-sonnet-4-6` (igual que Vercel).
+3. **Bug de parseo** → `callClaudeProxy` leía `data.reply`/`data.content[0].text`, pero el function devuelve `{ text }`; ahora lee `data.text` primero (con fallback a las otras formas). Sin esto el chat devolvía string vacío y no caía al fallback.
+
+Verificado en vivo: el proxy responde `{"text":"PONG"}` 200; chat operativo en local (`localhost:5173`) y prod. El source del edge function se **versionó** en `supabase/functions/claude-proxy/index.ts` (antes solo existía en Supabase y al editarlo desde el dashboard se revertía el modelo).
+
+**Commit:** `Fix chat de Claude: parsear {text} del edge function + alinear modelo` (`098b491`).
 
 ### 2026-05-25 — Sesion 3: Rediseño completo (v9)
 
