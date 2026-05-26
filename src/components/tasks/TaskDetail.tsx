@@ -109,6 +109,7 @@ export function TaskDetail() {
   const tasks = useStore(s => s.tasks)
   const contacts = useStore(s => s.contacts)
   const presentations = useStore(s => s.presentations)
+  const projects = useStore(s => s.projects)
   const setView = useStore(s => s.setView)
   const currentTaskId = useStore(s => s.currentTaskId)
   const closeDetail = useStore(s => s.closeDetail)
@@ -408,6 +409,40 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
                 className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                 {savingInfo ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Guardado'}
               </button>
+            </div>
+
+            {/* Organización — guarda al instante */}
+            <div className="border-t border-black/7 pt-3 mt-1 flex flex-col gap-3">
+              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Organización · se guarda al instante</div>
+
+              <div>
+                <label className={labelCls}>Parte de proyecto</label>
+                <select value={task.project_id ?? ''} className={fieldCls}
+                  onChange={async e => { await updateTask(task.id, { project_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
+                  <option value="">— Ninguno —</option>
+                  {projects.filter(p => p.context === task.context).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelCls}>Subtarea de</label>
+                <select value={task.parent_task_id ?? ''} className={fieldCls}
+                  onChange={async e => { await updateTask(task.id, { parent_task_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
+                  <option value="">— Ninguna (independiente) —</option>
+                  {tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 bg-bg2 rounded-lg border border-black/7">
+                <button onClick={async () => { const next = !isContent; await updateTask(task.id, { task_type: next ? 'contenido' : 'independiente' }); if (next) setTab('slide') }}
+                  className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isContent ? 'bg-claude' : 'bg-bg4'}`}>
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isContent ? 'left-5.5' : 'left-0.5'}`} />
+                </button>
+                <div>
+                  <div className="text-[13px]">Convertir a tarea de contenido</div>
+                  <div className="text-[11px] text-gray-400">Habilita el tab Slide para vincular o crear una presentación</div>
+                </div>
+              </div>
             </div>
           </div>
         )}
