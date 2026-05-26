@@ -34,6 +34,7 @@ export function FollowupModal() {
 
   const task = tasks.find(t => t.id === pendingId)
   if (!task) return null
+  const isRem = task.es_recordatorio
 
   const d4 = in4Hours()
   const dTom = tomorrow9()
@@ -51,9 +52,11 @@ export function FollowupModal() {
         <div className="flex items-start gap-2 mb-1">
           <span className="text-lg">⏰</span>
           <div className="flex-1">
-            <div className="font-serif text-xl font-light">Recordatorio de seguimiento</div>
+            <div className="font-serif text-xl font-light">{isRem ? 'Posponer recordatorio' : 'Recordatorio de seguimiento'}</div>
             <p className="text-[13px] text-gray-400 mt-0.5">
-              "{task.title}" pasó a <span className="font-medium text-gray-600">{task.status}</span>. ¿Cuándo te lo recuerdo?
+              {isRem
+                ? <>"{task.title}" — elige una nueva fecha y hora.</>
+                : <>"{task.title}" pasó a <span className="font-medium text-gray-600">{task.status}</span>. ¿Cuándo te lo recuerdo?</>}
             </p>
           </div>
         </div>
@@ -75,20 +78,22 @@ export function FollowupModal() {
           </button>
 
           <div className="flex items-center gap-2 px-4 py-3 rounded-lg border border-black/7 bg-bg3">
-            <span className="text-[13px] font-medium shrink-0">Fecha específica</span>
-            <input type="date" value={specific} onChange={e => setSpecific(e.target.value)}
+            <span className="text-[13px] font-medium shrink-0">{isRem ? 'Fecha y hora' : 'Fecha específica'}</span>
+            <input type={isRem ? 'datetime-local' : 'date'} value={specific} onChange={e => setSpecific(e.target.value)}
               className="ml-auto bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
             <button
               disabled={!specific}
-              onClick={() => { const d = new Date(specific + 'T09:00:00'); choose(d.toISOString(), 'specific') }}
+              onClick={() => { const d = isRem ? new Date(specific) : new Date(specific + 'T09:00:00'); choose(d.toISOString(), 'specific') }}
               className="text-[11px] bg-claude text-white px-2.5 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed">
               OK
             </button>
           </div>
 
-          <button className={optionCls + ' justify-center text-gray-400'} onClick={() => choose(null, 'none')}>
-            <span className="text-[13px]">Sin recordatorio</span>
-          </button>
+          {!isRem && (
+            <button className={optionCls + ' justify-center text-gray-400'} onClick={() => choose(null, 'none')}>
+              <span className="text-[13px]">Sin recordatorio</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

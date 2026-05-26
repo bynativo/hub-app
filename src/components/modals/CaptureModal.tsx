@@ -78,6 +78,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [origin, setOrigin] = useState('propia')
   const [dueDate, setDueDate] = useState('')
   const [isContent, setIsContent] = useState(false)
+  const [isReminder, setIsReminder] = useState(false)
+  const [reminderAt, setReminderAt] = useState('')
   const [desc, setDesc] = useState('')
   const [saving, setSaving] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
@@ -95,10 +97,12 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
   async function handleSaveTask() {
     if (!title.trim()) return
+    if (isReminder && !reminderAt) return
     setSaving(true)
+    const reminder = isReminder && !!reminderAt
 
     let resolvedProjectId: number | null = null
-    if (tipo === 'proyecto') {
+    if (!reminder && tipo === 'proyecto') {
       if (projectId === '__new__' || (!projectId && newProject.trim())) {
         const { data, error } = await supabase.from('projects').insert({
           name: newProject.trim(), context, client_id: context === 'agencia' ? clientId : null, type: 'proyecto',
@@ -117,11 +121,13 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       origin,
       client_id: context === 'agencia' ? clientId : null,
       project_id: resolvedProjectId,
-      parent_task_id: tipo === 'subtarea' ? parentId : null,
+      parent_task_id: reminder ? null : (tipo === 'subtarea' ? parentId : null),
       task_type: isContent ? 'contenido' : 'independiente',
-      due_date: dueDate || null,
+      due_date: reminder ? null : (dueDate || null),
       notes: desc.trim() || null,
-      status: 'Inbox',
+      status: reminder ? 'Recordatorio' : 'Inbox',
+      es_recordatorio: reminder,
+      recordatorio_at: reminder ? new Date(reminderAt).toISOString() : null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     })
@@ -292,6 +298,25 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="¿Qué hay que hacer?" autoFocus />
               </div>
 
+              {/* Es recordatorio */}
+              <div className="mb-3 flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
+                <button type="button" onClick={() => setIsReminder(!isReminder)} className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isReminder ? 'bg-claude' : 'bg-bg4'}`}>
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isReminder ? 'left-5.5' : 'left-0.5'}`} />
+                </button>
+                <div>
+                  <div className="text-[13px]">🔔 Es recordatorio</div>
+                  <div className="text-[11px] text-gray-400">Entra directo a Seguimiento y te avisa en la fecha/hora elegida</div>
+                </div>
+              </div>
+
+              {isReminder && (
+                <div className="mb-3">
+                  <label className={labelCls}>Fecha y hora del recordatorio *</label>
+                  <input type="datetime-local" value={reminderAt} onChange={e => setReminderAt(e.target.value)} className={fieldCls} />
+                </div>
+              )}
+
+              {!isReminder && (<>
               {/* Tipo / jerarquía */}
               <div className="mb-3">
                 <label className={labelCls}>Tipo</label>
@@ -334,6 +359,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   )}
                 </div>
               )}
+              </>)}
 
               <div className="mb-3">
                 <label className={labelCls}>Prioridad</label>
@@ -363,10 +389,12 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               </div>
 
-              <div className="mb-3">
-                <label className={labelCls}>Fecha de entrega</label>
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
-              </div>
+              {!isReminder && (
+                <div className="mb-3">
+                  <label className={labelCls}>Fecha de entrega</label>
+                  <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
+                </div>
+              )}
 
               <div className="mb-3 flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
                 <button onClick={() => setIsContent(!isContent)} className={`w-10 h-5 rounded-full relative transition-colors ${isContent ? 'bg-claude' : 'bg-bg4'}`}>
@@ -385,9 +413,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
               <div className="flex gap-2 justify-end">
                 <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">Cancelar</button>
-                <button onClick={handleSaveTask} disabled={!title.trim() || saving}
+                <button onClick={handleSaveTask} disabled={!title.trim() || saving || (isReminder && !reminderAt)}
                   className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                  {saving ? 'Guardando…' : 'Guardar tarea'}
+                  {saving ? 'Guardando…' : isReminder ? 'Crear recordatorio' : 'Guardar tarea'}
                 </button>
               </div>
             </>

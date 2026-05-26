@@ -29,7 +29,7 @@ export function Dashboard() {
 
   const hoy = active.filter(t => t.due_date === today)
   const manana = active.filter(t => t.due_date === tomorrow)
-  const seguimiento = active.filter(t => WAITING_STATES.includes(t.status))
+  const seguimiento = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status))
   const horasHoy = hoy.reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
 
   return (

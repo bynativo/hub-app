@@ -113,9 +113,14 @@ export const useStore = create<AppState>((set, get) => ({
   openFollowup: (id) => set({ pendingFollowupTaskId: id }),
   closeFollowup: () => set({ pendingFollowupTaskId: null }),
   setFollowup: async (id, at, type) => {
-    await supabase.from('tasks').update({ followup_at: at, followup_type: type }).eq('id', id)
+    // Los recordatorios guardan su alarma en recordatorio_at; las tareas en seguimiento en followup_at.
+    const task = get().tasks.find(t => t.id === id)
+    const patch = task?.es_recordatorio
+      ? { recordatorio_at: at }
+      : { followup_at: at, followup_type: type }
+    await supabase.from('tasks').update(patch).eq('id', id)
     set({
-      tasks: get().tasks.map(t => t.id === id ? { ...t, followup_at: at, followup_type: type } : t),
+      tasks: get().tasks.map(t => t.id === id ? { ...t, ...patch } : t),
       pendingFollowupTaskId: null,
     })
   },

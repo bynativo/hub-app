@@ -56,6 +56,7 @@ export const STATUS_ICON: Record<string, string> = {
   Propuesta: '◎', 'En ejecución': '▶', 'Revisión interna': '◐',
   'En revisión cliente': '⌛', Delegado: '→', Bloqueado: '✕',
   'En pausa': '‖', Entregado: '✓', Descartado: '✕', Planificando: '◈',
+  Recordatorio: '🔔',
 }
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -63,6 +64,7 @@ export const STATUS_COLOR: Record<string, string> = {
   Propuesta: '#7c3aed', 'En ejecución': '#2563eb', 'Revisión interna': '#7c3aed',
   'En revisión cliente': '#d97706', Delegado: '#d97706', Bloqueado: '#dc2626',
   'En pausa': '#6b7280', Entregado: '#16a34a', Descartado: '#9ca3af', Planificando: '#7c3aed',
+  Recordatorio: '#d97706',
 }
 
 export const PLAT_META: Record<string, { label: string; css: string; color: string }> = {

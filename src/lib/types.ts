@@ -73,6 +73,8 @@ export interface Task {
   followup_type: string | null
   estimated_hours: number | null
   kanban_order: number | null
+  es_recordatorio: boolean
+  recordatorio_at: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }

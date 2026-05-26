@@ -72,9 +72,9 @@ export function Sidebar() {
     const d = daysUntil(t.due_date)
     return d !== null && d >= 0 && d <= 7
   }).length
-  const seguimientoCount = active.filter(t => WAITING_STATES.includes(t.status)).length
+  const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length
 
-  const ctxCount = (ctx: string) => active.filter(t => t.context === ctx).length
+  const ctxCount = (ctx: string) => active.filter(t => t.context === ctx && !t.es_recordatorio).length
 
   return (
     <aside className="w-[230px] shrink-0 bg-bg2 border-r border-black/7 overflow-y-auto py-3 shadow-sm flex flex-col">
