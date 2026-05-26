@@ -33,7 +33,8 @@ export async function callClaudeProxy(
     })
     if (res.ok) {
       const data = await res.json()
-      return data.reply || data.content?.[0]?.text || ''
+      // El edge function de Supabase devuelve { text }; toleramos también las otras formas.
+      return data.text || data.reply || data.content?.[0]?.text || ''
     }
   } catch { /* cae al fallback */ }
   return callClaude(messages, system)
