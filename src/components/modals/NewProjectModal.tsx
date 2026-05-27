@@ -13,6 +13,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
   const [name, setName] = useState('')
   const [context, setContext] = useState(defaultContext)
   const [clientId, setClientId] = useState<number | null>(null)
+  const [esInterno, setEsInterno] = useState(false)
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [noDueDate, setNoDueDate] = useState(false)
@@ -20,12 +21,18 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
   const [tipoAgencia, setTipoAgencia] = useState(TIPO_AGENCIA[0])
   const [saving, setSaving] = useState(false)
 
+  // En agencia, un proyecto de cliente exige cliente; el interno no lleva cliente.
+  const needsClient = context === 'agencia' && !esInterno
+
   async function save() {
     if (!name.trim()) return
+    if (needsClient && !clientId) return
     setSaving(true)
     const { error } = await supabase.from('projects').insert({
-      name: name.trim(), context, client_id: context === 'agencia' ? clientId : null,
-      description: description.trim() || null, due_date: noDueDate ? null : (dueDate || null), status, type: 'proyecto',
+      name: name.trim(), context, client_id: needsClient ? clientId : null,
+      es_interno: context === 'agencia' ? esInterno : false,
+      description: description.trim() || null, due_date: noDueDate ? null : (dueDate || null),
+      is_ongoing: noDueDate, status, type: 'proyecto',
       tipo_agencia: context === 'agencia' ? tipoAgencia : null,
     })
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
@@ -50,7 +57,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className={labelCls}>Contexto</label>
-            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }} className={fieldCls}>
+            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null); setEsInterno(false) }} className={fieldCls}>
               <option value="banco">Banco Falabella</option>
               <option value="agencia">Agencia</option>
               <option value="personal">Personal</option>
@@ -65,21 +72,42 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
         </div>
 
         {context === 'agencia' && (
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className={labelCls}>Cliente</label>
-              <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)} className={fieldCls}>
-                <option value="">Agencia interna</option>
-                {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+          <>
+            <div className="mb-3">
+              <label className={labelCls}>Tipo de vínculo</label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { v: false, l: 'Vinculado a cliente' },
+                  { v: true, l: 'Proyecto interno de agencia' },
+                ] as { v: boolean; l: string }[]).map(o => (
+                  <button key={String(o.v)} onClick={() => { setEsInterno(o.v); if (o.v) setClientId(null) }}
+                    className={`py-2 px-1 border rounded-lg text-[12px] text-center cursor-pointer transition-all ${
+                      esInterno === o.v ? 'border-claude/20 text-claude bg-claude/7 font-medium' : 'border-black/7 text-gray-500 bg-bg3 hover:bg-bg4'
+                    }`}>
+                    {o.l}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>Tipo de proyecto</label>
-              <select value={tipoAgencia} onChange={e => setTipoAgencia(e.target.value)} className={fieldCls}>
-                {TIPO_AGENCIA.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              {!esInterno && (
+                <div>
+                  <label className={labelCls}>Cliente *</label>
+                  <select value={clientId ?? ''} onChange={e => setClientId(e.target.value ? Number(e.target.value) : null)}
+                    className={fieldCls + (needsClient && !clientId ? ' border-danger/60 bg-danger/5' : '')}>
+                    <option value="">Seleccionar cliente…</option>
+                    {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className={esInterno ? 'col-span-2' : ''}>
+                <label className={labelCls}>Tipo de proyecto</label>
+                <select value={tipoAgencia} onChange={e => setTipoAgencia(e.target.value)} className={fieldCls}>
+                  {TIPO_AGENCIA.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         <div className="mb-3">
@@ -104,7 +132,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
 
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">Cancelar</button>
-          <button onClick={save} disabled={!name.trim() || saving}
+          <button onClick={save} disabled={!name.trim() || (needsClient && !clientId) || saving}
             className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
             {saving ? 'Creando…' : 'Crear proyecto'}
           </button>

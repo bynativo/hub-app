@@ -119,6 +119,7 @@ export function Sidebar() {
         <>
           <NavItem label="Tareas" view="agencia-tareas" count={ctxCount('agencia')} indent />
           <NavItem label="Clientes" view="agencia-clientes" indent />
+          <NavItem label="Proyectos" view="agencia-proyectos" indent />
           <NavItem label="Equipo" view="agencia-equipo" indent />
           <NavItem label="Recurrentes" view="agencia-recurrentes" indent />
           <NavItem label="Presentaciones" view="agencia-presentaciones" indent />

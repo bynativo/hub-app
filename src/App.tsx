@@ -75,6 +75,7 @@ export default function App() {
       // Agencia
       case 'agencia-tareas': return <ContextView context="agencia" />
       case 'agencia-clientes': return <ClientesView />
+      case 'agencia-proyectos': return <ProjectsView context="agencia" onOpenPres={setOpenPresId} />
       case 'agencia-equipo': return <ContactsView context="agencia" title="Equipo" />
       case 'agencia-recurrentes': return <RecurrentesView context="agencia" />
       case 'agencia-presentaciones': return <PresentationsView context="agencia" onOpen={setOpenPresId} />
