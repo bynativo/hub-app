@@ -253,6 +253,16 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 10: Clientes (sigla/web/redes), crear cliente rápido, nomenclatura automática de tareas, recurrentes editar/eliminar, proyectos Ongoing
+
+Migración aplicada: `clients_add_sigla_website_social` (clients.sigla, clients.website_url, clients.social_links jsonb).
+
+- **Clientes agencia — campos:** ficha con Sigla/nomenclatura (3-4 letras), URL sitio web (link) y Redes sociales (REDES: IG/TikTok/YT/FB/X/LinkedIn; el usuario agrega solo las que existen, cada una con URL editable). Sigla como badge en la card.
+- **Crear cliente rápido:** QuickClientModal (desde Clientes y desde Capturar) pide Nombre*, Sigla* (obligatoria), Tipo y URL principal desde el inicio.
+- **Nomenclatura automática:** helpers `taskPrefix/buildTitle/splitTitle/stripPrefix`. Prefijo por contexto/cliente: banco `BF | …`, agencia interna `INF | …`, agencia con cliente `INF | SIGLA | …` (fallback 3 letras del nombre), personal sin prefijo. Badge en Capturar/TaskDetail (se escribe solo el nombre limpio); en las tarjetas (TaskItem/Kanban/Proyectos/detalle) el prefijo va en mono atenuado. Cambiar contexto recalcula el prefijo sin duplicar. Tareas viejas sin prefijo se muestran igual hasta editarlas.
+- **Recurrentes editar/eliminar:** RecurrenteModal precarga una recurrente existente (UPDATE) y persiste la descripción; botón eliminar con confirmación (DELETE). Click para editar en general, por contexto y por cliente.
+- **Proyectos fecha opcional:** toggle "Sin fecha de término definida" en el modal (due_date null); badge "Ongoing" en la lista; editor de fecha (agregar/quitar) en el detalle.
+
 ### 2026-05-27 — Sesion 9: Fix vistas por fecha, Kanban con subtareas, Capturar obligatorio, Equipo banco, Recurrentes por contexto, separación de contextos
 
 Migración aplicada: `20260527000000_enforce_task_context_separation` (trigger `trg_task_context_links`).
