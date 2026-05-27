@@ -40,6 +40,13 @@ export const ESTADOS: Record<string, string[]> = {
   personal: [...ESTADOS_FLOW.personal, ...ESTADOS_PAUSA.personal],
 }
 
+// Columnas del Kanban por contexto (vistas de tareas de cada contexto)
+export const STATUS_COLUMNS: Record<string, string[]> = {
+  banco: ['Inbox', 'Trabajando', 'Pend. validación', 'Delegado', 'Bloqueado', 'Cerrado'],
+  agencia: ['Inbox', 'Propuesta', 'En ejecución', 'Revisión interna', 'En revisión cliente', 'Delegado', 'Bloqueado', 'Cerrado'],
+  personal: ['Inbox', 'Trabajando', 'En pausa', 'Delegado', 'Cerrado'],
+}
+
 // 4 columnas universales del Kanban del dashboard
 export const KANBAN_GROUPS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'porhacer', label: 'Por hacer', statuses: ['Inbox'] },
