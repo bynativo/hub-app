@@ -70,7 +70,10 @@ export const useStore = create<AppState>((set, get) => ({
     // tras una mutación son silenciosos (no desmontan el árbol ni resetean estado).
     if (!get().initialized) set({ loading: true })
     const [tc, pc, cc, rc, prc, ct, ce] = await Promise.all([
-      supabase.from('tasks').select('*,projects(name,color),clients(name,email)').order('created_at', { ascending: false }),
+      // OJO: existen dos FKs entre tasks y projects (tasks.project_id→projects y
+      // projects.task_id→tasks), así que el embed `projects(...)` es ambiguo y
+      // PostgREST devuelve error (las tareas desaparecían). Desambiguar con el FK.
+      supabase.from('tasks').select('*,projects!tasks_project_id_fkey(name,color),clients(name,email)').order('created_at', { ascending: false }),
       supabase.from('projects').select('*,clients(name)').order('created_at', { ascending: false }),
       supabase.from('clients').select('*').eq('active', true).order('name'),
       supabase.from('recurrentes').select('*,clients(name)').eq('active', true),
@@ -78,6 +81,9 @@ export const useStore = create<AppState>((set, get) => ({
       supabase.from('contacts').select('*').order('name'),
       supabase.from('calendar_events').select('*').order('starts_at'),
     ])
+    // Surface de errores: antes un fallo de query dejaba las listas en [] en silencio.
+    const errored = [tc, pc, cc, rc, prc, ct, ce].find(r => r.error)
+    if (errored?.error) console.error('[loadAll] Supabase error:', errored.error)
     set({
       tasks: tc.data || [],
       projects: pc.data || [],
