@@ -39,9 +39,14 @@ export function Dashboard() {
   // El resto de las tareas activas (ni hoy, ni mañana, ni en seguimiento) para que
   // ninguna quede invisible en la vista Lista — misma fuente que el Kanban.
   const segIds = new Set(seguimiento.map(t => t.id))
-  const resto = active.filter(t => !t.es_recordatorio && !segIds.has(t.id) && t.due_date !== today && t.due_date !== tomorrow)
-  const proximas = resto.filter(t => t.due_date).sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
-  const sinFecha = resto.filter(t => !t.due_date)
+  const proximamente = active
+    .filter(t => !t.es_recordatorio && !segIds.has(t.id) && t.due_date !== today && t.due_date !== tomorrow)
+    .sort((a, b) => {
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
+      if (a.due_date) return -1   // con fecha futura primero
+      if (b.due_date) return 1
+      return 0                    // sin fecha al final
+    })
 
   return (
     <div className="animate-fade-in p-5">
@@ -108,17 +113,10 @@ export function Dashboard() {
           <SectionHeader icon="⏳" label="Seguimiento" count={seguimiento.length} />
           <TaskList tasks={seguimiento} emptyText="Nada esperando respuesta" />
 
-          {proximas.length > 0 && (
+          {proximamente.length > 0 && (
             <>
-              <SectionHeader icon="📅" label="Próximas" count={proximas.length} />
-              <TaskList tasks={proximas} />
-            </>
-          )}
-
-          {sinFecha.length > 0 && (
-            <>
-              <SectionHeader icon="📥" label="Sin fecha" count={sinFecha.length} />
-              <TaskList tasks={sinFecha} />
+              <SectionHeader icon="📅" label="Próximamente" count={proximamente.length} />
+              <TaskList tasks={proximamente} />
             </>
           )}
         </div>
