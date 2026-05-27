@@ -123,7 +123,10 @@ export function Sidebar() {
 
       <CollapsibleHeader label="Personal" color="#d97706" open={!collapsed.personal} onToggle={() => toggle('personal')} />
       {!collapsed.personal && (
-        <NavItem label="Tareas" view="personal-tareas" count={ctxCount('personal')} indent />
+        <>
+          <NavItem label="Tareas" view="personal-tareas" count={ctxCount('personal')} indent />
+          <NavItem label="Proyectos" view="personal-proyectos" indent />
+        </>
       )}
     </aside>
   )

@@ -78,6 +78,7 @@ export default function App() {
       case 'agencia-grilla': return <GrillaView context="agencia" />
       // Personal
       case 'personal-tareas': return <ContextView context="personal" />
+      case 'personal-proyectos': return <ProjectsView context="personal" onOpenPres={setOpenPresId} />
       default: return <Dashboard />
     }
   }
