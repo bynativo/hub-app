@@ -51,7 +51,7 @@ export function WeekView({ range }: { range: 'esta' | 'proxima' }) {
       </div>
 
       {mode === 'kanban' ? (
-        <KanbanBoard items={weekTasks.filter(t => !t.parent_task_id)} />
+        <KanbanBoard items={weekTasks} />
       ) : !days.length ? (
         <div className="text-center py-10 text-gray-400 text-[13px]">Sin tareas con fecha en este rango.</div>
       ) : (

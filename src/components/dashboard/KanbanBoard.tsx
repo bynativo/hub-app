@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR } from '../../lib/constants'
+import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR, STATUS_ICON } from '../../lib/constants'
 import { ctxColor } from '../../lib/helpers'
 import type { Task } from '../../lib/types'
 
@@ -11,9 +11,33 @@ function targetStatus(context: string, groupStatuses: string[]): string {
   return groupStatuses.find(s => ctxStates.includes(s)) || groupStatuses[0]
 }
 
-function KanbanCard({ task, onDragStart }: { task: Task; onDragStart: (id: number, e: React.DragEvent) => void }) {
+// Subtarea anidada dentro de la tarjeta padre: muestra su propio estado.
+function NestedSub({ sub }: { sub: Task }) {
+  const openDetail = useStore(s => s.openDetail)
+  const stColor = STATUS_COLOR[sub.status] || '#6b7280'
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); openDetail(sub.id) }}
+      className={`flex items-center gap-1.5 bg-bg3 border border-black/7 rounded-md px-2 py-1 cursor-pointer hover:border-black/13 transition-colors ${sub.done ? 'opacity-50' : ''}`}
+    >
+      <span className="text-[10px] shrink-0" style={{ color: stColor }}>{STATUS_ICON[sub.status] || '○'}</span>
+      <span className={`text-[11px] leading-tight flex-1 truncate ${sub.done ? 'line-through text-gray-400' : 'text-gray-600'}`}>{sub.title}</span>
+      {sub.due_date && <span className="text-[9px] font-mono px-1 py-px rounded bg-bg4 text-gray-400 shrink-0">{sub.due_date.slice(5).replace('-', '/')}</span>}
+      <span className="text-[9px] font-mono shrink-0" style={{ color: stColor }}>{sub.status}</span>
+    </div>
+  )
+}
+
+function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
+  task: Task
+  subs: Task[]
+  focused: boolean
+  onDragStart: (id: number, e: React.DragEvent) => void
+  onFocus: (id: number) => void
+}) {
   const openDetail = useStore(s => s.openDetail)
   const prioColor = task.priority === 'alta' ? '#dc2626' : task.priority === 'media' ? '#d97706' : '#16a34a'
+  const doneSubs = subs.filter(s => s.done).length
   return (
     <div
       draggable
@@ -23,7 +47,16 @@ function KanbanCard({ task, onDragStart }: { task: Task; onDragStart: (id: numbe
     >
       <div className="flex items-start gap-1.5 mb-1.5">
         <div className="w-[7px] h-[7px] rounded-full shrink-0 mt-1" style={{ background: ctxColor(task.context) }} />
-        <div className="text-[13px] leading-snug">{task.title}</div>
+        <div className="text-[13px] leading-snug flex-1">{task.title}</div>
+        {subs.length > 0 && (
+          <button
+            onClick={e => { e.stopPropagation(); onFocus(task.id) }}
+            title={focused ? 'Limpiar filtro' : 'Ver solo esta tarea y sus subtareas'}
+            className={`shrink-0 text-[11px] leading-none px-1 py-0.5 rounded cursor-pointer transition-colors ${
+              focused ? 'text-claude bg-claude/10' : 'text-gray-300 hover:text-claude hover:bg-claude/7'
+            }`}
+          >⤢</button>
+        )}
       </div>
       <div className="flex items-center gap-1 flex-wrap pl-[13px]">
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: prioColor + '14', color: prioColor }}>
@@ -33,7 +66,15 @@ function KanbanCard({ task, onDragStart }: { task: Task; onDragStart: (id: numbe
         {task.due_date && (
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{task.due_date.slice(5).replace('-', '/')}</span>
         )}
+        {subs.length > 0 && (
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">✓ {doneSubs}/{subs.length}</span>
+        )}
       </div>
+      {subs.length > 0 && (
+        <div className="flex flex-col gap-1 mt-2 pl-[13px]">
+          {subs.map(s => <NestedSub key={s.id} sub={s} />)}
+        </div>
+      )}
     </div>
   )
 }
@@ -43,11 +84,32 @@ export function KanbanBoard({ items, columns }: { items?: Task[]; columns?: { ke
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
+  const [focusId, setFocusId] = useState<number | null>(null)
 
   // `columns` = columnas por contexto (1 estado por columna); por defecto las 4 universales.
   const cols = columns || KANBAN_GROUPS
-  // Si recibe `items` los usa; si no, todas las tareas activas (sin recordatorios, que viven en Seguimiento).
-  const active = items ?? tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
+  // Conjunto base: si recibe `items` los usa; si no, todas las activas (sin recordatorios).
+  // El source puede traer subtareas (vistas por fecha) o solo top-level (vistas por contexto).
+  const source = items ?? tasks.filter(t => !t.done && !t.es_recordatorio && !t.archived_at)
+
+  // Las tarjetas son tareas top-level. Si el source trae subtareas, mostramos su padre
+  // para que la subtarea quede visible anidada (aunque el padre no esté en el source).
+  const parentIds = new Set<number>()
+  for (const t of source) parentIds.add(t.parent_task_id ?? t.id)
+  let cards = tasks.filter(t => parentIds.has(t.id) && !t.parent_task_id && !t.done && !t.archived_at)
+
+  // Subtareas a anidar: si el source ya trae subtareas (vistas por fecha) mostramos solo esas
+  // (las que caen en el rango); si no, todas las subtareas activas del padre.
+  const sourceSubs = source.filter(t => t.parent_task_id)
+  const hasSubsInSource = sourceSubs.length > 0
+  const subsOf = (parentId: number): Task[] => hasSubsInSource
+    ? sourceSubs.filter(s => s.parent_task_id === parentId)
+    : tasks.filter(s => s.parent_task_id === parentId && !s.done && !s.archived_at)
+
+  // Filtro "ver solo esta tarea y sus subtareas"
+  const focusedTask = focusId != null ? tasks.find(t => t.id === focusId) : null
+  if (focusId != null) cards = cards.filter(c => c.id === focusId)
+
   const groupKeyOf = (status: string) => cols.find(g => g.statuses.includes(status))?.key || cols[0].key
 
   function handleDragStart(id: number, e: React.DragEvent) {
@@ -71,32 +133,46 @@ export function KanbanBoard({ items, columns }: { items?: Task[]; columns?: { ke
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-3">
-      {cols.map(group => {
-        const colItems = active.filter(t => groupKeyOf(t.status) === group.key)
-        const accent = STATUS_COLOR[group.statuses[0]] || '#6b7280'
-        return (
-          <div
-            key={group.key}
-            onDragOver={e => { e.preventDefault(); setOverCol(group.key) }}
-            onDragLeave={() => setOverCol(c => c === group.key ? null : c)}
-            onDrop={e => handleDrop(group.key, e)}
-            className={`flex-1 min-w-[205px] rounded-xl border transition-colors ${
-              overCol === group.key ? 'border-claude/40 bg-claude/5' : 'border-black/7 bg-bg3'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-black/7">
-              <div className="w-2 h-2 rounded-full" style={{ background: accent }} />
-              <span className="text-[12px] font-medium">{group.label}</span>
-              <span className="ml-auto font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{colItems.length}</span>
+    <div>
+      {focusedTask && (
+        <div className="flex items-center gap-2 mb-3 bg-claude/5 border border-claude/20 rounded-lg px-3 py-2">
+          <span className="text-[12px] text-claude">⤢ Viendo solo <span className="font-medium">{focusedTask.title}</span> y sus subtareas</span>
+          <button onClick={() => setFocusId(null)}
+            className="ml-auto text-[11px] text-gray-500 bg-bg2 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">
+            Limpiar filtro
+          </button>
+        </div>
+      )}
+      <div className="flex gap-3 overflow-x-auto pb-3">
+        {cols.map(group => {
+          const colItems = cards.filter(t => groupKeyOf(t.status) === group.key)
+          const accent = STATUS_COLOR[group.statuses[0]] || '#6b7280'
+          return (
+            <div
+              key={group.key}
+              onDragOver={e => { e.preventDefault(); setOverCol(group.key) }}
+              onDragLeave={() => setOverCol(c => c === group.key ? null : c)}
+              onDrop={e => handleDrop(group.key, e)}
+              className={`flex-1 min-w-[205px] rounded-xl border transition-colors ${
+                overCol === group.key ? 'border-claude/40 bg-claude/5' : 'border-black/7 bg-bg3'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-black/7">
+                <div className="w-2 h-2 rounded-full" style={{ background: accent }} />
+                <span className="text-[12px] font-medium">{group.label}</span>
+                <span className="ml-auto font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{colItems.length}</span>
+              </div>
+              <div className="flex flex-col gap-1.5 p-2 min-h-[140px]">
+                {colItems.map(t => (
+                  <KanbanCard key={t.id} task={t} subs={subsOf(t.id)} focused={focusId === t.id}
+                    onDragStart={handleDragStart} onFocus={id => setFocusId(f => f === id ? null : id)} />
+                ))}
+                {!colItems.length && <div className="text-center py-6 text-gray-300 text-[11px]">—</div>}
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5 p-2 min-h-[140px]">
-              {colItems.map(t => <KanbanCard key={t.id} task={t} onDragStart={handleDragStart} />)}
-              {!colItems.length && <div className="text-center py-6 text-gray-300 text-[11px]">—</div>}
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
