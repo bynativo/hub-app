@@ -372,7 +372,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       origin,
       client_id: context === 'agencia' ? clientId : null,
       project_id: emailReply ? null : resolvedProjectId,
-      parent_task_id: (reminder || emailReply) ? null : (tipo === 'subtarea' ? parentId : null),
+      parent_task_id: emailReply ? null : (reminder ? (parentId ?? null) : (tipo === 'subtarea' ? parentId : null)),
       task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
       publish_date: (!reminder && isContent) ? (publishDate || null) : null,

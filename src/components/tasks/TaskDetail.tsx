@@ -12,6 +12,14 @@ import type { Checklist, Task } from '../../lib/types'
 type Tab = 'info' | 'subtareas' | 'checklist' | 'chat' | 'email' | 'slide'
 interface Msg { role: 'user' | 'assistant'; content: string }
 
+// ISO timestamptz → valor para <input type="datetime-local"> en hora local
+function toLocalDT(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 const PROXY_URL = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-proxy'
 
 function parseAction(text: string): { json: any; clean: string } | null {
@@ -139,6 +147,7 @@ export function TaskDetail() {
   const [priority, setPriority] = useState('media')
   const [dueDate, setDueDate] = useState('')
   const [publishDate, setPublishDate] = useState('')
+  const [recordatorioAt, setRecordatorioAt] = useState('')
   const [pubType, setPubType] = useState('propia')
   const [infName, setInfName] = useState('')
   const [infHandle, setInfHandle] = useState('')
@@ -180,6 +189,7 @@ export function TaskDetail() {
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
     setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || '')
     setPubType(task.content_pub_type || 'propia'); setInfName(task.influencer_name || ''); setInfHandle(task.influencer_handle || ''); setInfAgency(task.influencer_agency || '')
+    setRecordatorioAt(toLocalDT(task.recordatorio_at))
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
@@ -222,6 +232,7 @@ export function TaskDetail() {
       influencer_name: isContent ? (infName.trim() || null) : null,
       influencer_handle: isContent ? (infHandle.trim() || null) : null,
       influencer_agency: isContent ? (infAgency.trim() || null) : null,
+      ...(task.es_recordatorio ? { recordatorio_at: recordatorioAt ? new Date(recordatorioAt).toISOString() : null } : {}),
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
     })
@@ -523,6 +534,13 @@ Reglas del bloque:
                 <input type="date" value={dueDate} onChange={e => setInfo(setDueDate, e.target.value)} className={fieldCls} />
               </div>
             </div>
+
+            {task.es_recordatorio && (
+              <div>
+                <label className={labelCls}>🔔 Fecha y hora del recordatorio</label>
+                <input type="datetime-local" value={recordatorioAt} onChange={e => setInfo(setRecordatorioAt, e.target.value)} className={fieldCls} />
+              </div>
+            )}
 
             {isContent && (
               <div>

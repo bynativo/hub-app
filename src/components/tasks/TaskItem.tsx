@@ -3,6 +3,7 @@ import type { Task } from '../../lib/types'
 import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
+import { ReminderRow } from './ReminderRow'
 
 function Tag({ children, bg, color }: { children: React.ReactNode; bg: string; color: string }) {
   return (
@@ -19,9 +20,11 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
   const due = fmtDue(task.due_date)
   const { prefix, name } = splitTitle(task.title)
   const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
-  // Subtareas (un nivel) — colapsadas por defecto; solo se ven al expandir la padre.
-  const children = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
-  const hasChildren = children.length > 0
+  // Subtareas reales (un nivel) y recordatorios vinculados — colapsados por defecto.
+  const linked = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
+  const children = linked.filter(t => !t.es_recordatorio)
+  const reminders = linked.filter(t => t.es_recordatorio)
+  const hasChildren = children.length > 0 || reminders.length > 0
   const isEmail = task.task_type === 'responder_email'
 
   return (
@@ -56,7 +59,8 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
             {isEmail && <span className="mr-1">✉️</span>}
             {prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{prefix} |</span>}
             {name}
-            {hasChildren && <span className="ml-1.5 text-[10px] font-mono text-gray-400">({children.length})</span>}
+            {children.length > 0 && <span className="ml-1.5 text-[10px] font-mono text-gray-400">({children.length})</span>}
+            {reminders.length > 0 && <span className="ml-1 text-[10px]">🔔</span>}
           </div>
           <div className="flex items-center gap-1 mt-1.5 flex-wrap">
             <span
@@ -132,6 +136,14 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
       {hasChildren && expanded && (
         <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/15 pl-2.5">
           {children.map(c => <TaskItem key={c.id} task={c} nested />)}
+          {reminders.length > 0 && (
+            <>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 uppercase tracking-wider mt-1 mb-0.5">
+                <span className="h-px flex-1 bg-black/7" />Recordatorios<span className="h-px flex-1 bg-black/7" />
+              </div>
+              {reminders.map(r => <ReminderRow key={r.id} reminder={r} />)}
+            </>
+          )}
         </div>
       )}
     </div>

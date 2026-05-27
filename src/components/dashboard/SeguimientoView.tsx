@@ -169,9 +169,10 @@ function FollowupCard({ task }: { task: Task }) {
 
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
-  // Esperando respuesta / recordatorios (top-level) + contenido que vence hoy (cualquier nivel)
+  // Recordatorios (incluso los vinculados a una tarea) + esperando respuesta (top-level)
+  // + contenido que vence hoy (cualquier nivel)
   const waiting = tasks.filter(t => !t.done && !t.archived_at && (
-    (!t.parent_task_id && (t.es_recordatorio || WAITING_STATES.includes(t.status))) || isContentDueToday(t)
+    t.es_recordatorio || (!t.parent_task_id && WAITING_STATES.includes(t.status)) || isContentDueToday(t)
   ))
   // Tiempo de alarma unificado: recordatorio_at para recordatorios, followup_at para seguimientos.
   const alarmTime = (t: Task) => {
