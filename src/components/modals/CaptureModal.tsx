@@ -90,8 +90,9 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
   const dueMissing = !!showError && !s.isReminder && !s.due_date
   const errFld = fld + ' border-danger/60 bg-danger/5'
   const agClients = clients.filter(c => c.context === 'agencia')
+  // Separación de contexto: proyectos y tareas padre solo del mismo contexto que la tarea
   const ctxProjects = projects.filter(p => p.context === s.contexto)
-  const activeTasks = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at && !t.es_recordatorio)
+  const activeTasks = tasks.filter(t => !t.done && t.context === s.contexto && !t.parent_task_id && !t.archived_at && !t.es_recordatorio)
   const togg = (on: boolean) => `w-9 h-5 rounded-full relative transition-colors shrink-0 ${on ? 'bg-claude' : 'bg-bg4'}`
   const knob = (on: boolean) => `w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all ${on ? 'left-[18px]' : 'left-0.5'}`
 
@@ -150,7 +151,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
 
           <div className="grid grid-cols-2 gap-2">
             <div><label className={lbl}>Contexto</label>
-              <select value={s.contexto} onChange={e => onChange({ contexto: e.target.value, clientId: null })} className={fld}>
+              <select value={s.contexto} onChange={e => onChange({ contexto: e.target.value, clientId: null, parentId: null, projectId: null })} className={fld}>
                 <option value="banco">Banco</option><option value="agencia">Agencia</option><option value="personal">Personal</option>
               </select></div>
             {s.contexto === 'agencia' && (
@@ -278,7 +279,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const dueError = showErrors && !isReminder && !dueDate
   const ctxError = showErrors && !context
 
-  const activeTasks = tasks.filter(t => !t.done)
+  // Separación de contexto: como tarea padre solo tareas del MISMO contexto (top-level, activas)
+  const activeTasks = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
   const ctxProjects = projects.filter(p => p.context === context)
 
   // Al elegir tarea padre, heredar su contexto
@@ -519,7 +521,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         <div className="px-6 pt-4 pb-3 border-b border-black/7 grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Contexto <span className="text-danger">*</span></label>
-            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }}
+            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null); setParentId(null); setProjectId('') }}
               className={fieldCls + (ctxError ? ' border-danger/60 bg-danger/5' : '')}>
               <option value="banco">Banco Falabella</option>
               <option value="agencia">Agencia</option>

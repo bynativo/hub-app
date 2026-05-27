@@ -390,6 +390,27 @@ Reglas del bloque:
     await loadAll()
   }
 
+  // Cambiar el contexto de la tarea: separación estricta. Limpia tarea padre y
+  // proyecto si quedan de otro contexto, y propaga el contexto a las subtareas
+  // (que siempre heredan el del padre, requisito del trigger de la DB).
+  async function changeContext(newCtx: string) {
+    if (!task || newCtx === task.context) return
+    const patch: Partial<Task> = { context: newCtx }
+    const parent = tasks.find(t => t.id === task.parent_task_id)
+    if (task.parent_task_id && (!parent || parent.context !== newCtx)) patch.parent_task_id = null
+    const proj = projects.find(p => p.id === task.project_id)
+    if (task.project_id && (!proj || proj.context !== newCtx)) patch.project_id = null
+    if (newCtx !== 'agencia' && task.client_id) patch.client_id = null
+    await updateTask(task.id, patch)
+    for (const c of tasks.filter(t => t.parent_task_id === task.id)) {
+      const cp = projects.find(pr => pr.id === c.project_id)
+      const childPatch: Record<string, any> = { context: newCtx }
+      if (c.project_id && (!cp || cp.context !== newCtx)) childPatch.project_id = null
+      await supabase.from('tasks').update(childPatch).eq('id', c.id)
+    }
+    await loadAll()
+  }
+
   const fieldCls = 'w-full bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20'
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
@@ -565,12 +586,22 @@ Reglas del bloque:
             <div className="border-t border-black/7 pt-3 mt-1 flex flex-col gap-3">
               <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Organización · se guarda al instante</div>
 
+              <div>
+                <label className={labelCls}>Contexto</label>
+                <select value={task.context} className={fieldCls} onChange={e => changeContext(e.target.value)}>
+                  <option value="banco">Banco Falabella</option>
+                  <option value="agencia">Agencia</option>
+                  <option value="personal">Personal</option>
+                </select>
+              </div>
+
               {!isEmailReply && (<>
               <div>
                 <label className={labelCls}>Parte de proyecto</label>
                 <select value={task.project_id ?? ''} className={fieldCls}
                   onChange={async e => { await updateTask(task.id, { project_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
                   <option value="">— Ninguno —</option>
+                  {/* Separación de contexto: solo proyectos del mismo contexto que la tarea */}
                   {projects.filter(p => p.context === task.context).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
@@ -580,7 +611,8 @@ Reglas del bloque:
                 <select value={task.parent_task_id ?? ''} className={fieldCls}
                   onChange={async e => { await updateTask(task.id, { parent_task_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
                   <option value="">— Ninguna (independiente) —</option>
-                  {tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                  {/* Separación de contexto: solo tareas del mismo contexto como padre */}
+                  {tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio && t.context === task.context).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
                 </select>
               </div>
               </>)}
