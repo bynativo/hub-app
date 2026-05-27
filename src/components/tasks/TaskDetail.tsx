@@ -516,7 +516,8 @@ Reglas del bloque:
                 <label className={labelCls}>Delegado a</label>
                 <select value={delegatedTo} onChange={e => setInfo(setDelegatedTo, e.target.value)} className={fieldCls}>
                   <option value="">Nadie</option>
-                  {contacts.map(c => <option key={c.id} value={c.name}>{c.name}{c.role ? ` · ${c.role}` : ''}</option>)}
+                  {/* Solo el equipo del mismo contexto que la tarea (banco no aparece en agencia y viceversa) */}
+                  {contacts.filter(c => c.context === task.context).map(c => <option key={c.id} value={c.name}>{c.name}{c.role ? ` · ${c.role}` : ''}</option>)}
                   {delegatedTo && !contacts.some(c => c.name === delegatedTo) && <option value={delegatedTo}>{delegatedTo}</option>}
                 </select>
               </div>

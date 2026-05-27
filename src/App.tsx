@@ -68,6 +68,7 @@ export default function App() {
       // Banco Falabella
       case 'banco-tareas': return <ContextView context="banco" />
       case 'banco-proyectos': return <ProjectsView context="banco" onOpenPres={setOpenPresId} />
+      case 'banco-equipo': return <ContactsView context="banco" title="Equipo" />
       case 'banco-presentaciones': return <PresentationsView context="banco" onOpen={setOpenPresId} />
       case 'banco-grilla': return <GrillaView context="banco" />
       // Agencia
