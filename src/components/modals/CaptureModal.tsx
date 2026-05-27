@@ -42,10 +42,10 @@ const EXTRACT_SYSTEM = 'Sos un asistente que extrae tareas accionables de notas,
 function extractPrompt(text: string) {
   return `Hoy es ${todayISO()}. Extrae las tareas concretas. Para CADA tarea devolvé estos campos:
 - titulo: corto y práctico
-- contexto: banco | agencia | personal
+- contexto: banco | agencia | personal — OBLIGATORIO, siempre elegí el más probable según el contenido
 - tipo: independiente | con_subtareas | proyecto | recurrente
 - prioridad: alta | media | baja
-- due_date: fecha de entrega "YYYY-MM-DD" si se menciona o infiere, sino null
+- due_date: fecha de entrega "YYYY-MM-DD" — OBLIGATORIA. Inferila siempre que puedas: convertí expresiones relativas ("hoy", "mañana", "el viernes", "fin de mes", "en una semana") a fecha concreta tomando hoy=${todayISO()}. Solo dejá null si es realmente imposible inferir una fecha.
 - requested_at: fecha en que lo pidieron "YYYY-MM-DD" si se infiere (ej. fecha del correo), sino null
 - estimated_hours: estimación de esfuerzo, uno de 0.5,1,1.5,2,3,4,6,8
 - origen: gmail-agencia | whatsapp | reunion | propia
@@ -75,16 +75,20 @@ function parseSuggested(reply: string): Suggested[] {
 }
 
 // Formulario completo y editable por cada tarea extraída (igual al tab Tarea directa)
-function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks }: {
+function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showError }: {
   s: Suggested
   onChange: (patch: Partial<Suggested>) => void
   onRemove: () => void
   clients: Client[]
   projects: Project[]
   tasks: Task[]
+  showError?: boolean
 }) {
   const fld = 'w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20'
   const lbl = 'text-[10px] font-mono text-gray-400 uppercase block mb-1'
+  // Fecha de entrega obligatoria (salvo recordatorios, que usan reminderAt)
+  const dueMissing = !!showError && !s.isReminder && !s.due_date
+  const errFld = fld + ' border-danger/60 bg-danger/5'
   const agClients = clients.filter(c => c.context === 'agencia')
   const ctxProjects = projects.filter(p => p.context === s.contexto)
   const activeTasks = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at && !t.es_recordatorio)
@@ -171,7 +175,11 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks }: {
 
           {!s.isReminder && (
             <div className="grid grid-cols-2 gap-2">
-              <div><label className={lbl}>Fecha entrega</label><input type="date" value={s.due_date || ''} onChange={e => onChange({ due_date: e.target.value || null })} className={fld} /></div>
+              <div>
+                <label className={lbl}>Fecha entrega <span className="text-danger">*</span></label>
+                <input type="date" value={s.due_date || ''} onChange={e => onChange({ due_date: e.target.value || null })} className={dueMissing ? errFld : fld} />
+                {dueMissing && <span className="text-[10px] text-danger">Obligatoria</span>}
+              </div>
               <div><label className={lbl}>¿Cuándo te lo pidieron?</label><input type="date" value={s.requested_at || ''} onChange={e => onChange({ requested_at: e.target.value || null })} className={fld} /></div>
             </div>
           )}
@@ -264,7 +272,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [isEmailReply, setIsEmailReply] = useState(false)
   const [desc, setDesc] = useState(template?.notes ?? '')
   const [saving, setSaving] = useState(false)
+  const [showErrors, setShowErrors] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
+  // Fecha de entrega obligatoria salvo recordatorios (usan reminderAt como fecha)
+  const dueError = showErrors && !isReminder && !dueDate
+  const ctxError = showErrors && !context
 
   const activeTasks = tasks.filter(t => !t.done)
   const ctxProjects = projects.filter(p => p.context === context)
@@ -280,6 +292,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   async function handleSaveTask() {
     if (!title.trim()) return
     if (isReminder && !reminderAt) return
+    // Contexto y fecha de entrega son obligatorios (la fecha no aplica a recordatorios)
+    if (!context || (!isReminder && !dueDate)) { setShowErrors(true); return }
     setSaving(true)
     const reminder = isReminder && !!reminderAt
     const emailReply = isEmailReply && origin === 'gmail-agencia'
@@ -375,6 +389,14 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   async function handleCreateSelected() {
     const selected = suggestions.filter(s => s.selected)
     if (!selected.length) return
+    // Contexto y fecha de entrega obligatorios en cada tarea seleccionada
+    const isMissing = (s: Suggested) => !s.contexto || (!s.isReminder && !s.due_date)
+    if (selected.some(isMissing)) {
+      setShowErrors(true)
+      // Expandir las tareas con campos faltantes para que el usuario las complete
+      setSuggestions(prev => prev.map(s => (s.selected && isMissing(s)) ? { ...s, expanded: true } : s))
+      return
+    }
     setSavingNotes(true)
     const taskRows = selected.map(s => {
       const reminder = s.isReminder && !!s.reminderAt
@@ -469,10 +491,15 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
           <button onClick={() => setSuggestions(prev => prev.map(s => ({ ...s, expanded: !prev.every(x => x.expanded) })))}
             className="text-[10px] text-gray-400 hover:text-claude cursor-pointer">expandir/contraer</button>
         </div>
+        {showErrors && suggestions.some(s => s.selected && (!s.contexto || (!s.isReminder && !s.due_date))) && (
+          <div className="text-[11px] text-danger bg-danger/5 border border-danger/30 rounded-md px-2.5 py-1.5 mb-2">
+            Completá la fecha de entrega (obligatoria) en las tareas marcadas antes de crear.
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           {suggestions.map((s, i) => (
             <SuggestionForm key={i} s={s} onChange={p => update(i, p)} onRemove={() => setSuggestions(prev => prev.filter((_, j) => j !== i))}
-              clients={clients} projects={projects} tasks={tasks} />
+              clients={clients} projects={projects} tasks={tasks} showError={showErrors} />
           ))}
         </div>
       </div>
@@ -491,8 +518,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         {/* Selectores compartidos por los 3 tabs */}
         <div className="px-6 pt-4 pb-3 border-b border-black/7 grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Contexto</label>
-            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }} className={fieldCls}>
+            <label className={labelCls}>Contexto <span className="text-danger">*</span></label>
+            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }}
+              className={fieldCls + (ctxError ? ' border-danger/60 bg-danger/5' : '')}>
               <option value="banco">Banco Falabella</option>
               <option value="agencia">Agencia</option>
               <option value="personal">Personal</option>
@@ -626,8 +654,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               {!isReminder && (
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className={labelCls}>Fecha de entrega</label>
-                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
+                    <label className={labelCls}>Fecha de entrega <span className="text-danger">*</span></label>
+                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                      className={fieldCls + (dueError ? ' border-danger/60 bg-danger/5' : '')} />
+                    {dueError && <span className="text-[10px] text-danger">Obligatoria</span>}
                   </div>
                   <div>
                     <label className={labelCls}>¿Cuándo te lo pidieron?</label>
