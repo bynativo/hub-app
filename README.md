@@ -253,6 +253,17 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 9: Fix vistas por fecha, Kanban con subtareas, Capturar obligatorio, Equipo banco, Recurrentes por contexto, separación de contextos
+
+Migración aplicada: `20260527000000_enforce_task_context_separation` (trigger `trg_task_context_links`).
+
+- **Fix "tareas de hoy no aparecían":** NO era timezone (`due_date` es `date` y `todayISO()` ya es local). La causa: las vistas por fecha filtraban `!parent_task_id`, excluyendo subtareas (que tienen su propio `due_date`). Ahora Hoy/Mañana/Esta-Próxima semana y sus contadores incluyen subtareas.
+- **Kanban con subtareas anidadas:** `KanbanBoard` muestra cada subtarea como card dentro de su tarjeta padre, con su propio estado; contador ✓ hechas/total. Botón ⤢ "Ver solo esta tarea y sus subtareas" filtra el tablero al padre + hijas, con "Limpiar filtro". (Seguimiento sigue siendo lista especializada, no Kanban.)
+- **Capturar obligatorio:** contexto y fecha de entrega son obligatorios (validación + resaltado rojo). Prompt de extracción reforzado: Claude infiere fecha desde expresiones relativas; tareas sin fecha se expanden y resaltan antes de crear.
+- **Equipo en Banco Falabella:** nav + ruta `banco-equipo` (ContactsView context="banco"). "Delegado a" en TaskDetail filtra contactos por contexto de la tarea.
+- **Recurrentes por contexto:** `RecurrentesView` acepta `context` (subconjunto filtrado; agencia con filtro por cliente). Nav/rutas en Banco, Agencia, Personal. La global (General) sigue mostrando todas.
+- **Separación estricta de contextos:** selectores de tarea padre/proyecto filtran por contexto; cambiar contexto limpia padre/proyecto/cliente y propaga a subtareas. Trigger en DB impide `parent_task_id`/`project_id` cross-context (limpieza previa: subtarea 66 agencia→banco).
+
 ### 2026-05-27 — Sesion 8: Lista/Kanban por contexto, archivado, buscador, eliminar, proyectos personales, extracción editable + Google Calendar activo
 
 Migración aplicada: `tasks.archived_at`.
