@@ -146,6 +146,9 @@ export function TaskDetail() {
 
   // Subtask add: usa el CaptureModal completo con parent_task_id precargado
   const [subModalOpen, setSubModalOpen] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   // Chat
   const [messages, setMessages] = useState<Msg[]>([])
@@ -378,6 +381,15 @@ Reglas del bloque:
     setLinkedSlide(data as Slide)
   }
 
+  async function deleteTask() {
+    if (!task) return
+    setDeleting(true)
+    await supabase.from('tasks').delete().eq('id', task.id) // CASCADE: subtareas, checklists, threads, attachments
+    setDeleting(false); setConfirmDel(false)
+    closeDetail()
+    await loadAll()
+  }
+
   const fieldCls = 'w-full bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20'
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
@@ -398,7 +410,19 @@ Reglas del bloque:
             {task.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{task.clients.name}</span>}
           </div>
         </div>
-        <button onClick={closeDetail} className="text-gray-400 text-lg hover:text-gray-900 cursor-pointer">✕</button>
+        <div className="relative flex items-center gap-1 shrink-0">
+          <button onClick={() => setShowMenu(m => !m)} className="text-gray-400 text-lg hover:text-gray-900 cursor-pointer px-1 leading-none" title="Opciones">⋯</button>
+          {showMenu && (
+            <>
+              <div className="fixed inset-0 z-[5]" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 top-7 bg-bg2 border border-black/7 rounded-lg shadow-lg py-1 z-10 w-44">
+                <button onClick={() => { setShowMenu(false); setConfirmDel(true) }}
+                  className="w-full text-left px-3 py-1.5 text-[13px] text-danger hover:bg-danger/10 cursor-pointer">🗑 Eliminar tarea</button>
+              </div>
+            </>
+          )}
+          <button onClick={closeDetail} className="text-gray-400 text-lg hover:text-gray-900 cursor-pointer">✕</button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -759,6 +783,23 @@ Reglas del bloque:
       {subModalOpen && (
         <CaptureModal onClose={() => setSubModalOpen(false)}
           preselectContext={task.context} preselectClientId={task.client_id} preselectParentId={task.id} />
+      )}
+
+      {confirmDel && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmDel(false) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[400px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">Eliminar tarea</div>
+            <p className="text-[13px] text-gray-500 mb-4">
+              Esta acción no se puede deshacer. ¿Eliminar permanentemente "<span className="font-medium text-gray-700">{task.title}</span>"? Se borran también sus subtareas, checklist y adjuntos.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDel(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
+              <button onClick={deleteTask} disabled={deleting} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer disabled:opacity-40">
+                {deleting ? 'Eliminando…' : 'Eliminar permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
