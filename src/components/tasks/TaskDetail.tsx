@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
-import { ctxLabel, fmtHoras } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import type { Checklist, Task, Slide } from '../../lib/types'
@@ -32,8 +32,11 @@ function SubtaskRow({ sub }: { sub: Task }) {
   const updateTask = useStore(s => s.updateTask)
   const toggleTask = useStore(s => s.toggleTask)
   const openDetail = useStore(s => s.openDetail)
+  const clients = useStore(s => s.clients)
+  const subPrefix = taskPrefix(sub.context, clients.find(c => c.id === sub.client_id) || null)
+  const subParts = splitTitle(sub.title)
   const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState(sub.title)
+  const [title, setTitle] = useState(stripPrefix(sub.title))
   const [status, setStatus] = useState(sub.status)
   const [due, setDue] = useState(sub.due_date || '')
   const [hours, setHours] = useState(sub.estimated_hours != null ? String(sub.estimated_hours) : '')
@@ -47,7 +50,7 @@ function SubtaskRow({ sub }: { sub: Task }) {
   async function save() {
     setSaving(true)
     await updateTask(sub.id, {
-      title: title.trim() || sub.title, status, due_date: due || null,
+      title: buildTitle(subPrefix, title.trim() || stripPrefix(sub.title)), status, due_date: due || null,
       estimated_hours: hours ? Number(hours) : null, notes: notes.trim() || null,
     })
     setSaving(false); setDirty(false)
@@ -63,7 +66,9 @@ function SubtaskRow({ sub }: { sub: Task }) {
           className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] ${sub.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'}`}>
           {sub.done && '✓'}
         </div>
-        <span onClick={() => setOpen(o => !o)} className={`text-[13px] flex-1 cursor-pointer hover:text-claude ${sub.done ? 'line-through text-gray-400' : ''}`}>{sub.title}</span>
+        <span onClick={() => setOpen(o => !o)} className={`text-[13px] flex-1 cursor-pointer hover:text-claude ${sub.done ? 'line-through text-gray-400' : ''}`}>
+          {subParts.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{subParts.prefix} |</span>}{subParts.name}
+        </span>
         {sub.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{sub.due_date.slice(5).replace('-', '/')}</span>}
         {sub.estimated_hours != null && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{sub.estimated_hours}h</span>}
         <span className="text-[10px]" style={{ color: STATUS_COLOR[sub.status] }}>{STATUS_ICON[sub.status]}</span>
@@ -114,6 +119,7 @@ export function TaskDetail() {
   const contacts = useStore(s => s.contacts)
   const presentations = useStore(s => s.presentations)
   const projects = useStore(s => s.projects)
+  const clients = useStore(s => s.clients)
   const setView = useStore(s => s.setView)
   const currentTaskId = useStore(s => s.currentTaskId)
   const closeDetail = useStore(s => s.closeDetail)
@@ -168,7 +174,7 @@ export function TaskDetail() {
   useEffect(() => {
     if (!task) return
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
-    setTitle(task.title); setPriority(task.priority); setDueDate(task.due_date || '')
+    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || '')
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
@@ -186,6 +192,8 @@ export function TaskDetail() {
   if (!task) return null
 
   const ctxStates = ESTADOS[task.context] || ESTADOS.banco
+  const titlePrefix = taskPrefix(task.context, clients.find(c => c.id === task.client_id) || null)
+  const headerTitle = splitTitle(task.title)
   const isContent = task.task_type === 'contenido'
   const isEmailReply = task.task_type === 'responder_email'
   const tabs: { id: Tab; label: string }[] = [
@@ -203,7 +211,7 @@ export function TaskDetail() {
     if (!task) return
     setSavingInfo(true)
     await updateTask(task.id, {
-      title: title.trim() || task.title, priority, due_date: dueDate || null,
+      title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
     })
@@ -309,7 +317,7 @@ Reglas del bloque:
     const subs = (a.subtareas || []).filter((s: any) => s.title || s.titulo)
     if (subs.length) {
       await supabase.from('tasks').insert(subs.map((s: any) => ({
-        title: s.title || s.titulo, context: task.context, client_id: task.client_id,
+        title: buildTitle(titlePrefix, s.title || s.titulo), context: task.context, client_id: task.client_id,
         parent_task_id: task.id, project_id: task.project_id, priority: 'media', origin: 'propia',
         status: 'Inbox', done: false, due_date: s.due_date || null, task_type: 'independiente',
         cats: [], plan: [], meeting_agenda: [],
@@ -401,6 +409,9 @@ Reglas del bloque:
     const proj = projects.find(p => p.id === task.project_id)
     if (task.project_id && (!proj || proj.context !== newCtx)) patch.project_id = null
     if (newCtx !== 'agencia' && task.client_id) patch.client_id = null
+    // Recalcular el prefijo de nomenclatura según el nuevo contexto/cliente
+    const prefixClient = newCtx === 'agencia' && patch.client_id !== null ? (clients.find(c => c.id === task.client_id) || null) : null
+    patch.title = buildTitle(taskPrefix(newCtx, prefixClient), stripPrefix(task.title))
     await updateTask(task.id, patch)
     for (const c of tasks.filter(t => t.parent_task_id === task.id)) {
       const cp = projects.find(pr => pr.id === c.project_id)
@@ -422,7 +433,10 @@ Reglas del bloque:
           {task.parent_task_id && (
             <button onClick={() => openDetail(task.parent_task_id!)} className="text-[11px] text-claude hover:underline mb-1 cursor-pointer">↑ ver tarea padre</button>
           )}
-          <div className="font-serif text-[17px] font-light mb-1.5 leading-snug">{task.title}</div>
+          <div className="font-serif text-[17px] font-light mb-1.5 leading-snug">
+            {headerTitle.prefix && <span className="font-mono text-[13px] text-claude/70 mr-1">{headerTitle.prefix} |</span>}
+            {headerTitle.name}
+          </div>
           <div className="flex gap-1 flex-wrap">
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: (STATUS_COLOR[task.status] || '#6b7280') + '16', color: STATUS_COLOR[task.status] }}>
               {STATUS_ICON[task.status]} {task.status}
@@ -464,7 +478,12 @@ Reglas del bloque:
           <div className="animate-fade-in flex flex-col gap-3">
             <div>
               <label className={labelCls}>Título</label>
-              <input value={title} onChange={e => setInfo(setTitle, e.target.value)} className={fieldCls} />
+              <div className="flex items-stretch">
+                {titlePrefix && (
+                  <span className="shrink-0 inline-flex items-center px-3 rounded-l-lg border border-r-0 border-black/7 bg-bg4 text-claude font-mono text-[13px] font-medium">{titlePrefix} |</span>
+                )}
+                <input value={title} onChange={e => setInfo(setTitle, e.target.value)} className={fieldCls + (titlePrefix ? ' rounded-l-none' : '')} />
+              </div>
             </div>
 
             <div>

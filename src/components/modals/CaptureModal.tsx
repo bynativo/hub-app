@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
-import { fmtHoras, todayISO } from '../../lib/helpers'
+import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix } from '../../lib/helpers'
 import type { Client, Project, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -89,6 +89,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
   // Fecha de entrega obligatoria (salvo recordatorios, que usan reminderAt)
   const dueMissing = !!showError && !s.isReminder && !s.due_date
   const errFld = fld + ' border-danger/60 bg-danger/5'
+  const sPrefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
   const agClients = clients.filter(c => c.context === 'agencia')
   // Separación de contexto: proyectos y tareas padre solo del mismo contexto que la tarea
   const ctxProjects = projects.filter(p => p.context === s.contexto)
@@ -114,7 +115,13 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
 
       {s.expanded && (
         <div className="border-t border-black/7 p-2.5 flex flex-col gap-2">
-          <div><label className={lbl}>Título</label><input value={s.titulo} onChange={e => onChange({ titulo: e.target.value })} className={fld} /></div>
+          <div>
+            <label className={lbl}>Título</label>
+            <div className="flex items-stretch">
+              {sPrefix && <span className="shrink-0 inline-flex items-center px-2 rounded-l-md border border-r-0 border-black/7 bg-bg4 text-claude font-mono text-[11px] font-medium">{sPrefix} |</span>}
+              <input value={s.titulo} onChange={e => onChange({ titulo: e.target.value })} className={fld + (sPrefix ? ' rounded-l-none' : '')} />
+            </div>
+          </div>
 
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <button type="button" onClick={() => onChange({ isReminder: !s.isReminder })} className={togg(s.isReminder)}><div className={knob(s.isReminder)} /></button>
@@ -255,7 +262,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const agClients = clients.filter(c => c.context === 'agencia')
 
   // ===== Tab Tarea =====
-  const [title, setTitle] = useState(template?.title ?? '')
+  const [title, setTitle] = useState(stripPrefix(template?.title ?? ''))
   const [tipo, setTipo] = useState<TipoTarea>(preselectParentId ? 'subtarea' : preselectProjectId ? 'proyecto' : 'independiente')
   const [parentId, setParentId] = useState<number | null>(preselectParentId ?? null)
   const [projectId, setProjectId] = useState<number | '' | '__new__'>(preselectProjectId ?? '')
@@ -282,6 +289,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   // Separación de contexto: como tarea padre solo tareas del MISMO contexto (top-level, activas)
   const activeTasks = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
   const ctxProjects = projects.filter(p => p.context === context)
+  // Prefijo de nomenclatura automático según contexto + cliente (se antepone al guardar)
+  const titlePrefix = taskPrefix(context, clients.find(c => c.id === clientId) || null)
 
   // Al elegir tarea padre, heredar su contexto
   useEffect(() => {
@@ -314,7 +323,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     }
 
     const { error } = await supabase.from('tasks').insert({
-      title: title.trim(),
+      title: buildTitle(titlePrefix, title.trim()),
       context,
       priority,
       origin,
@@ -402,8 +411,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     setSavingNotes(true)
     const taskRows = selected.map(s => {
       const reminder = s.isReminder && !!s.reminderAt
+      const prefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
       return {
-        title: s.titulo, context: s.contexto, priority: s.prioridad, origin: s.origen || 'reunion',
+        title: buildTitle(prefix, s.titulo), context: s.contexto, priority: s.prioridad, origin: s.origen || 'reunion',
         client_id: s.contexto === 'agencia' ? s.clientId : null,
         project_id: (!reminder && s.tipo === 'proyecto') ? s.projectId : null,
         parent_task_id: (!reminder && s.tipo === 'subtarea') ? s.parentId : null,
@@ -547,7 +557,13 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
             <>
               <div className="mb-3">
                 <label className={labelCls}>Título *</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="¿Qué hay que hacer?" autoFocus />
+                <div className="flex items-stretch">
+                  {titlePrefix && (
+                    <span className="shrink-0 inline-flex items-center px-3 rounded-l-lg border border-r-0 border-black/7 bg-bg4 text-claude font-mono text-[13px] font-medium">{titlePrefix} |</span>
+                  )}
+                  <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls + (titlePrefix ? ' rounded-l-none' : '')} placeholder="¿Qué hay que hacer?" autoFocus />
+                </div>
+                {titlePrefix && <p className="text-[10px] text-gray-400 mt-1">Se guardará como <span className="font-mono text-gray-500">{titlePrefix} | {title.trim() || '…'}</span></p>}
               </div>
 
               {/* Es recordatorio */}

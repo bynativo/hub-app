@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { ctxColor, ctxLabel } from '../../lib/helpers'
+import { ctxColor, ctxLabel, splitTitle } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { NewProjectModal } from '../modals/NewProjectModal'
 
@@ -115,7 +115,9 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
                     <div key={t.id} onClick={() => openDetail(t.id)}
                       className={`flex items-center gap-2.5 p-2.5 rounded-lg border border-black/7 cursor-pointer hover:border-black/13 hover:shadow-sm transition-all ${t.done ? 'opacity-40' : ''}`}>
                       <div className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 flex items-center justify-center text-[9px] ${t.done ? 'bg-success border-success text-white' : 'border-black/13'}`}>{t.done && '✓'}</div>
-                      <span className={`text-[13px] flex-1 ${t.done ? 'line-through text-gray-400' : ''}`}>{t.title}</span>
+                      <span className={`text-[13px] flex-1 ${t.done ? 'line-through text-gray-400' : ''}`}>
+                        {(() => { const p = splitTitle(t.title); return <>{p.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{p.prefix} |</span>}{p.name}</> })()}
+                      </span>
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: stColor + '16', color: stColor }}>{STATUS_ICON[t.status]} {t.status}</span>
                     </div>
                   )

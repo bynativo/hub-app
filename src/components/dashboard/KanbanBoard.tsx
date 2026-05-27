@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR, STATUS_ICON } from '../../lib/constants'
-import { ctxColor } from '../../lib/helpers'
+import { ctxColor, splitTitle, stripPrefix } from '../../lib/helpers'
 import type { Task } from '../../lib/types'
 
 // Estado destino al soltar una tarea en una columna universal:
@@ -21,7 +21,7 @@ function NestedSub({ sub }: { sub: Task }) {
       className={`flex items-center gap-1.5 bg-bg3 border border-black/7 rounded-md px-2 py-1 cursor-pointer hover:border-black/13 transition-colors ${sub.done ? 'opacity-50' : ''}`}
     >
       <span className="text-[10px] shrink-0" style={{ color: stColor }}>{STATUS_ICON[sub.status] || '○'}</span>
-      <span className={`text-[11px] leading-tight flex-1 truncate ${sub.done ? 'line-through text-gray-400' : 'text-gray-600'}`}>{sub.title}</span>
+      <span className={`text-[11px] leading-tight flex-1 truncate ${sub.done ? 'line-through text-gray-400' : 'text-gray-600'}`}>{stripPrefix(sub.title)}</span>
       {sub.due_date && <span className="text-[9px] font-mono px-1 py-px rounded bg-bg4 text-gray-400 shrink-0">{sub.due_date.slice(5).replace('-', '/')}</span>}
       <span className="text-[9px] font-mono shrink-0" style={{ color: stColor }}>{sub.status}</span>
     </div>
@@ -38,6 +38,7 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
   const openDetail = useStore(s => s.openDetail)
   const prioColor = task.priority === 'alta' ? '#dc2626' : task.priority === 'media' ? '#d97706' : '#16a34a'
   const doneSubs = subs.filter(s => s.done).length
+  const parts = splitTitle(task.title)
   return (
     <div
       draggable
@@ -47,7 +48,9 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
     >
       <div className="flex items-start gap-1.5 mb-1.5">
         <div className="w-[7px] h-[7px] rounded-full shrink-0 mt-1" style={{ background: ctxColor(task.context) }} />
-        <div className="text-[13px] leading-snug flex-1">{task.title}</div>
+        <div className="text-[13px] leading-snug flex-1">
+          {parts.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{parts.prefix} |</span>}{parts.name}
+        </div>
         {subs.length > 0 && (
           <button
             onClick={e => { e.stopPropagation(); onFocus(task.id) }}

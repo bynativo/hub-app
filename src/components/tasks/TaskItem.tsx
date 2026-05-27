@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel, fmtHoras } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras, splitTitle } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 
@@ -17,6 +17,7 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
   const allTasks = useStore(s => s.tasks)
   const [expanded, setExpanded] = useState(false)
   const due = fmtDue(task.due_date)
+  const { prefix, name } = splitTitle(task.title)
   const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
   // Subtareas (un nivel) — colapsadas por defecto; solo se ven al expandir la padre.
   const children = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
@@ -53,7 +54,8 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
         <div className="flex-1 min-w-0">
           <div className={`text-[13px] leading-snug font-medium ${task.done ? 'line-through text-gray-400' : ''}`}>
             {isEmail && <span className="mr-1">✉️</span>}
-            {task.title}
+            {prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{prefix} |</span>}
+            {name}
             {hasChildren && <span className="ml-1.5 text-[10px] font-mono text-gray-400">({children.length})</span>}
           </div>
           <div className="flex items-center gap-1 mt-1.5 flex-wrap">

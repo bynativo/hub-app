@@ -86,3 +86,37 @@ export function priorityColor(p: string): string {
   if (p === 'media') return '#d97706'
   return '#16a34a'
 }
+
+// ===== Nomenclatura automática de títulos de tareas =====
+// banco → "BF" | agencia interna → "INF" | agencia con cliente → "INF | SIGLA" | personal → ""
+export function taskPrefix(context: string, client?: { sigla?: string | null; name: string } | null): string {
+  if (context === 'banco') return 'BF'
+  if (context === 'agencia') {
+    if (!client) return 'INF'
+    const sigla = (client.sigla?.trim() || client.name.slice(0, 3)).toUpperCase()
+    return `INF | ${sigla}`
+  }
+  return '' // personal: sin prefijo
+}
+
+// Construye el título completo a guardar: "PREFIJO | nombre" (o solo el nombre si no hay prefijo).
+export function buildTitle(prefix: string, cleanName: string): string {
+  const c = cleanName.trim()
+  return prefix ? `${prefix} | ${c}` : c
+}
+
+// Separa un título guardado en { prefix, name } para mostrarlos con estilos distintos.
+export function splitTitle(title: string): { prefix: string; name: string } {
+  let m = title.match(/^\s*INF\s*\|\s*([A-Z0-9]{2,6})\s*\|\s*(.*)$/is)
+  if (m) return { prefix: `INF | ${m[1].toUpperCase()}`, name: m[2] }
+  m = title.match(/^\s*INF\s*\|\s*(.*)$/is)
+  if (m) return { prefix: 'INF', name: m[1] }
+  m = title.match(/^\s*BF\s*\|\s*(.*)$/is)
+  if (m) return { prefix: 'BF', name: m[1] }
+  return { prefix: '', name: title }
+}
+
+// Quita el prefijo de nomenclatura, dejando el nombre limpio (para editar sin duplicar).
+export function stripPrefix(title: string): string {
+  return splitTitle(title).name
+}
