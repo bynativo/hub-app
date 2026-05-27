@@ -253,6 +253,14 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 11: Proyectos como tarea padre, proyectos en agencia (+internos), editar/eliminar proyectos + fix tareas invisibles
+
+- **FIX CRÍTICO — tareas invisibles en toda la app:** existen dos FKs entre tasks y projects (tasks.project_id→projects y projects.task_id→tasks), así que el embed `projects(name,color)` de `loadAll` era ambiguo → PostgREST devolvía error PGRST201 → `tasks: tc.data || []` quedaba en []. Desambiguado con `projects!tasks_project_id_fkey(...)`. Además `loadAll` ahora loguea errores (antes el fallo era silencioso).
+- **Proyectos como tarea padre:** una tarea con project_id se anida bajo una tarjeta de proyecto expandible (📁 + badge "Proyecto"). TaskList agrupa bajo `ProjectCard`; KanbanBoard bajo `ProjectKanbanCard` (un proyecto puede aparecer en varias columnas según el estado de sus tareas). Se quitó el tag de proyecto de TaskItem. Solo visual: las tareas siguen usando project_id.
+- **Proyectos en Agencia (+ internos):** nav `agencia-proyectos`. NewProjectModal en agencia: selector "Vinculado a cliente" / "Proyecto interno" (es_interno, sin cliente; cliente obligatorio si es de cliente). Badge "Interno" en la lista.
+- **Editar/eliminar proyectos:** panel de detalle de ProjectsView convertido en formulario editable (nombre, descripción, status, fecha+toggle Ongoing/is_ongoing, cliente/interno y tipo en agencia). Guardar cambios (UPDATE) y Eliminar proyecto con confirmación (las tareas quedan con project_id=null, luego DELETE).
+- Tipos: Project + is_ongoing, es_interno.
+
 ### 2026-05-27 — Sesion 10: Clientes (sigla/web/redes), crear cliente rápido, nomenclatura automática de tareas, recurrentes editar/eliminar, proyectos Ongoing
 
 Migración aplicada: `clients_add_sigla_website_social` (clients.sigla, clients.website_url, clients.social_links jsonb).
