@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
-import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix } from '../../lib/helpers'
+import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning } from '../../lib/helpers'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
 import type { Client, Project, Task } from '../../lib/types'
@@ -18,6 +18,7 @@ interface Suggested {
   tipo: TipoTarea
   prioridad: string
   due_date: string | null
+  publish_date: string | null
   requested_at: string | null
   estimated_hours: number | null
   origen: string
@@ -70,6 +71,7 @@ function parseSuggested(reply: string): Suggested[] {
     tipo: normTipo(t.tipo || t.type || ''),
     prioridad: t.prioridad || t.priority || 'media',
     due_date: t.due_date || null,
+    publish_date: t.publish_date || null,
     requested_at: t.requested_at || null,
     estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
     origen: t.origen || t.origin || 'propia',
@@ -96,6 +98,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
   const dueMissing = !!showError && !s.isReminder && !s.due_date
   const errFld = fld + ' border-danger/60 bg-danger/5'
   const sPrefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
+  const sPubWarn = s.isContent ? deliveryWarning(s.due_date, s.publish_date) : null
   const updTarget = s.updateTargetId ? tasks.find(t => t.id === s.updateTargetId) : null
   const agClients = clients.filter(c => c.context === 'agencia')
   // Separación de contexto: proyectos y tareas padre solo del mismo contexto que la tarea
@@ -215,6 +218,14 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
             </div>
           )}
 
+          {!s.isReminder && s.isContent && (
+            <div>
+              <label className={lbl}>¿Cuándo se publica? (opcional)</label>
+              <input type="date" value={s.publish_date || ''} onChange={e => onChange({ publish_date: e.target.value || null })} className={fld} />
+              {sPubWarn && <span className="text-[10px] text-warn">⚠ Entrega ≥24h antes de publicar. Mínimo sugerido: {sPubWarn}</span>}
+            </div>
+          )}
+
           <div>
             <label className={lbl}>Estimado</label>
             <div className="flex gap-1 flex-wrap">
@@ -296,6 +307,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [origin, setOrigin] = useState(template?.origin ?? 'propia')
   const [dueDate, setDueDate] = useState('')
   const [requestedAt, setRequestedAt] = useState(todayISO())
+  const [publishDate, setPublishDate] = useState('')
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
   const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
   const [isReminder, setIsReminder] = useState(false)
@@ -308,6 +320,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   // Fecha de entrega obligatoria salvo recordatorios (usan reminderAt como fecha)
   const dueError = showErrors && !isReminder && !dueDate
   const ctxError = showErrors && !context
+  // Contenido: la entrega debe ser ≥24h antes de la publicación
+  const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
 
   // Separación de contexto: como tarea padre solo tareas del MISMO contexto (top-level, activas)
   const activeTasks = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
@@ -355,6 +369,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       parent_task_id: (reminder || emailReply) ? null : (tipo === 'subtarea' ? parentId : null),
       task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
+      publish_date: (!reminder && isContent) ? (publishDate || null) : null,
       requested_at: requestedAt || todayISO(),
       estimated_hours: emailReply ? 0.25 : estHours,
       notes: desc.trim() || null,
@@ -414,7 +429,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     const tipo: TipoTarea = hasProject ? 'proyecto' : (/subtarea/i.test(r.tipoRaw) ? 'subtarea' : /proyecto/i.test(r.tipoRaw) ? 'proyecto' : 'independiente')
     return {
       titulo: r.title, contexto: r.context, tipo, prioridad: r.prioridad,
-      due_date: r.due_date, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
+      due_date: r.due_date, publish_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
       parentId: null, projectId: null,
       clientId: r.context === 'agencia' ? (client?.id ?? null) : null,
       isContent: false, isReminder: false, reminderAt: '',
@@ -535,6 +550,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         estimated_hours: s.estimated_hours,
       }
       if (s.desc.trim()) patch.context_readme = s.desc.trim()
+      if (s.isContent) patch.publish_date = s.publish_date || null
       const linked = projectFor(s)
       if (linked) patch.project_id = linked
       await supabase.from('tasks').update(patch).eq('id', s.updateTargetId)
@@ -552,6 +568,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         parent_task_id: (!reminder && s.tipo === 'subtarea') ? s.parentId : null,
         task_type: s.isContent ? 'contenido' : 'independiente',
         due_date: reminder ? null : (s.due_date || null),
+        publish_date: (!reminder && s.isContent) ? (s.publish_date || null) : null,
         requested_at: s.requested_at || todayISO(),
         estimated_hours: s.estimated_hours,
         notes: s.desc.trim() || null,
@@ -843,7 +860,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {!isReminder && (
+              {!isReminder && !isContent && (
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className={labelCls}>Fecha de entrega <span className="text-danger">*</span></label>
@@ -855,6 +872,37 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                     <label className={labelCls}>¿Cuándo te lo pidieron?</label>
                     <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
                   </div>
+                </div>
+              )}
+
+              {/* Tareas de contenido: 3 fechas con roles distintos */}
+              {!isReminder && isContent && (
+                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+                  <div className="text-[11px] font-mono text-claude tracking-wider uppercase">📅 Fechas del contenido</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className={labelCls}>¿Cuándo fue solicitado?</label>
+                      <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>¿Cuándo entregas el contenido? <span className="text-danger">*</span></label>
+                      <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                        className={fieldCls + (dueError ? ' border-danger/60 bg-danger/5' : '')} />
+                      {dueError && <span className="text-[10px] text-danger">Obligatoria</span>}
+                    </div>
+                    <div>
+                      <label className={labelCls}>¿Cuándo se publica?</label>
+                      <input type="date" value={publishDate} onChange={e => setPublishDate(e.target.value)} className={fieldCls} />
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-gray-400 leading-snug">
+                    <b>Entrega</b> = tu responsabilidad (listo para revisión). <b>Publicación</b> = la define el CM; si no está definida aún, la puede completar después.
+                  </div>
+                  {pubWarn && (
+                    <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
+                      ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
+                    </div>
+                  )}
                 </div>
               )}
 

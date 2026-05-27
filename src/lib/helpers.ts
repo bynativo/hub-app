@@ -120,3 +120,11 @@ export function splitTitle(title: string): { prefix: string; name: string } {
 export function stripPrefix(title: string): string {
   return splitTitle(title).name
 }
+
+// Contenido: la entrega (due) debe ser al menos 24h antes de la publicación.
+// Devuelve la fecha mínima sugerida de entrega si NO se cumple; null si está OK o faltan datos.
+export function deliveryWarning(due: string | null, publish: string | null): string | null {
+  if (!due || !publish) return null
+  const minDelivery = addDaysISO(publish, -1)
+  return due > minDelivery ? minDelivery : null
+}

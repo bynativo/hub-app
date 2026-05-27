@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import type { Checklist, Task, Slide } from '../../lib/types'
@@ -139,6 +139,7 @@ export function TaskDetail() {
   const [title, setTitle] = useState('')
   const [priority, setPriority] = useState('media')
   const [dueDate, setDueDate] = useState('')
+  const [publishDate, setPublishDate] = useState('')
   const [notes, setNotes] = useState('')
   const [delegatedTo, setDelegatedTo] = useState('')
   const [origin, setOrigin] = useState('propia')
@@ -174,7 +175,7 @@ export function TaskDetail() {
   useEffect(() => {
     if (!task) return
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
-    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || '')
+    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || '')
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
@@ -195,6 +196,7 @@ export function TaskDetail() {
   const titlePrefix = taskPrefix(task.context, clients.find(c => c.id === task.client_id) || null)
   const headerTitle = splitTitle(task.title)
   const isContent = task.task_type === 'contenido'
+  const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
   const isEmailReply = task.task_type === 'responder_email'
   const tabs: { id: Tab; label: string }[] = [
     { id: 'info', label: '📋 Info' },
@@ -212,6 +214,7 @@ export function TaskDetail() {
     setSavingInfo(true)
     await updateTask(task.id, {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
+      publish_date: isContent ? (publishDate || null) : null,
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
     })
@@ -384,6 +387,9 @@ Reglas del bloque:
     const { count } = await supabase.from('slides').select('id', { count: 'exact', head: true }).eq('presentation_id', presId)
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, title: task.title, task_id: task.id, position: (count || 0) + 1,
+      // Las fechas del slide reflejan las de la tarea: publicación = publish_date,
+      // entrega a CM (validación) = due_date, y la grilla se ordena por publish_date.
+      fecha_publicacion: task.publish_date, fecha_validacion: task.due_date, grilla_date: task.publish_date,
     }).select().single()
     if (error || !data) { alert('Error: ' + error?.message); return }
     setLinkedSlide(data as Slide)
@@ -511,10 +517,23 @@ Reglas del bloque:
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Fecha de entrega</label>
+                <label className={labelCls}>Fecha de entrega{isContent ? ' (a CM)' : ''}</label>
                 <input type="date" value={dueDate} onChange={e => setInfo(setDueDate, e.target.value)} className={fieldCls} />
               </div>
             </div>
+
+            {isContent && (
+              <div>
+                <label className={labelCls}>Fecha de publicación</label>
+                <input type="date" value={publishDate} onChange={e => setInfo(setPublishDate, e.target.value)} className={fieldCls} />
+                <div className="text-[10px] text-gray-400 mt-1">La define el CM. No cierra tu parte — vos cerrás al entregar. Ordena la grilla/calendario RRSS.</div>
+                {pubWarn && (
+                  <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5 mt-1.5">
+                    ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label className={labelCls}>Estimado de tiempo</label>

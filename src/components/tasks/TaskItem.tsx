@@ -90,8 +90,12 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
             {due && (
               <Tag bg={due.urgent ? 'rgba(220,38,38,0.07)' : 'var(--color-bg4)'}
                    color={due.urgent ? '#dc2626' : '#6b6860'}>
-                {due.text}
+                {task.task_type === 'contenido' ? `Entrega ${due.text}` : due.text}
               </Tag>
+            )}
+
+            {task.publish_date && (
+              <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">📅 Pub {task.publish_date.slice(5).replace('-', '/')}</Tag>
             )}
 
             {task.estimated_hours != null && (

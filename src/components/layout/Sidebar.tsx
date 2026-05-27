@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { WAITING_STATES } from '../../lib/constants'
+import { WAITING_STATES, CLOSING_STATES } from '../../lib/constants'
 import { todayISO, daysUntil, nextWeekRange } from '../../lib/helpers'
 
 const STORAGE_KEY = 'sidebar_collapsed'
@@ -76,7 +76,9 @@ export function Sidebar() {
   }).length
   const pw = nextWeekRange()
   const proximaCount = dated.filter(t => t.due_date && t.due_date >= pw.from && t.due_date <= pw.to).length
-  const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length
+  // Seguimiento = recordatorios/esperando (top-level) + contenido que vence hoy
+  const contentDueCount = dated.filter(t => t.task_type === 'contenido' && t.due_date === today && !CLOSING_STATES.includes(t.status) && !WAITING_STATES.includes(t.status)).length
+  const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length + contentDueCount
 
   const ctxCount = (ctx: string) => active.filter(t => t.context === ctx && !t.es_recordatorio).length
 

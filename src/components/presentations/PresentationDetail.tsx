@@ -79,6 +79,8 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
       .from('slides')
       .select('*')
       .eq('presentation_id', presId)
+      // La presentación se ordena por fecha de publicación (las sin fecha, al final)
+      .order('fecha_publicacion', { ascending: true, nullsFirst: false })
       .order('position')
     setSlides(data || [])
     setActiveIdx(0)

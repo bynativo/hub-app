@@ -1,9 +1,14 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
-import { WAITING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
-import { ctxLabel } from '../../lib/helpers'
+import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
+import { ctxLabel, todayISO, addDaysISO } from '../../lib/helpers'
 import type { Task } from '../../lib/types'
+
+// Contenido cuyo día de entrega es hoy (y aún no entregado/cerrado)
+function isContentDueToday(t: Task): boolean {
+  return t.task_type === 'contenido' && t.due_date === todayISO() && !CLOSING_STATES.includes(t.status)
+}
 
 function inProgressStatus(context: string): string {
   const grp = KANBAN_GROUPS.find(g => g.key === 'encurso')!
@@ -26,6 +31,7 @@ function fmtFollowup(at: string | null): string {
 
 function FollowupCard({ task }: { task: Task }) {
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
+  const updateTask = useStore(s => s.updateTask)
   const setFollowup = useStore(s => s.setFollowup)
   const openFollowup = useStore(s => s.openFollowup)
   const openDetail = useStore(s => s.openDetail)
@@ -34,10 +40,18 @@ function FollowupCard({ task }: { task: Task }) {
   const [drafting, setDrafting] = useState(false)
 
   const isRem = task.es_recordatorio
+  const isContentDue = !isRem && isContentDueToday(task) // contenido cuya entrega vence hoy
   const alarmAt = isRem ? task.recordatorio_at : task.followup_at
   const stColor = STATUS_COLOR[task.status] || '#6b7280'
   const overdue = alarmAt ? new Date(alarmAt) <= new Date() : false
-  const due = isRem && overdue // recordatorio cuya hora ya llegó → destacado
+  const due = (isRem && overdue) || isContentDue // destacado
+
+  async function marcarEntregado() {
+    await updateTaskStatus(task.id, 'Entregado') // cierra el rol de Felipe (se archiva)
+  }
+  async function posponerEntrega() {
+    await updateTask(task.id, { due_date: addDaysISO(task.due_date || todayISO(), 1) })
+  }
 
   async function redactar() {
     setDrafting(true); setDraft('')
@@ -76,12 +90,22 @@ function FollowupCard({ task }: { task: Task }) {
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{ctxLabel(task.context)}</span>
             {task.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{task.clients.name}</span>}
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-              due ? 'bg-claude/10 text-claude font-medium' : overdue ? 'bg-danger/10 text-danger' : 'bg-bg4 text-gray-500'
-            }`}>
-              {due ? '🔔 ' : '⏰ '}{fmtFollowup(alarmAt)}
-            </span>
+            {isContentDue ? (
+              <>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/10 text-claude font-medium">📅 Entrega hoy</span>
+                {task.publish_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-600/10 text-purple-600">Pub {task.publish_date.slice(5).replace('-', '/')}</span>}
+              </>
+            ) : (
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                due ? 'bg-claude/10 text-claude font-medium' : overdue ? 'bg-danger/10 text-danger' : 'bg-bg4 text-gray-500'
+              }`}>
+                {due ? '🔔 ' : '⏰ '}{fmtFollowup(alarmAt)}
+              </span>
+            )}
           </div>
+          {isContentDue && (
+            <div className="text-[12px] text-claude mt-1.5">Hoy vence la entrega de este contenido — ¿ya está listo?</div>
+          )}
         </div>
       </div>
 
@@ -93,6 +117,21 @@ function FollowupCard({ task }: { task: Task }) {
               ✓ Listo
             </button>
             <button onClick={() => openFollowup(task.id)}
+              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">
+              ↻ Posponer
+            </button>
+          </>
+        ) : isContentDue ? (
+          <>
+            <button onClick={redactar} disabled={drafting}
+              className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
+              {drafting ? 'Redactando…' : '✦ Redactar seguimiento con Claude'}
+            </button>
+            <button onClick={marcarEntregado}
+              className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
+              ✓ Marcar entregado
+            </button>
+            <button onClick={posponerEntrega}
               className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">
               ↻ Posponer
             </button>
@@ -126,7 +165,10 @@ function FollowupCard({ task }: { task: Task }) {
 
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
-  const waiting = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at && (t.es_recordatorio || WAITING_STATES.includes(t.status)))
+  // Esperando respuesta / recordatorios (top-level) + contenido que vence hoy (cualquier nivel)
+  const waiting = tasks.filter(t => !t.done && !t.archived_at && (
+    (!t.parent_task_id && (t.es_recordatorio || WAITING_STATES.includes(t.status))) || isContentDueToday(t)
+  ))
   // Tiempo de alarma unificado: recordatorio_at para recordatorios, followup_at para seguimientos.
   const alarmTime = (t: Task) => {
     const at = t.es_recordatorio ? t.recordatorio_at : t.followup_at
