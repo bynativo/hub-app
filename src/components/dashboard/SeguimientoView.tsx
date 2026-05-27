@@ -40,6 +40,7 @@ function FollowupCard({ task }: { task: Task }) {
   const [drafting, setDrafting] = useState(false)
 
   const isRem = task.es_recordatorio
+  const isMailReminder = isRem && task.tipo_recordatorio === 'seguimiento_correo'
   const isContentDue = !isRem && isContentDueToday(task) // contenido cuya entrega vence hoy
   const alarmAt = isRem ? task.recordatorio_at : task.followup_at
   const stColor = STATUS_COLOR[task.status] || '#6b7280'
@@ -56,10 +57,13 @@ function FollowupCard({ task }: { task: Task }) {
   async function redactar() {
     setDrafting(true); setDraft('')
     try {
-      const reply = await callClaudeProxy(
-        [{ role: 'user', content: `Redacta un mensaje breve y profesional de seguimiento para esta tarea que está en "${task.status}" (esperando respuesta).\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\nContexto: ${ctxLabel(task.context)}\nTono humano y directo, en español. Solo el mensaje.` }],
-        'Eres el asistente de Felipe. Redactas mensajes de seguimiento humanos y concisos.'
-      )
+      const prompt = isMailReminder
+        ? `Redactá una respuesta breve y profesional a este correo, en español, tono humano (que no se note IA). Asunto/contexto del correo:\n${task.correo_contexto || task.title}\nDevolvé solo el cuerpo de la respuesta.`
+        : `Redacta un mensaje breve y profesional de seguimiento para esta tarea que está en "${task.status}" (esperando respuesta).\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\nContexto: ${ctxLabel(task.context)}\nTono humano y directo, en español. Solo el mensaje.`
+      const system = isMailReminder
+        ? 'Redactás respuestas de correo humanas y profesionales, en español.'
+        : 'Eres el asistente de Felipe. Redactas mensajes de seguimiento humanos y concisos.'
+      const reply = await callClaudeProxy([{ role: 'user', content: prompt }], system)
       setDraft(reply)
     } catch {
       setDraft('No se pudo generar el borrador (el proxy de Claude no está disponible aquí).')
@@ -82,8 +86,12 @@ function FollowupCard({ task }: { task: Task }) {
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium leading-snug cursor-pointer hover:text-claude" onClick={() => openDetail(task.id)}>
             {due && <span className="text-claude mr-1 animate-pulse">●</span>}
+            {isRem && <span className="mr-1">{isMailReminder ? '📧' : '🔔'}</span>}
             {task.title}
           </div>
+          {isMailReminder && task.correo_contexto && (
+            <div className="text-[12px] text-gray-500 mt-1 line-clamp-2">{task.correo_contexto}</div>
+          )}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: stColor + '16', color: stColor }}>
               {STATUS_ICON[task.status]} {task.status}
@@ -114,7 +122,22 @@ function FollowupCard({ task }: { task: Task }) {
       </div>
 
       <div className="flex gap-2 mt-3 flex-wrap">
-        {isRem ? (
+        {isMailReminder ? (
+          <>
+            <button onClick={redactar} disabled={drafting}
+              className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
+              {drafting ? 'Redactando…' : '✦ Redactar respuesta con Claude'}
+            </button>
+            <button onClick={() => toggleTask(task.id)}
+              className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
+              ✓ Ya respondí — cerrar
+            </button>
+            <button onClick={() => openFollowup(task.id)}
+              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">
+              ↻ Posponer
+            </button>
+          </>
+        ) : isRem ? (
           <>
             <button onClick={() => toggleTask(task.id)}
               className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">

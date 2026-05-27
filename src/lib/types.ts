@@ -83,6 +83,8 @@ export interface Task {
   kanban_order: number | null
   es_recordatorio: boolean
   recordatorio_at: string | null
+  tipo_recordatorio: string | null
+  correo_contexto: string | null
   requested_at: string | null
   context_readme: string | null
   archived_at: string | null

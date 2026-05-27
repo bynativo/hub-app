@@ -318,6 +318,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
   const [isReminder, setIsReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
+  const [reminderType, setReminderType] = useState('general')
+  const [correoCtx, setCorreoCtx] = useState('')
   const [isEmailReply, setIsEmailReply] = useState(false)
   const [desc, setDesc] = useState(template?.notes ?? '')
   const [saving, setSaving] = useState(false)
@@ -387,6 +389,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       status: reminder ? 'Recordatorio' : 'Inbox',
       es_recordatorio: reminder,
       recordatorio_at: reminder ? new Date(reminderAt).toISOString() : null,
+      tipo_recordatorio: reminder ? reminderType : null,
+      correo_contexto: (reminder && reminderType === 'seguimiento_correo') ? (correoCtx.trim() || null) : null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     })
@@ -779,9 +783,33 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               </div>
 
               {isReminder && (
-                <div className="mb-3">
-                  <label className={labelCls}>Fecha y hora del recordatorio *</label>
-                  <input type="datetime-local" value={reminderAt} onChange={e => setReminderAt(e.target.value)} className={fieldCls} />
+                <div className="mb-3 flex flex-col gap-2.5">
+                  <div>
+                    <label className={labelCls}>Tipo de recordatorio</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { v: 'general', l: 'Recordatorio general' },
+                        { v: 'seguimiento_correo', l: '📧 Seguimiento de correo' },
+                      ] as { v: string; l: string }[]).map(o => (
+                        <button key={o.v} type="button" onClick={() => setReminderType(o.v)}
+                          className={`py-2 px-1 border rounded-lg text-[11px] text-center cursor-pointer transition-all ${
+                            reminderType === o.v ? 'border-claude/20 text-claude bg-claude/7 font-medium' : 'border-black/7 text-gray-500 bg-bg3 hover:bg-bg4'
+                          }`}>
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {reminderType === 'seguimiento_correo' && (
+                    <div>
+                      <label className={labelCls}>Asunto o contexto del correo</label>
+                      <textarea value={correoCtx} onChange={e => setCorreoCtx(e.target.value)} rows={2} className={fieldCls + ' resize-y'} placeholder="Pegá el asunto o un fragmento del correo…" />
+                    </div>
+                  )}
+                  <div>
+                    <label className={labelCls}>Fecha y hora del recordatorio *</label>
+                    <input type="datetime-local" value={reminderAt} onChange={e => setReminderAt(e.target.value)} className={fieldCls} />
+                  </div>
                 </div>
               )}
 

@@ -12,6 +12,7 @@ export function ReminderRow({ reminder }: { reminder: Task }) {
     ? new Date(at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : 'Sin fecha'
   const { name } = splitTitle(reminder.title)
+  const isMail = reminder.tipo_recordatorio === 'seguimiento_correo'
 
   return (
     <div
@@ -20,7 +21,7 @@ export function ReminderRow({ reminder }: { reminder: Task }) {
         overdue ? 'border-danger/40 bg-danger/5' : 'border-black/15 bg-bg3 hover:bg-bg4'
       } ${reminder.done ? 'opacity-50' : ''}`}
     >
-      <span className="text-[13px] shrink-0 leading-none">🔔</span>
+      <span className="text-[13px] shrink-0 leading-none">{isMail ? '📧' : '🔔'}</span>
       <span className={`text-[12px] flex-1 truncate ${reminder.done ? 'line-through text-gray-400' : 'text-gray-600'}`}>{name}</span>
       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 shrink-0">{when}</span>
       {overdue
