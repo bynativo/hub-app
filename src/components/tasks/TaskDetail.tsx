@@ -12,13 +12,17 @@ import type { Checklist, Task, Slide } from '../../lib/types'
 type Tab = 'info' | 'subtareas' | 'checklist' | 'chat' | 'email' | 'slide'
 interface Msg { role: 'user' | 'assistant'; content: string }
 
+const PROXY_URL = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-proxy'
+
 function parseAction(text: string): { json: any; clean: string } | null {
-  const fence = /```(?:crear|json)?\s*([\s\S]*?)```/g
+  const fence = /```(?:crear|accion|json)?\s*([\s\S]*?)```/g
   let m: RegExpExecArray | null
   while ((m = fence.exec(text)) !== null) {
     try {
       const obj = JSON.parse(m[1].trim())
-      if (obj && (obj.subtareas || obj.title || obj.titulo)) return { json: obj, clean: text.replace(m[0], '').trim() }
+      if (obj && (obj.subtareas || obj.title || obj.titulo || obj.due_date || obj.priority || obj.prioridad || obj.context_readme)) {
+        return { json: obj, clean: text.replace(m[0], '').trim() }
+      }
     } catch { /* sigue */ }
   }
   return null
@@ -147,6 +151,10 @@ export function TaskDetail() {
   const [messages, setMessages] = useState<Msg[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [pendingAction, setPendingAction] = useState<any | null>(null)
+  const [chatImages, setChatImages] = useState<{ media_type: string; data: string; url: string }[]>([])
+  const [chatRecording, setChatRecording] = useState(false)
+  const chatRecRef = useRef<any>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
   // Email
@@ -163,7 +171,8 @@ export function TaskDetail() {
     setContextReadme(task.context_readme || ''); setShowContext(false)
     setSuggestedHours(null)
     setDirty(false)
-    setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). ¿En qué te ayudo? Puedo crear subtareas con fechas distribuidas hasta su entrega.` }])
+    setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). Pegá texto, una captura o dictá: puedo actualizar fecha, prioridad, el contexto o crear subtareas (con tu aprobación).` }])
+    setPendingAction(null); setChatImages([])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
     supabase.from('slides').select('*').eq('task_id', task.id).limit(1).then(({ data }) => setLinkedSlide((data?.[0] as Slide) || null))
     setAssignPresId('')
@@ -253,32 +262,83 @@ ${task.context_readme ? `\nCONTEXTO ACUMULADO DE LA TAREA:\n${task.context_readm
 SUBTAREAS ACTUALES:
 ${subs}
 
-Cuando el usuario pida crear subtareas, generalas con fechas tentativas distribuidas hasta la fecha límite de la tarea (${task.due_date || 'sin fecha, usá fechas razonables'}). Emití un bloque al final exactamente así:
-\`\`\`crear
-{"subtareas":[{"title":"...","due_date":"YYYY-MM-DD"}]}
+Cuando el usuario te dé información nueva (texto o imagen), podés PROPONER cambios a la tarea. Si hay algo para cambiar, emití al final UN bloque exactamente así:
+\`\`\`accion
+{"due_date":"YYYY-MM-DD o null","priority":"alta|media|baja o null","context_readme":"contexto COMPLETO actualizado (lo previo + lo nuevo) o null","subtareas":[{"title":"...","due_date":"YYYY-MM-DD o null"}]}
 \`\`\`
-No incluyas el bloque si solo estás conversando. No crees subtareas que no aporten valor real.`
+Reglas del bloque:
+- Incluí SOLO lo que cambia; lo demás omitilo o null. No inventes subtareas sin valor.
+- Para context_readme devolvé el texto COMPLETO actualizado (no solo lo nuevo).
+- Los cambios NO se aplican hasta que el usuario los apruebe; vos solo proponés.
+- Si solo estás conversando, NO incluyas el bloque.`
+  }
+
+  async function addChatImages(files: FileList | null) {
+    if (!files) return
+    const arr = await Promise.all(Array.from(files).map(f => new Promise<{ media_type: string; data: string; url: string }>(res => {
+      const rd = new FileReader()
+      rd.onload = () => { const r = rd.result as string; res({ media_type: f.type || 'image/png', data: r.split(',')[1] || '', url: r }) }
+      rd.readAsDataURL(f)
+    })))
+    setChatImages(prev => [...prev, ...arr])
+  }
+
+  function chatStartRec() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) { alert('Tu navegador no soporta dictado por voz.'); return }
+    const r = new SR(); r.lang = 'es-CL'; r.continuous = true; r.interimResults = true
+    const base = chatInput
+    r.onresult = (e: any) => { let s = ''; for (let i = 0; i < e.results.length; i++) s += e.results[i][0].transcript; setChatInput((base ? base + ' ' : '') + s) }
+    r.onend = () => setChatRecording(false)
+    r.start(); chatRecRef.current = r; setChatRecording(true)
+  }
+  function chatStopRec() { chatRecRef.current?.stop(); setChatRecording(false) }
+
+  async function applyAction(a: any) {
+    if (!task) return
+    const patch: Record<string, any> = {}
+    if (a.due_date && a.due_date !== 'null') patch.due_date = a.due_date
+    const prio = a.priority || a.prioridad
+    if (prio && ['alta', 'media', 'baja'].includes(prio)) patch.priority = prio
+    if (a.context_readme && a.context_readme !== 'null') patch.context_readme = a.context_readme
+    if (Object.keys(patch).length) await updateTask(task.id, patch)
+    const subs = (a.subtareas || []).filter((s: any) => s.title || s.titulo)
+    if (subs.length) {
+      await supabase.from('tasks').insert(subs.map((s: any) => ({
+        title: s.title || s.titulo, context: task.context, client_id: task.client_id,
+        parent_task_id: task.id, project_id: task.project_id, priority: 'media', origin: 'propia',
+        status: 'Inbox', done: false, due_date: s.due_date || null, task_type: 'independiente',
+        cats: [], plan: [], meeting_agenda: [],
+      })))
+    }
+    await loadAll()
+    if (patch.context_readme) setContextReadme(patch.context_readme)
+    setPendingAction(null)
+    setMessages(prev => [...prev, { role: 'assistant', content: '✓ Cambios aplicados.' }])
   }
 
   async function sendChat() {
-    if (!chatInput.trim() || !task || chatLoading) return
-    const history: Msg[] = [...messages, { role: 'user', content: chatInput }]
+    if ((!chatInput.trim() && !chatImages.length) || !task || chatLoading) return
+    const userText = chatInput.trim() || '(ver imágenes adjuntas)'
+    const history: Msg[] = [...messages, { role: 'user', content: userText }]
     setMessages(history); setChatInput(''); setChatLoading(true)
+    const imgs = chatImages; setChatImages([])
     try {
-      const reply = await callClaudeProxy(history.slice(-12), buildChatSystem())
+      let reply: string
+      if (imgs.length) {
+        const apiMessages = history.slice(-12).map((m, idx, arr) => (idx === arr.length - 1)
+          ? { role: m.role, content: [{ type: 'text', text: m.content }, ...imgs.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }))] }
+          : { role: m.role, content: m.content })
+        const res = await fetch(PROXY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: apiMessages, system: buildChatSystem() }) })
+        const data = await res.json()
+        reply = data.text || data.reply || data.content?.[0]?.text || ''
+      } else {
+        reply = await callClaudeProxy(history.slice(-12), buildChatSystem())
+      }
       const action = parseAction(reply)
       if (action) {
-        setMessages(prev => [...prev, { role: 'assistant', content: action.clean || 'Creando subtareas…' }])
-        const subs = action.json.subtareas || [action.json]
-        const rows = subs.filter((s: any) => s.title || s.titulo).map((s: any) => ({
-          title: s.title || s.titulo, context: task.context, client_id: task.client_id,
-          parent_task_id: task.id, project_id: task.project_id, priority: 'media', origin: 'propia',
-          status: 'Inbox', done: false, due_date: s.due_date || null, task_type: 'independiente',
-          cats: [], plan: [], meeting_agenda: [],
-        }))
-        if (rows.length) await supabase.from('tasks').insert(rows)
-        await loadAll()
-        setMessages(prev => [...prev, { role: 'assistant', content: `✓ ${rows.length} subtarea(s) creada(s).` }])
+        if (action.clean) setMessages(prev => [...prev, { role: 'assistant', content: action.clean }])
+        setPendingAction(action.json)
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: reply }])
       }
@@ -579,12 +639,46 @@ No incluyas el bloque si solo estás conversando. No crees subtareas que no apor
               )}
               <div ref={endRef} />
             </div>
-            <div className="border-t border-black/7 pt-3 flex gap-2">
-              <textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat() } }}
-                rows={2} disabled={chatLoading} placeholder="Pedile un plan, subtareas, etc."
-                className="flex-1 bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] resize-none outline-none focus:border-claude/20" />
-              <button onClick={sendChat} disabled={chatLoading} className="bg-claude text-white px-3.5 py-2 rounded-lg text-[13px] self-end hover:bg-purple-700 cursor-pointer disabled:opacity-40">Enviar</button>
+            {pendingAction && (
+              <div className="bg-claude/5 border border-claude/30 rounded-lg p-3 mb-2 text-[13px]">
+                <div className="text-[11px] font-mono text-claude uppercase tracking-wider mb-1.5">✦ Cambios propuestos — aprobá para aplicar</div>
+                <ul className="text-[12px] text-gray-600 space-y-0.5 mb-2 list-none">
+                  {pendingAction.due_date && pendingAction.due_date !== 'null' && <li>📅 Nueva fecha de entrega: <span className="font-medium">{pendingAction.due_date}</span></li>}
+                  {(pendingAction.priority || pendingAction.prioridad) && (pendingAction.priority || pendingAction.prioridad) !== 'null' && <li>🚩 Prioridad: <span className="font-medium">{pendingAction.priority || pendingAction.prioridad}</span></li>}
+                  {pendingAction.context_readme && pendingAction.context_readme !== 'null' && <li>📄 Contexto de la tarea actualizado</li>}
+                  {(pendingAction.subtareas || []).filter((s: any) => s.title || s.titulo).length > 0 && <li>✓ {pendingAction.subtareas.filter((s: any) => s.title || s.titulo).length} subtarea(s): {pendingAction.subtareas.map((s: any) => s.title || s.titulo).filter(Boolean).join(', ')}</li>}
+                </ul>
+                <div className="flex gap-2">
+                  <button onClick={() => applyAction(pendingAction)} className="text-[11px] bg-claude text-white px-3 py-1 rounded-md cursor-pointer hover:bg-purple-700">Aplicar</button>
+                  <button onClick={() => setPendingAction(null)} className="text-[11px] bg-bg3 border border-black/7 text-gray-500 px-3 py-1 rounded-md cursor-pointer hover:bg-bg4">Descartar</button>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-black/7 pt-3">
+              {chatImages.length > 0 && (
+                <div className="flex gap-2 flex-wrap mb-2">
+                  {chatImages.map((im, i) => (
+                    <div key={i} className="relative">
+                      <img src={im.url} alt="" className="w-12 h-12 object-cover rounded border border-black/10" />
+                      <button onClick={() => setChatImages(prev => prev.filter((_, j) => j !== i))}
+                        className="absolute -top-1.5 -right-1.5 bg-danger text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center cursor-pointer">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2 items-end">
+                <label className="self-center text-base cursor-pointer text-gray-400 hover:text-claude" title="Adjuntar imagen">
+                  📎<input type="file" accept="image/*" multiple className="hidden" onChange={e => { addChatImages(e.target.files); e.target.value = '' }} />
+                </label>
+                <button onClick={() => chatRecording ? chatStopRec() : chatStartRec()}
+                  className={`self-center text-base cursor-pointer ${chatRecording ? 'text-danger animate-pulse' : 'text-gray-400 hover:text-claude'}`} title="Dictar">🎙</button>
+                <textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat() } }}
+                  rows={2} disabled={chatLoading} placeholder="Pegá texto, adjuntá imagen o dictá…"
+                  className="flex-1 bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] resize-none outline-none focus:border-claude/20" />
+                <button onClick={sendChat} disabled={chatLoading} className="bg-claude text-white px-3.5 py-2 rounded-lg text-[13px] self-end hover:bg-purple-700 cursor-pointer disabled:opacity-40">Enviar</button>
+              </div>
             </div>
           </div>
         )}
