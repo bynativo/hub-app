@@ -4,6 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { fmtHoras, todayISO } from '../../lib/helpers'
+import type { Client, Project, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CaptureTab = 'tarea' | 'notas' | 'micro'
@@ -12,13 +13,26 @@ type TipoTarea = 'independiente' | 'subtarea' | 'proyecto'
 interface Suggested {
   titulo: string
   contexto: string
-  tipo: string
+  tipo: TipoTarea
   prioridad: string
   due_date: string | null
   requested_at: string | null
   estimated_hours: number | null
   origen: string
+  // campos editables del formulario completo
+  parentId: number | null
+  projectId: number | null
+  clientId: number | null
+  isContent: boolean
+  isReminder: boolean
+  reminderAt: string
+  desc: string
   selected: boolean
+  expanded: boolean
+}
+
+function normTipo(t: string): TipoTarea {
+  return t === 'subtarea' ? 'subtarea' : t === 'proyecto' ? 'proyecto' : 'independiente'
 }
 
 const PROXY_URL = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-proxy'
@@ -48,14 +62,140 @@ function parseSuggested(reply: string): Suggested[] {
   return items.map((t: any) => ({
     titulo: t.titulo || t.title || '',
     contexto: t.contexto || t.context || 'agencia',
-    tipo: t.tipo || t.type || 'independiente',
+    tipo: normTipo(t.tipo || t.type || ''),
     prioridad: t.prioridad || t.priority || 'media',
     due_date: t.due_date || null,
     requested_at: t.requested_at || null,
     estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
     origen: t.origen || t.origin || 'propia',
-    selected: true,
+    parentId: null, projectId: null, clientId: null,
+    isContent: false, isReminder: false, reminderAt: '', desc: '',
+    selected: true, expanded: false,
   }))
+}
+
+// Formulario completo y editable por cada tarea extraída (igual al tab Tarea directa)
+function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks }: {
+  s: Suggested
+  onChange: (patch: Partial<Suggested>) => void
+  onRemove: () => void
+  clients: Client[]
+  projects: Project[]
+  tasks: Task[]
+}) {
+  const fld = 'w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20'
+  const lbl = 'text-[10px] font-mono text-gray-400 uppercase block mb-1'
+  const agClients = clients.filter(c => c.context === 'agencia')
+  const ctxProjects = projects.filter(p => p.context === s.contexto)
+  const activeTasks = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at && !t.es_recordatorio)
+  const togg = (on: boolean) => `w-9 h-5 rounded-full relative transition-colors shrink-0 ${on ? 'bg-claude' : 'bg-bg4'}`
+  const knob = (on: boolean) => `w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all ${on ? 'left-[18px]' : 'left-0.5'}`
+
+  return (
+    <div className={`rounded-lg border transition-all ${s.selected ? 'border-claude/20 bg-claude/5' : 'border-black/7 bg-bg3 opacity-60'}`}>
+      <div className="flex items-center gap-2 p-2.5">
+        <div onClick={() => onChange({ selected: !s.selected })}
+          className={`w-4 h-4 rounded border-[1.5px] shrink-0 flex items-center justify-center text-[10px] cursor-pointer ${s.selected ? 'bg-claude border-claude text-white' : 'border-black/13'}`}>{s.selected && '✓'}</div>
+        <span onClick={() => onChange({ expanded: !s.expanded })} className="flex-1 text-[13px] cursor-pointer truncate">{s.titulo || '(sin título)'}</span>
+        {!s.expanded && (
+          <>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 shrink-0">{s.contexto}</span>
+            {s.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn shrink-0">{s.due_date.slice(5).replace('-', '/')}</span>}
+          </>
+        )}
+        <button onClick={() => onChange({ expanded: !s.expanded })} className="text-gray-400 text-[11px] cursor-pointer w-4 shrink-0">{s.expanded ? '▾' : '▸'}</button>
+        <button onClick={onRemove} className="text-gray-300 hover:text-danger text-xs cursor-pointer shrink-0" title="Descartar">✕</button>
+      </div>
+
+      {s.expanded && (
+        <div className="border-t border-black/7 p-2.5 flex flex-col gap-2">
+          <div><label className={lbl}>Título</label><input value={s.titulo} onChange={e => onChange({ titulo: e.target.value })} className={fld} /></div>
+
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <button type="button" onClick={() => onChange({ isReminder: !s.isReminder })} className={togg(s.isReminder)}><div className={knob(s.isReminder)} /></button>
+            🔔 Es recordatorio
+          </label>
+          {s.isReminder && <div><label className={lbl}>Fecha y hora</label><input type="datetime-local" value={s.reminderAt} onChange={e => onChange({ reminderAt: e.target.value })} className={fld} /></div>}
+
+          {!s.isReminder && (
+            <div>
+              <label className={lbl}>Tipo</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['independiente', 'subtarea', 'proyecto'] as TipoTarea[]).map(tp => (
+                  <button key={tp} onClick={() => onChange({ tipo: tp })} className={`py-1.5 border rounded-md text-[11px] cursor-pointer transition-all ${s.tipo === tp ? 'border-claude/20 text-claude bg-claude/7' : 'border-black/7 text-gray-500 bg-bg2 hover:bg-bg4'}`}>
+                    {tp === 'independiente' ? 'Independiente' : tp === 'subtarea' ? 'Subtarea' : 'Proyecto'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {!s.isReminder && s.tipo === 'subtarea' && (
+            <div><label className={lbl}>Tarea padre</label>
+              <select value={s.parentId ?? ''} onChange={e => onChange({ parentId: e.target.value ? Number(e.target.value) : null })} className={fld}>
+                <option value="">Seleccionar…</option>
+                {activeTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select></div>
+          )}
+          {!s.isReminder && s.tipo === 'proyecto' && (
+            <div><label className={lbl}>Proyecto</label>
+              <select value={s.projectId ?? ''} onChange={e => onChange({ projectId: e.target.value ? Number(e.target.value) : null })} className={fld}>
+                <option value="">Seleccionar…</option>
+                {ctxProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select></div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lbl}>Contexto</label>
+              <select value={s.contexto} onChange={e => onChange({ contexto: e.target.value, clientId: null })} className={fld}>
+                <option value="banco">Banco</option><option value="agencia">Agencia</option><option value="personal">Personal</option>
+              </select></div>
+            {s.contexto === 'agencia' && (
+              <div><label className={lbl}>Cliente</label>
+                <select value={s.clientId ?? ''} onChange={e => onChange({ clientId: e.target.value ? Number(e.target.value) : null })} className={fld}>
+                  <option value="">Agencia interna</option>
+                  {agClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select></div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lbl}>Prioridad</label>
+              <select value={s.prioridad} onChange={e => onChange({ prioridad: e.target.value })} className={fld}>
+                <option value="alta">🔴 Alta</option><option value="media">🟡 Media</option><option value="baja">🟢 Baja</option>
+              </select></div>
+            <div><label className={lbl}>Origen</label>
+              <select value={s.origen} onChange={e => onChange({ origen: e.target.value })} className={fld}>
+                <option value="gmail-agencia">📧 Email</option><option value="whatsapp">💬 WhatsApp</option><option value="reunion">🤝 Reunión</option><option value="propia">💡 Propia</option>
+              </select></div>
+          </div>
+
+          {!s.isReminder && (
+            <div className="grid grid-cols-2 gap-2">
+              <div><label className={lbl}>Fecha entrega</label><input type="date" value={s.due_date || ''} onChange={e => onChange({ due_date: e.target.value || null })} className={fld} /></div>
+              <div><label className={lbl}>¿Cuándo te lo pidieron?</label><input type="date" value={s.requested_at || ''} onChange={e => onChange({ requested_at: e.target.value || null })} className={fld} /></div>
+            </div>
+          )}
+
+          <div>
+            <label className={lbl}>Estimado</label>
+            <div className="flex gap-1 flex-wrap">
+              {[0.5, 1, 1.5, 2, 3, 4, 6, 8].map(h => (
+                <button key={h} onClick={() => onChange({ estimated_hours: h })} className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${s.estimated_hours === h ? 'border-claude text-claude bg-claude/7' : 'border-black/7 text-gray-500 bg-bg2'}`}>{fmtHoras(h)}</button>
+              ))}
+              <button onClick={() => onChange({ estimated_hours: null })} className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${s.estimated_hours == null ? 'border-claude text-claude bg-claude/7' : 'border-black/7 text-gray-400 bg-bg2'}`}>—</button>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <button type="button" onClick={() => onChange({ isContent: !s.isContent })} className={togg(s.isContent)}><div className={knob(s.isContent)} /></button>
+            Es tarea de contenido
+          </label>
+
+          <div><label className={lbl}>Descripción / contexto</label><textarea value={s.desc} onChange={e => onChange({ desc: e.target.value })} rows={2} className={fld + ' resize-y'} placeholder="Detalles adicionales…" /></div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // El edge function devuelve { text }; leemos eso primero.
@@ -236,28 +376,30 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     const selected = suggestions.filter(s => s.selected)
     if (!selected.length) return
     setSavingNotes(true)
-    const taskRows = selected.filter(s => s.tipo !== 'recurrente').map(s => ({
-      title: s.titulo, context: s.contexto, priority: s.prioridad, origin: s.origen || 'reunion',
-      client_id: s.contexto === 'agencia' ? clientId : null,
-      due_date: s.due_date || null,
-      requested_at: s.requested_at || todayISO(),
-      estimated_hours: s.estimated_hours,
-      context_readme: meetingText.trim() || (images.length ? 'Extraído de imágenes adjuntas.' : null),
-      status: 'Inbox', done: false, cats: [], plan: [], meeting_agenda: [], task_type: 'independiente',
-    }))
-    const recRows = selected.filter(s => s.tipo === 'recurrente').map(s => ({
-      title: s.titulo, context: s.contexto, client_id: s.contexto === 'agencia' ? clientId : null,
-      freq: 'mensual', day_of_month: '1', priority: s.prioridad, active: true, cats: [], time_minutes: 60,
-    }))
+    const taskRows = selected.map(s => {
+      const reminder = s.isReminder && !!s.reminderAt
+      return {
+        title: s.titulo, context: s.contexto, priority: s.prioridad, origin: s.origen || 'reunion',
+        client_id: s.contexto === 'agencia' ? s.clientId : null,
+        project_id: (!reminder && s.tipo === 'proyecto') ? s.projectId : null,
+        parent_task_id: (!reminder && s.tipo === 'subtarea') ? s.parentId : null,
+        task_type: s.isContent ? 'contenido' : 'independiente',
+        due_date: reminder ? null : (s.due_date || null),
+        requested_at: s.requested_at || todayISO(),
+        estimated_hours: s.estimated_hours,
+        notes: s.desc.trim() || null,
+        context_readme: s.desc.trim() || meetingText.trim() || (images.length ? 'Extraído de imágenes adjuntas.' : null),
+        status: reminder ? 'Recordatorio' : 'Inbox',
+        es_recordatorio: reminder,
+        recordatorio_at: reminder ? new Date(s.reminderAt).toISOString() : null,
+        done: false, cats: [], plan: [], meeting_agenda: [],
+      }
+    })
     let firstTaskId: number | null = null
     if (taskRows.length) {
       const { data, error } = await supabase.from('tasks').insert(taskRows).select('id')
       if (error) { alert('Error: ' + error.message); setSavingNotes(false); return }
       firstTaskId = data?.[0]?.id ?? null
-    }
-    if (recRows.length) {
-      const { error } = await supabase.from('recurrentes').insert(recRows)
-      if (error) { alert('Error: ' + error.message); setSavingNotes(false); return }
     }
     // Guardar las imágenes como contexto (es_contexto=true), vinculadas a la primera tarea creada
     if (images.length && firstTaskId) {
@@ -317,36 +459,20 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   function renderSuggestions() {
     if (!extracted) return null
     if (!suggestions.length) return <div className="text-center py-4 text-gray-400 text-[13px]">No se identificaron tareas.</div>
-    const tipoColor: Record<string, string> = {
-      recurrente: '#0d9488', proyecto: '#7c3aed', con_subtareas: '#2563eb', independiente: '#6b7280',
-    }
+    const update = (i: number, patch: Partial<Suggested>) => setSuggestions(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
     return (
       <div className="mb-4">
-        <div className="text-[11px] font-mono text-claude tracking-wider uppercase mb-2">
-          ✦ {suggestions.length} tarea{suggestions.length > 1 ? 's' : ''} identificada{suggestions.length > 1 ? 's' : ''}
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] font-mono text-claude tracking-wider uppercase">
+            ✦ {suggestions.length} tarea{suggestions.length > 1 ? 's' : ''} — editá lo que quieras y aprobá
+          </div>
+          <button onClick={() => setSuggestions(prev => prev.map(s => ({ ...s, expanded: !prev.every(x => x.expanded) })))}
+            className="text-[10px] text-gray-400 hover:text-claude cursor-pointer">expandir/contraer</button>
         </div>
         <div className="flex flex-col gap-1.5">
           {suggestions.map((s, i) => (
-            <div key={i} onClick={() => setSuggestions(prev => prev.map((x, j) => j === i ? { ...x, selected: !x.selected } : x))}
-              className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-all ${s.selected ? 'bg-claude/5 border-claude/20' : 'bg-bg3 border-black/7 opacity-50'}`}>
-              <div className={`w-4 h-4 rounded border-[1.5px] shrink-0 mt-0.5 flex items-center justify-center text-[10px] ${s.selected ? 'bg-claude border-claude text-white' : 'border-black/13'}`}>
-                {s.selected && '✓'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] leading-snug">{s.titulo}</div>
-                <div className="flex gap-1.5 mt-1 flex-wrap">
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{s.contexto}</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: (tipoColor[s.tipo] || '#6b7280') + '18', color: tipoColor[s.tipo] || '#6b7280' }}>
-                    {s.tipo}
-                  </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{s.prioridad}</span>
-                  {s.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">📅 {s.due_date.slice(5).replace('-', '/')}</span>}
-                  {s.requested_at && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">📨 {s.requested_at.slice(5).replace('-', '/')}</span>}
-                  {s.estimated_hours != null && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">⏱ {fmtHoras(s.estimated_hours)}</span>}
-                  {s.origen && s.origen !== 'propia' && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{s.origen}</span>}
-                </div>
-              </div>
-            </div>
+            <SuggestionForm key={i} s={s} onChange={p => update(i, p)} onRemove={() => setSuggestions(prev => prev.filter((_, j) => j !== i))}
+              clients={clients} projects={projects} tasks={tasks} />
           ))}
         </div>
       </div>
