@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR, STATUS_ICON } from '../../lib/constants'
 import { ctxColor, splitTitle, stripPrefix } from '../../lib/helpers'
-import type { Task } from '../../lib/types'
+import type { Task, Project } from '../../lib/types'
 
 // Estado destino al soltar una tarea en una columna universal:
 // primer estado del grupo que sea válido para el contexto de la tarea.
@@ -82,8 +82,42 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
   )
 }
 
+// Tarjeta de proyecto en el Kanban: agrupa, dentro de una columna, las tareas
+// del proyecto que están en ese estado. Expandible, con carpeta y badge.
+function ProjectKanbanCard({ project, tasks, subsOf, focusId, onDragStart, onFocus }: {
+  project: Project
+  tasks: Task[]
+  subsOf: (parentId: number) => Task[]
+  focusId: number | null
+  onDragStart: (id: number, e: React.DragEvent) => void
+  onFocus: (id: number) => void
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const accent = ctxColor(project.context)
+  return (
+    <div className="rounded-lg border border-claude/20 bg-claude/[0.04] p-1.5">
+      <div onClick={() => setExpanded(e => !e)} className="flex items-center gap-1.5 px-1 py-0.5 cursor-pointer">
+        <span className="text-[9px] text-gray-400">{expanded ? '▼' : '▶'}</span>
+        <span className="text-[12px] leading-none">📁</span>
+        <span className="text-[12px] font-medium flex-1 truncate" style={{ color: accent }}>{project.name}</span>
+        <span className="text-[9px] font-mono px-1 py-px rounded bg-claude/10 text-claude shrink-0">Proyecto</span>
+        <span className="text-[10px] font-mono text-gray-400 shrink-0">{tasks.length}</span>
+      </div>
+      {expanded && (
+        <div className="flex flex-col gap-1.5 mt-1">
+          {tasks.map(t => (
+            <KanbanCard key={t.id} task={t} subs={subsOf(t.id)} focused={focusId === t.id}
+              onDragStart={onDragStart} onFocus={onFocus} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function KanbanBoard({ items, columns }: { items?: Task[]; columns?: { key: string; label: string; statuses: string[] }[] } = {}) {
   const tasks = useStore(s => s.tasks)
+  const projects = useStore(s => s.projects)
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [overCol, setOverCol] = useState<string | null>(null)
@@ -135,6 +169,30 @@ export function KanbanBoard({ items, columns }: { items?: Task[]; columns?: { ke
     await updateTaskStatus(id, targetStatus(task.context, group.statuses))
   }
 
+  const onFocus = (id: number) => setFocusId(f => f === id ? null : id)
+
+  // Renderiza el contenido de una columna: tareas sin proyecto como cards sueltas;
+  // las tareas con proyecto agrupadas bajo una tarjeta de proyecto (proyecto = tarea padre).
+  function renderColumn(colItems: Task[]) {
+    const seenProj = new Set<number>()
+    const out: React.ReactNode[] = []
+    for (const t of colItems) {
+      const project = t.project_id ? projects.find(p => p.id === t.project_id) : undefined
+      if (project) {
+        if (seenProj.has(project.id)) continue
+        seenProj.add(project.id)
+        const pts = colItems.filter(x => x.project_id === project.id)
+        out.push(<ProjectKanbanCard key={`p${project.id}`} project={project} tasks={pts}
+          subsOf={subsOf} focusId={focusId} onDragStart={handleDragStart} onFocus={onFocus} />)
+      } else {
+        out.push(<KanbanCard key={t.id} task={t} subs={subsOf(t.id)} focused={focusId === t.id}
+          onDragStart={handleDragStart} onFocus={onFocus} />)
+      }
+    }
+    if (!out.length) out.push(<div key="empty" className="text-center py-6 text-gray-300 text-[11px]">—</div>)
+    return out
+  }
+
   return (
     <div>
       {focusedTask && (
@@ -166,11 +224,7 @@ export function KanbanBoard({ items, columns }: { items?: Task[]; columns?: { ke
                 <span className="ml-auto font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{colItems.length}</span>
               </div>
               <div className="flex flex-col gap-1.5 p-2 min-h-[140px]">
-                {colItems.map(t => (
-                  <KanbanCard key={t.id} task={t} subs={subsOf(t.id)} focused={focusId === t.id}
-                    onDragStart={handleDragStart} onFocus={id => setFocusId(f => f === id ? null : id)} />
-                ))}
-                {!colItems.length && <div className="text-center py-6 text-gray-300 text-[11px]">—</div>}
+                {renderColumn(colItems)}
               </div>
             </div>
           )

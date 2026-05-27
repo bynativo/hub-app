@@ -84,9 +84,8 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
               <Tag bg="rgba(13,148,136,0.07)" color="#0d9488">{task.clients.name}</Tag>
             )}
 
-            {task.projects && (
-              <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">📁 {task.projects.name}</Tag>
-            )}
+            {/* El proyecto ya no se muestra como tag: las tareas con proyecto se
+                agrupan bajo su tarjeta de proyecto (ver TaskList/KanbanBoard). */}
 
             {due && (
               <Tag bg={due.urgent ? 'rgba(220,38,38,0.07)' : 'var(--color-bg4)'}

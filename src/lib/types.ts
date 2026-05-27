@@ -35,6 +35,8 @@ export interface Project {
   presentation_url: string | null
   presentation_type: string | null
   is_content_grid: boolean
+  is_ongoing: boolean | null
+  es_interno: boolean | null
   clients?: { name: string } | null
 }
 
