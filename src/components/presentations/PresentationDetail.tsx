@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS } from '../../lib/constants'
-import { addDaysISO, todayISO } from '../../lib/helpers'
-import type { Slide } from '../../lib/types'
+import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning } from '../../lib/helpers'
+import type { Slide, Task } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
   Pendiente: 'bg-gray-500/10 text-gray-500 border-gray-500/20',
@@ -56,9 +56,15 @@ function VisualFrame({ label, url, feedRed }: { label: string; url?: string | nu
   )
 }
 
+type Entry =
+  | { key: string; kind: 'slide'; slide: Slide; pub: string | null }
+  | { key: string; kind: 'task'; task: Task; pub: string | null }
+
 export function PresentationDetail({ presId, onClose }: { presId: number; onClose: () => void }) {
   const { presentations } = useStore()
   const loadAll = useStore(s => s.loadAll)
+  const allTasks = useStore(s => s.tasks)
+  const updateTask = useStore(s => s.updateTask)
   const pres = presentations.find(p => p.id === presId)
   const [slides, setSlides] = useState<Slide[]>([])
   const [activeIdx, setActiveIdx] = useState(0)
@@ -113,9 +119,37 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     setActiveIdx(slides.length)
   }
 
+  // Convierte una tarea de contenido vinculada en un slide de producción (rico).
+  async function createSlideFromTask(t: Task) {
+    const { count } = await supabase.from('slides').select('id', { count: 'exact', head: true }).eq('presentation_id', presId)
+    const { data, error } = await supabase.from('slides').insert({
+      presentation_id: presId, title: t.title, task_id: t.id, position: (count || 0) + 1,
+      fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, grilla_date: t.publish_date,
+    }).select().single()
+    if (error || !data) { alert('Error creando slide: ' + error?.message); return }
+    setSlides(prev => [...prev, data as Slide])
+  }
+  async function unlinkTask(t: Task) {
+    await updateTask(t.id, { presentation_id: null })
+  }
+
   if (!pres) return null
   const kv = pres.kv_color || '#16a34a'
-  const slide = slides[activeIdx]
+
+  // Entradas de la presentación = slides reales + tareas de contenido vinculadas
+  // (tasks.presentation_id) que aún no tienen slide. Ordenadas por fecha de
+  // publicación ASC (las sin fecha, al final). Se recalcula en cada render, así
+  // que cambiar publish_date (de una slide o tarea) re-ordena automáticamente.
+  const linkedTasks = allTasks.filter(t => t.presentation_id === presId && t.task_type === 'contenido' && !t.archived_at && !t.done)
+  const slideTaskIds = new Set(slides.filter(s => s.task_id).map(s => s.task_id))
+  const pubOfSlide = (s: Slide) => s.task_id ? (allTasks.find(t => t.id === s.task_id)?.publish_date ?? s.fecha_publicacion) : s.fecha_publicacion
+  const entries: Entry[] = [
+    ...slides.map(s => ({ key: `s${s.id}`, kind: 'slide' as const, slide: s, pub: pubOfSlide(s) })),
+    ...linkedTasks.filter(t => !slideTaskIds.has(t.id)).map(t => ({ key: `t${t.id}`, kind: 'task' as const, task: t, pub: t.publish_date })),
+  ].sort((a, b) => (a.pub && b.pub) ? a.pub.localeCompare(b.pub) : a.pub ? -1 : b.pub ? 1 : 0)
+  const entry = entries.length ? entries[Math.min(activeIdx, entries.length - 1)] : undefined
+  const slide = entry?.kind === 'slide' ? entry.slide : undefined
+
   const prodOpts = PROD_STATUS[pres.context] || PROD_STATUS.banco
 
   // --- Reglas de fechas (11b) ---
@@ -206,13 +240,13 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
             ← Volver al hub
           </button>
           <div className="font-serif text-base font-light leading-snug mb-0.5" style={{ color: kv }}>{pres.title}</div>
-          <div className="text-[11px] text-gray-400 font-mono">{slides.length} ideas · {pres.month_label}</div>
+          <div className="text-[11px] text-gray-400 font-mono">{entries.length} ideas · {pres.month_label}</div>
         </div>
 
         <div className="p-2 flex-1">
-          {slides.map((s, i) => (
+          {entries.map((e, i) => (
             <div
-              key={s.id}
+              key={e.key}
               onClick={() => setActiveIdx(i)}
               className={`flex gap-2 p-2 rounded-lg border-[1.5px] cursor-pointer transition-all mb-1 ${
                 i === activeIdx
@@ -220,20 +254,30 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   : 'border-transparent hover:bg-bg3'
               }`}
             >
-              <div className="text-[10px] font-mono text-gray-400 w-4 shrink-0 pt-0.5 text-right">{s.position || i + 1}</div>
+              <div className="text-[10px] font-mono text-gray-400 w-4 shrink-0 pt-0.5 text-right">{i + 1}</div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium leading-snug mb-1 line-clamp-2">{s.title}</div>
+                <div className="text-xs font-medium leading-snug mb-1 line-clamp-2">{e.kind === 'slide' ? e.slide.title : splitTitle(e.task.title).name}</div>
                 <div className="flex gap-1 flex-wrap">
-                  <span className={`text-[9px] font-mono px-1.5 py-px rounded ${PROD_CSS[s.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
-                    {s.status_prod || 'Pendiente'}
-                  </span>
-                  {s.tipo_contenido && (
-                    <span className="text-[9px] font-mono px-1.5 py-px rounded bg-bg4 text-gray-400">{s.tipo_contenido.toUpperCase()}</span>
+                  {e.kind === 'slide' ? (
+                    <>
+                      <span className={`text-[9px] font-mono px-1.5 py-px rounded ${PROD_CSS[e.slide.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
+                        {e.slide.status_prod || 'Pendiente'}
+                      </span>
+                      {e.slide.tipo_contenido && (
+                        <span className="text-[9px] font-mono px-1.5 py-px rounded bg-bg4 text-gray-400">{e.slide.tipo_contenido.toUpperCase()}</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-[9px] font-mono px-1.5 py-px rounded bg-claude/10 text-claude">tarea</span>
+                      {e.pub && <span className="text-[9px] font-mono px-1.5 py-px rounded bg-purple-600/10 text-purple-600">Pub {e.pub.slice(5).replace('-', '/')}</span>}
+                    </>
                   )}
                 </div>
               </div>
             </div>
           ))}
+          {!entries.length && <div className="text-center py-6 text-gray-300 text-[11px]">Sin contenido aún</div>}
         </div>
 
         <div className="p-2.5 border-t border-black/7 flex flex-col gap-1.5 shrink-0">
@@ -734,6 +778,67 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
           )}
         </div>
       </div>
+
+      {/* Panel de tarea de contenido vinculada (sin slide aún) */}
+      {entry?.kind === 'task' && (() => {
+        const t = entry.task
+        const parts = splitTitle(t.title)
+        const warn = deliveryWarning(t.due_date, t.publish_date)
+        const dcls = 'w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20'
+        const lcls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
+        return (
+          <div className="absolute top-0 bottom-0 left-[260px] right-0 bg-bg overflow-y-auto z-10 p-6">
+            <div className="max-w-[640px] mx-auto">
+              <div className="flex items-start gap-2.5 mb-4">
+                <span className="text-[20px] leading-none mt-0.5">🎬</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-serif text-xl font-light leading-snug">
+                    {parts.prefix && <span className="font-mono text-[13px] text-claude/70 mr-1">{parts.prefix} |</span>}{parts.name}
+                  </div>
+                  <div className="flex gap-1.5 flex-wrap mt-1.5">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Tarea de contenido</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: ctxColor(t.context) + '12', color: ctxColor(t.context) }}>{ctxLabel(t.context)}</span>
+                    {t.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{t.clients.name}</span>}
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{t.status}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <div>
+                  <label className={lcls}>📤 Entrega a CM</label>
+                  <input type="date" value={t.due_date || ''} onChange={e => updateTask(t.id, { due_date: e.target.value || null })} className={dcls} />
+                </div>
+                <div>
+                  <label className={lcls}>📅 Publicación</label>
+                  <input type="date" value={t.publish_date || ''} onChange={e => updateTask(t.id, { publish_date: e.target.value || null })} className={dcls} />
+                </div>
+              </div>
+              {warn && (
+                <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5 mb-2">
+                  ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{warn}</span>.
+                </div>
+              )}
+
+              {t.notes && <div className="bg-bg2 border border-black/7 rounded-lg p-3 text-[13px] leading-relaxed whitespace-pre-wrap mt-2">{t.notes}</div>}
+
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => createSlideFromTask(t)}
+                  className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
+                  + Crear slide de producción
+                </button>
+                <button onClick={() => unlinkTask(t)}
+                  className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
+                  Quitar de la presentación
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-3 leading-snug">
+                Tarea de contenido vinculada a esta presentación. Editá sus fechas acá: la presentación se reordena por fecha de publicación. Para producción enriquecida (estados, guión, visuales), creá un slide.
+              </p>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Popup de aprobación (sobre la slide) */}
       {approvalKey && slide && (

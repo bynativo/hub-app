@@ -6,7 +6,7 @@ import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
-import type { Checklist, Task, Slide } from '../../lib/types'
+import type { Checklist, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Tab = 'info' | 'subtareas' | 'checklist' | 'chat' | 'email' | 'slide'
@@ -131,7 +131,6 @@ export function TaskDetail() {
   const task = tasks.find(t => t.id === currentTaskId)
   const [tab, setTab] = useState<Tab>('info')
   const [checklists, setChecklists] = useState<Checklist[]>([])
-  const [linkedSlide, setLinkedSlide] = useState<Slide | null>(null)
   const [newPresOpen, setNewPresOpen] = useState(false)
   const [assignPresId, setAssignPresId] = useState<number | ''>('')
 
@@ -184,7 +183,6 @@ export function TaskDetail() {
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). Pegá texto, una captura o dictá: puedo actualizar fecha, prioridad, el contexto o crear subtareas (con tu aprobación).` }])
     setPendingAction(null); setChatImages([])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
-    supabase.from('slides').select('*').eq('task_id', task.id).limit(1).then(({ data }) => setLinkedSlide((data?.[0] as Slide) || null))
     setAssignPresId('')
   }, [currentTaskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -382,17 +380,12 @@ Reglas del bloque:
     }
   }
 
+  // Vincula la tarea de contenido a la presentación (tasks.presentation_id). Aparece
+  // en la presentación como entrada de contenido; el slide de producción se crea desde ahí.
   async function assignToPresentation(presId: number) {
     if (!task) return
-    const { count } = await supabase.from('slides').select('id', { count: 'exact', head: true }).eq('presentation_id', presId)
-    const { data, error } = await supabase.from('slides').insert({
-      presentation_id: presId, title: task.title, task_id: task.id, position: (count || 0) + 1,
-      // Las fechas del slide reflejan las de la tarea: publicación = publish_date,
-      // entrega a CM (validación) = due_date, y la grilla se ordena por publish_date.
-      fecha_publicacion: task.publish_date, fecha_validacion: task.due_date, grilla_date: task.publish_date,
-    }).select().single()
-    if (error || !data) { alert('Error: ' + error?.message); return }
-    setLinkedSlide(data as Slide)
+    await updateTask(task.id, { presentation_id: presId })
+    await loadAll()
   }
 
   async function deleteTask() {
@@ -819,13 +812,17 @@ Reglas del bloque:
         {/* SLIDE */}
         {tab === 'slide' && (
           <div className="animate-fade-in flex flex-col gap-3">
-            {linkedSlide ? (
+            {task.presentation_id ? (
               <div className="bg-bg2 border border-black/7 rounded-[10px] p-3.5">
                 <div className="text-[11px] font-mono text-gray-400 uppercase mb-1">Vinculada a presentación</div>
-                <div className="font-medium text-gray-900 mb-0.5">{presentations.find(p => p.id === linkedSlide.presentation_id)?.title || 'Presentación'}</div>
-                <div className="text-xs text-gray-400 mb-2.5">Slide: {linkedSlide.title}</div>
-                <button onClick={() => { setView(task.context === 'banco' ? 'banco-presentaciones' : 'agencia-presentaciones'); closeDetail() }}
-                  className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">Ir a Presentaciones →</button>
+                <div className="font-medium text-gray-900 mb-0.5">{presentations.find(p => p.id === task.presentation_id)?.title || 'Presentación'}</div>
+                <div className="text-xs text-gray-400 mb-2.5">Aparece en la presentación ordenada por fecha de publicación. El slide de producción se crea desde la presentación.</div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setView(task.context === 'banco' ? 'banco-presentaciones' : 'agencia-presentaciones'); closeDetail() }}
+                    className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">Ir a Presentaciones →</button>
+                  <button onClick={async () => { await updateTask(task.id, { presentation_id: null }); await loadAll() }}
+                    className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4">Quitar vínculo</button>
+                </div>
               </div>
             ) : (
               <>

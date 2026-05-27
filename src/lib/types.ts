@@ -47,6 +47,7 @@ export interface Task {
   client_id: number | null
   project_id: number | null
   parent_task_id: number | null
+  presentation_id: number | null
   priority: string
   status: string
   task_type: string
