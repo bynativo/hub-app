@@ -244,10 +244,26 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **Columna `campaña` con ñ** — en `slides` la columna real es `campaña`/`campaña_nombre` (con ñ); acceder vía `(slide as Record<string, any>)['campaña']`, no `campana`.
 - **Colores de contexto** — convención de la app: banco azul (`#2563eb`), agencia teal (`#0d9488`), personal ámbar (`#d97706`). Usar `ctxColor()` para consistencia.
 - **Validar con `npm run build`, NO solo `tsc --noEmit`** — el build real es `tsc -b && vite build` (lo que corre Vercel) y usa la config estricta de `tsconfig.app.json`; `tsc --noEmit` lee otra config y NO caza errores como casts inválidos (`TS2352`). Si el build falla, Vercel deja prod en el último build exitoso (silenciosamente). Siempre `npm run build` antes de pushear.
+- **Archivado por estado (`tasks.archived_at`)** — al pasar a un estado de cierre (`CLOSING_STATES` = Cerrado/Entregado/Descartado) la tarea se archiva (archived_at = now) y TODAS las vistas/contadores de tareas activas la excluyen con `&& !t.archived_at`. Distinto de `done` (checkbox). Se desarchiva al reabrir.
+- **Kanban por contexto (`STATUS_COLUMNS`)** — las vistas de tareas de cada contexto usan columnas = estados del contexto (1 estado por columna). `KanbanBoard` acepta prop `columns`; sin ella usa las 4 universales (`KANBAN_GROUPS`) del dashboard.
+- **Google Calendar via OAuth refresh token** — `calendar-proxy` usa secrets `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN` (no service account) y mintea un access token por llamada. El índice de `calendar_events.google_id` debe ser único NORMAL (no parcial) para que el upsert `on_conflict=google_id` funcione. Para sincronizar: botón "↻ Google" en la vista Calendario.
+- **Buscador Cmd+K (`SearchModal`)** — busca sobre el store (tareas incl. archivadas, proyectos, presentaciones) + query a `attachments`; se abre con `openSearch()` del store.
 
 ---
 
 ## Changelog
+
+### 2026-05-27 — Sesion 8: Lista/Kanban por contexto, archivado, buscador, eliminar, proyectos personales, extracción editable + Google Calendar activo
+
+Migración aplicada: `tasks.archived_at`.
+
+- **Lista/Kanban en vistas de contexto:** Banco/Agencia/Personal tienen toggle Lista (agrupada por status) / Kanban (columnas por contexto via `STATUS_COLUMNS`). `KanbanBoard` acepta `columns`.
+- **Cerrado en Personal + archivado automático:** al pasar a un estado de cierre (Cerrado/Entregado/Descartado) `updateTaskStatus` setea `archived_at` y la tarea se oculta de todas las vistas/contadores (se desarchiva al reabrir). Constante `CLOSING_STATES`.
+- **Buscador general (Cmd+K):** `SearchModal` desde el topbar y atajo. Busca título/notas/context_readme/subtareas (store) + adjuntos (query a `attachments`). Agrupa Activas / Archivadas / Proyectos / Presentaciones. "Usar como plantilla" en archivadas abre Capturar pre-rellenado (`template` en CaptureModal). Store: `searchOpen`.
+- **Eliminar tarea:** menú (...) en el panel → confirmación → DELETE (CASCADE borra subtareas/checklists/threads/attachments; slides quedan con task_id null).
+- **Proyectos en Personal:** nav + ruta `personal-proyectos` (ProjectsView/NewProjectModal/Capturar ya eran genéricos por contexto).
+- **Extracción = formulario completo editable:** cada tarea que Claude extrae se muestra como `SuggestionForm` editable (todos los campos de Tarea directa), expandible, con aprobar/editar/descartar individual.
+- **Google Calendar ACTIVO:** OAuth con refresh token (secrets `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN` en Supabase); `calendar-proxy` intercambia el refresh token por access token en cada llamada y upserta en `calendar_events`. Fix: el índice único de `google_id` era parcial y el upsert (ON CONFLICT) fallaba en silencio → ahora índice normal.
 
 ### 2026-05-26 — Sesion 7: Tanda de 12 mejoras (P1–P12)
 
