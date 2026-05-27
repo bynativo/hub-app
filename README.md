@@ -253,6 +253,13 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 14: Fix presentaciones (tareas de contenido vinculadas + orden por publicación)
+
+Migración: `tasks.presentation_id` (FK→presentations, ON DELETE SET NULL) + backfill desde `slides.task_id`.
+
+- **Bug 1 — tareas de contenido no aparecían en la presentación:** no existía forma de vincular una tarea a una presentación salvo creando un slide a mano (no había `tasks.presentation_id`). Ahora la presentación **mergea**: slides reales + tareas de contenido vinculadas (sin slide), deduplicadas por `task_id`. Las tareas-entrada se muestran en un panel (fechas editables, "Crear slide de producción", "Quitar de la presentación"). En TaskDetail → tab Slide, "Asignar a presentación" setea `presentation_id`.
+- **Bug 2 — no ordenaba por publicación:** las entradas se ordenan por fecha de publicación ASC, sin fecha al final, **en cada render** (slide: `publish_date` de su tarea o `fecha_publicacion`; tarea: `publish_date`). Editar la fecha reordena en vivo.
+
 ### 2026-05-27 — Sesion 13: Flujo de 3 fechas para tareas de contenido
 
 Migración: `tasks.publish_date` (date). Helper `deliveryWarning` (entrega ≥24h antes de publicar).
