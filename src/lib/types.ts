@@ -14,6 +14,9 @@ export interface Client {
   is_internal: boolean | null
   tipo: string | null
   es_agencia_interna: boolean | null
+  sigla: string | null
+  website_url: string | null
+  social_links: Record<string, string> | null
 }
 
 export interface Project {

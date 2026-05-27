@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
+import { REDES } from '../../lib/constants'
 import { RecurrenteModal } from '../modals/RecurrenteModal'
 import { QuickClientModal } from '../modals/QuickClientModal'
 
 interface ClientForm {
   name: string
+  sigla: string
+  website_url: string
   contact_name: string
   contact_role: string
   service_scope: string
@@ -13,7 +16,7 @@ interface ClientForm {
   drive_folder_url: string
 }
 
-const EMPTY: ClientForm = { name: '', contact_name: '', contact_role: '', service_scope: '', proposal_url: '', drive_folder_url: '' }
+const EMPTY: ClientForm = { name: '', sigla: '', website_url: '', contact_name: '', contact_role: '', service_scope: '', proposal_url: '', drive_folder_url: '' }
 
 export function ClientesView() {
   const clients = useStore(s => s.clients)
@@ -25,6 +28,7 @@ export function ClientesView() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [form, setForm] = useState<ClientForm>(EMPTY)
+  const [social, setSocial] = useState<Record<string, string>>({})
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [recurrenteOpen, setRecurrenteOpen] = useState(false)
@@ -37,12 +41,15 @@ export function ClientesView() {
     if (!selected) return
     setForm({
       name: selected.name || '',
+      sigla: selected.sigla || '',
+      website_url: selected.website_url || '',
       contact_name: selected.contact_name || '',
       contact_role: selected.contact_role || '',
       service_scope: selected.service_scope || '',
       proposal_url: selected.proposal_url || '',
       drive_folder_url: selected.drive_folder_url || '',
     })
+    setSocial(selected.social_links || {})
     setDirty(false)
   }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,6 +57,10 @@ export function ClientesView() {
     setForm(prev => ({ ...prev, [key]: val }))
     setDirty(true)
   }
+
+  function addSocial(v: string) { setSocial(prev => ({ ...prev, [v]: '' })); setDirty(true) }
+  function removeSocial(v: string) { setSocial(prev => { const n = { ...prev }; delete n[v]; return n }); setDirty(true) }
+  function setSocialUrl(v: string, url: string) { setSocial(prev => ({ ...prev, [v]: url })); setDirty(true) }
 
   const clientRecurrentes = selected ? recurrentes.filter(r => r.client_id === selected.id) : []
   const clientProjects = selected ? projects.filter(p => p.client_id === selected.id) : []
@@ -63,6 +74,9 @@ export function ClientesView() {
     setSaving(true)
     await supabase.from('clients').update({
       name: form.name.trim(),
+      sigla: form.sigla.trim().toUpperCase() || null,
+      website_url: form.website_url.trim() || null,
+      social_links: social,
       contact_name: form.contact_name.trim() || null,
       contact_role: form.contact_role.trim() || null,
       service_scope: form.service_scope.trim() || null,
@@ -91,6 +105,7 @@ export function ClientesView() {
         <div className="flex items-center gap-2.5 mb-1.5">
           <div className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
           <div className="text-[15px] font-medium flex-1">{c.name}</div>
+          {c.sigla && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{c.sigla}</span>}
           {c.tipo === 'prospecto'
             ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">prospecto</span>
             : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-success/10 text-success">activo</span>}
@@ -161,6 +176,16 @@ export function ClientesView() {
                 <input value={form.name} onChange={e => set('name', e.target.value)} className={fieldCls} />
               </div>
               <div>
+                <label className={labelCls}>Sigla / nomenclatura</label>
+                <input value={form.sigla} onChange={e => set('sigla', e.target.value.toUpperCase().slice(0, 4))} maxLength={4}
+                  className={fieldCls + ' uppercase font-mono'} placeholder="Ej: CPC" />
+              </div>
+              <div>
+                <label className={labelCls}>URL sitio web</label>
+                <input value={form.website_url} onChange={e => set('website_url', e.target.value)} type="url"
+                  className={fieldCls + ' font-mono text-xs'} placeholder="https://..." />
+              </div>
+              <div>
                 <label className={labelCls}>Contacto</label>
                 <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className={fieldCls} placeholder="Nombre del contacto" />
               </div>
@@ -185,9 +210,41 @@ export function ClientesView() {
               </div>
             </div>
 
+            {/* Redes sociales — el usuario agrega solo las que existen para el cliente */}
+            <div className="mb-4">
+              <label className={labelCls}>Redes sociales</label>
+              {REDES.some(r => r.v in social) && (
+                <div className="flex flex-col gap-1.5 mb-2">
+                  {REDES.filter(r => r.v in social).map(r => (
+                    <div key={r.v} className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono w-16 shrink-0 font-medium" style={{ color: r.color }}>{r.label}</span>
+                      <input value={social[r.v]} onChange={e => setSocialUrl(r.v, e.target.value)} type="url"
+                        className={fieldCls + ' flex-1 font-mono text-xs'} placeholder="https://..." />
+                      <button onClick={() => removeSocial(r.v)} title="Quitar red"
+                        className="text-gray-300 hover:text-danger text-sm cursor-pointer shrink-0">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-1.5 flex-wrap">
+                {REDES.filter(r => !(r.v in social)).map(r => (
+                  <button key={r.v} onClick={() => addSocial(r.v)}
+                    className="text-[11px] font-mono px-2 py-1 rounded-md border border-black/7 bg-bg3 hover:bg-bg4 cursor-pointer transition-colors"
+                    style={{ color: r.color }}>+ {r.label}</button>
+                ))}
+                {REDES.every(r => r.v in social) && <span className="text-[11px] text-gray-400">Todas las redes agregadas</span>}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2 mb-5">
-              {(form.proposal_url || form.drive_folder_url) && (
-                <div className="flex gap-2 mr-auto">
+              {(form.website_url || form.proposal_url || form.drive_folder_url) && (
+                <div className="flex gap-2 mr-auto flex-wrap">
+                  {form.website_url && (
+                    <a href={form.website_url} target="_blank" rel="noreferrer"
+                      className="text-[11px] text-gray-600 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md hover:bg-bg4 transition-colors">
+                      ↗ Sitio web
+                    </a>
+                  )}
                   {form.proposal_url && (
                     <a href={form.proposal_url} target="_blank" rel="noreferrer"
                       className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md hover:bg-claude/15 transition-colors">
