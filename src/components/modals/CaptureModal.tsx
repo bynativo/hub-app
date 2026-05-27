@@ -4,6 +4,8 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix } from '../../lib/helpers'
+import { parseStructuredNotes } from '../../lib/notesParser'
+import type { RawTask } from '../../lib/notesParser'
 import type { Client, Project, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -29,6 +31,9 @@ interface Suggested {
   desc: string
   selected: boolean
   expanded: boolean
+  // Si la nota pide actualizar una tarea existente (renombrar/ajustar/cambiar)
+  updateTargetId: number | null
+  mode: 'create' | 'update'
 }
 
 function normTipo(t: string): TipoTarea {
@@ -71,6 +76,7 @@ function parseSuggested(reply: string): Suggested[] {
     parentId: null, projectId: null, clientId: null,
     isContent: false, isReminder: false, reminderAt: '', desc: '',
     selected: true, expanded: false,
+    updateTargetId: null, mode: 'create' as const,
   }))
 }
 
@@ -90,6 +96,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
   const dueMissing = !!showError && !s.isReminder && !s.due_date
   const errFld = fld + ' border-danger/60 bg-danger/5'
   const sPrefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
+  const updTarget = s.updateTargetId ? tasks.find(t => t.id === s.updateTargetId) : null
   const agClients = clients.filter(c => c.context === 'agencia')
   // Separación de contexto: proyectos y tareas padre solo del mismo contexto que la tarea
   const ctxProjects = projects.filter(p => p.context === s.contexto)
@@ -105,6 +112,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
         <span onClick={() => onChange({ expanded: !s.expanded })} className="flex-1 text-[13px] cursor-pointer truncate">{s.titulo || '(sin título)'}</span>
         {!s.expanded && (
           <>
+            {updTarget && s.mode === 'update' && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn shrink-0">↻ actualiza</span>}
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 shrink-0">{s.contexto}</span>
             {s.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn shrink-0">{s.due_date.slice(5).replace('-', '/')}</span>}
           </>
@@ -115,6 +123,21 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
 
       {s.expanded && (
         <div className="border-t border-black/7 p-2.5 flex flex-col gap-2">
+          {updTarget && (
+            <div className="bg-warn/5 border border-warn/30 rounded-md p-2">
+              <div className="text-[11px] text-gray-600 mb-1.5">Parece una actualización de una tarea que ya existe: <span className="font-medium">{stripPrefix(updTarget.title)}</span></div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button onClick={() => onChange({ mode: 'update' })}
+                  className={`py-1.5 border rounded-md text-[11px] cursor-pointer transition-all ${s.mode === 'update' ? 'border-warn/40 text-warn bg-warn/10 font-medium' : 'border-black/7 text-gray-500 bg-bg2 hover:bg-bg4'}`}>
+                  ↻ Actualizar existente
+                </button>
+                <button onClick={() => onChange({ mode: 'create' })}
+                  className={`py-1.5 border rounded-md text-[11px] cursor-pointer transition-all ${s.mode === 'create' ? 'border-claude/20 text-claude bg-claude/7 font-medium' : 'border-black/7 text-gray-500 bg-bg2 hover:bg-bg4'}`}>
+                  + Crear nueva
+                </button>
+              </div>
+            </div>
+          )}
           <div>
             <label className={lbl}>Título</label>
             <div className="flex items-stretch">
@@ -354,6 +377,52 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [extracted, setExtracted] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
   const [images, setImages] = useState<{ name: string; url: string; media_type: string; data: string; file: File }[]>([])
+  // Formato estructurado parseado localmente (sin API), proyecto detectado y modo revisión
+  const [localParsed, setLocalParsed] = useState(false)
+  const [parsedProjectName, setParsedProjectName] = useState<string | null>(null)
+  const [createProjectFlag, setCreateProjectFlag] = useState(false)
+  const [reviewMode, setReviewMode] = useState(false)
+  const [reviewIdx, setReviewIdx] = useState(0)
+
+  // Normaliza un título para comparar (sin prefijo, sin acentos, minúsculas)
+  function normTitle(s: string): string {
+    return stripPrefix(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+  }
+  // Busca una tarea existente parecida (mismo contexto) para ofrecer actualizarla
+  function findSimilarTask(title: string, context: string): Task | null {
+    const target = normTitle(title)
+    if (!target) return null
+    const words = new Set(target.split(' ').filter(w => w.length > 2))
+    let best: Task | null = null, bestScore = 0
+    for (const t of tasks) {
+      if (t.done || t.archived_at || t.context !== context) continue
+      const cand = normTitle(t.title)
+      if (!cand) continue
+      if (cand === target || cand.includes(target) || target.includes(cand)) return t
+      const cw = new Set(cand.split(' ').filter(w => w.length > 2))
+      let inter = 0; words.forEach(w => { if (cw.has(w)) inter++ })
+      const union = new Set([...words, ...cw]).size || 1
+      const score = inter / union
+      if (score > bestScore) { bestScore = score; best = t }
+    }
+    return bestScore >= 0.5 ? best : null
+  }
+  // Convierte una tarea parseada del formato estructurado a Suggested editable
+  function rawToSuggested(r: RawTask, hasProject: boolean): Suggested {
+    const client = r.sigla ? clients.find(c => (c.sigla || '').toUpperCase() === r.sigla) : null
+    const upd = r.updateHint ? findSimilarTask(r.title, r.context) : null
+    const tipo: TipoTarea = hasProject ? 'proyecto' : (/subtarea/i.test(r.tipoRaw) ? 'subtarea' : /proyecto/i.test(r.tipoRaw) ? 'proyecto' : 'independiente')
+    return {
+      titulo: r.title, contexto: r.context, tipo, prioridad: r.prioridad,
+      due_date: r.due_date, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
+      parentId: null, projectId: null,
+      clientId: r.context === 'agencia' ? (client?.id ?? null) : null,
+      isContent: false, isReminder: false, reminderAt: '',
+      desc: r.phase ? `[${r.phase}] ${r.desc}`.trim() : r.desc,
+      selected: true, expanded: false,
+      updateTargetId: upd?.id ?? null, mode: upd ? 'update' : 'create',
+    }
+  }
 
   async function addImages(files: FileList | null) {
     if (!files) return
@@ -368,8 +437,20 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     setImages(prev => [...prev, ...arr])
   }
 
+  function resetParseExtras() {
+    setLocalParsed(false); setParsedProjectName(null); setCreateProjectFlag(false); setReviewMode(false); setReviewIdx(0)
+  }
+
   async function runExtract(text: string) {
     if (!text.trim()) return
+    resetParseExtras()
+    // El dictado por voz rara vez viene estructurado, pero igual lo intentamos local.
+    const parsed = parseStructuredNotes(text)
+    if (parsed && parsed.tasks.length) {
+      setSuggestions(parsed.tasks.map(r => rawToSuggested(r, !!parsed.project)))
+      setParsedProjectName(parsed.project); setCreateProjectFlag(!!parsed.project); setLocalParsed(true); setExtracted(true)
+      return
+    }
     setExtracting(true); setSuggestions([])
     try {
       setSuggestions(await extractTasks(text)); setExtracted(true)
@@ -380,10 +461,26 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     }
   }
 
-  // Extrae de notas y/o imágenes (visión)
+  // Extrae de notas y/o imágenes. Primero intenta el parser local (sin gastar API);
+  // si el texto no viene en el formato estructurado, recurre a Claude.
   async function handleExtract() {
     const hasImages = images.length > 0
     if (!meetingText.trim() && !hasImages) return
+    setShowErrors(false)
+    resetParseExtras()
+
+    if (meetingText.trim() && !hasImages) {
+      const parsed = parseStructuredNotes(meetingText)
+      if (parsed && parsed.tasks.length) {
+        setSuggestions(parsed.tasks.map(r => rawToSuggested(r, !!parsed.project)))
+        setParsedProjectName(parsed.project)
+        setCreateProjectFlag(!!parsed.project)
+        setLocalParsed(true)
+        setExtracted(true)
+        return // sin llamar a la API
+      }
+    }
+
     setExtracting(true); setSuggestions([])
     try {
       const items = hasImages
@@ -401,7 +498,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     const selected = suggestions.filter(s => s.selected)
     if (!selected.length) return
     // Contexto y fecha de entrega obligatorios en cada tarea seleccionada
-    const isMissing = (s: Suggested) => !s.contexto || (!s.isReminder && !s.due_date)
+    // Las actualizaciones no exigen fecha (solo modifican lo que venga). Las nuevas sí.
+    const isMissing = (s: Suggested) => s.mode !== 'update' && (!s.contexto || (!s.isReminder && !s.due_date))
     if (selected.some(isMissing)) {
       setShowErrors(true)
       // Expandir las tareas con campos faltantes para que el usuario las complete
@@ -409,13 +507,48 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       return
     }
     setSavingNotes(true)
-    const taskRows = selected.map(s => {
+
+    // 1) Si se detectó estructura de proyecto, crear el proyecto primero
+    let newProjectId: number | null = null
+    const projCtx = createProjectFlag && parsedProjectName?.trim() ? (selected[0]?.contexto || 'banco') : null
+    if (projCtx && parsedProjectName?.trim()) {
+      const projClient = projCtx === 'agencia' ? (selected.find(s => s.clientId)?.clientId ?? null) : null
+      const { data, error } = await supabase.from('projects').insert({
+        name: parsedProjectName.trim(), context: projCtx, client_id: projClient,
+        es_interno: projCtx === 'agencia' ? !projClient : false,
+        type: 'proyecto', status: 'activo', is_ongoing: true,
+      }).select().single()
+      if (error || !data) { alert('Error creando proyecto: ' + error?.message); setSavingNotes(false); return }
+      newProjectId = data.id
+    }
+    // Solo se vincula al proyecto nuevo si la tarea es del mismo contexto (regla de la DB)
+    const projectFor = (s: Suggested) => (newProjectId && s.contexto === projCtx) ? newProjectId : null
+
+    // 2) Actualizar las tareas existentes elegidas como "actualización"
+    const updates = selected.filter(s => s.mode === 'update' && s.updateTargetId)
+    for (const s of updates) {
+      const prefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
+      const patch: Record<string, any> = {
+        title: buildTitle(prefix, s.titulo),
+        priority: s.prioridad,
+        due_date: s.isReminder ? null : (s.due_date || null),
+        estimated_hours: s.estimated_hours,
+      }
+      if (s.desc.trim()) patch.context_readme = s.desc.trim()
+      const linked = projectFor(s)
+      if (linked) patch.project_id = linked
+      await supabase.from('tasks').update(patch).eq('id', s.updateTargetId)
+    }
+
+    // 3) Crear las tareas nuevas
+    const creates = selected.filter(s => !(s.mode === 'update' && s.updateTargetId))
+    const taskRows = creates.map(s => {
       const reminder = s.isReminder && !!s.reminderAt
       const prefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
       return {
         title: buildTitle(prefix, s.titulo), context: s.contexto, priority: s.prioridad, origin: s.origen || 'reunion',
         client_id: s.contexto === 'agencia' ? s.clientId : null,
-        project_id: (!reminder && s.tipo === 'proyecto') ? s.projectId : null,
+        project_id: reminder ? null : (projectFor(s) ?? ((s.tipo === 'proyecto') ? s.projectId : null)),
         parent_task_id: (!reminder && s.tipo === 'subtarea') ? s.parentId : null,
         task_type: s.isContent ? 'contenido' : 'independiente',
         due_date: reminder ? null : (s.due_date || null),
@@ -494,26 +627,67 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     if (!extracted) return null
     if (!suggestions.length) return <div className="text-center py-4 text-gray-400 text-[13px]">No se identificaron tareas.</div>
     const update = (i: number, patch: Partial<Suggested>) => setSuggestions(prev => prev.map((x, j) => j === i ? { ...x, ...patch } : x))
+    const remove = (i: number) => setSuggestions(prev => prev.filter((_, j) => j !== i))
+    const idx = Math.min(reviewIdx, suggestions.length - 1)
     return (
       <div className="mb-4">
+        {localParsed && (
+          <div className="text-[11px] text-success bg-success/7 border border-success/25 rounded-md px-2.5 py-1.5 mb-2">
+            ✓ Formato estructurado detectado — parseado localmente sin usar Claude (0 tokens).
+          </div>
+        )}
+        {parsedProjectName !== null && (
+          <div className="bg-claude/5 border border-claude/20 rounded-md p-2.5 mb-2">
+            <label className="flex items-center gap-2 text-[12px] cursor-pointer mb-1.5">
+              <button type="button" onClick={() => setCreateProjectFlag(v => !v)} className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${createProjectFlag ? 'bg-claude' : 'bg-bg4'}`}>
+                <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all ${createProjectFlag ? 'left-[18px]' : 'left-0.5'}`} />
+              </button>
+              📁 Crear proyecto y vincular las tareas
+            </label>
+            {createProjectFlag && (
+              <input value={parsedProjectName} onChange={e => setParsedProjectName(e.target.value)}
+                className="w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" placeholder="Nombre del proyecto" />
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between mb-2">
           <div className="text-[11px] font-mono text-claude tracking-wider uppercase">
             ✦ {suggestions.length} tarea{suggestions.length > 1 ? 's' : ''} — editá lo que quieras y aprobá
           </div>
-          <button onClick={() => setSuggestions(prev => prev.map(s => ({ ...s, expanded: !prev.every(x => x.expanded) })))}
-            className="text-[10px] text-gray-400 hover:text-claude cursor-pointer">expandir/contraer</button>
+          {!reviewMode && (
+            <button onClick={() => setSuggestions(prev => prev.map(s => ({ ...s, expanded: !prev.every(x => x.expanded) })))}
+              className="text-[10px] text-gray-400 hover:text-claude cursor-pointer">expandir/contraer</button>
+          )}
         </div>
-        {showErrors && suggestions.some(s => s.selected && (!s.contexto || (!s.isReminder && !s.due_date))) && (
+        {showErrors && suggestions.some(s => s.selected && s.mode !== 'update' && (!s.contexto || (!s.isReminder && !s.due_date))) && (
           <div className="text-[11px] text-danger bg-danger/5 border border-danger/30 rounded-md px-2.5 py-1.5 mb-2">
             Completá la fecha de entrega (obligatoria) en las tareas marcadas antes de crear.
           </div>
         )}
-        <div className="flex flex-col gap-1.5">
-          {suggestions.map((s, i) => (
-            <SuggestionForm key={i} s={s} onChange={p => update(i, p)} onRemove={() => setSuggestions(prev => prev.filter((_, j) => j !== i))}
+
+        {reviewMode ? (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-mono text-gray-500">Revisando {idx + 1} de {suggestions.length}</span>
+              <button onClick={() => setReviewMode(false)} className="text-[10px] text-gray-400 hover:text-claude cursor-pointer">Ver todas</button>
+            </div>
+            <SuggestionForm s={{ ...suggestions[idx], expanded: true }} onChange={p => update(idx, p)} onRemove={() => { remove(idx); setReviewIdx(i => Math.max(0, i - 1)) }}
               clients={clients} projects={projects} tasks={tasks} showError={showErrors} />
-          ))}
-        </div>
+            <div className="flex items-center justify-between mt-2">
+              <button disabled={idx === 0} onClick={() => setReviewIdx(i => Math.max(0, i - 1))}
+                className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-3 py-1 rounded-md cursor-pointer hover:bg-bg4 disabled:opacity-40 disabled:cursor-not-allowed">← Anterior</button>
+              <button disabled={idx >= suggestions.length - 1} onClick={() => setReviewIdx(i => Math.min(suggestions.length - 1, i + 1))}
+                className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-3 py-1 rounded-md cursor-pointer hover:bg-bg4 disabled:opacity-40 disabled:cursor-not-allowed">Siguiente →</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {suggestions.map((s, i) => (
+              <SuggestionForm key={i} s={s} onChange={p => update(i, p)} onRemove={() => remove(i)}
+                clients={clients} projects={projects} tasks={tasks} showError={showErrors} />
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -733,7 +907,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
             <>
               {tab === 'notas' ? (
                 <>
-                  <p className="text-[13px] text-gray-400 mb-3">Pegá lo que te pidieron y/o subí imágenes (correos, WhatsApp, documentos). Claude extrae y clasifica las tareas con todos los campos.</p>
+                  <p className="text-[13px] text-gray-400 mb-3">Pegá lo que te pidieron y/o subí imágenes (correos, WhatsApp, documentos). Si el texto ya viene en formato estructurado (<span className="font-mono text-[11px]">BF | … Tipo: … | Prioridad: … | Entrega: …</span>) se parsea local sin gastar API; si no, lo extrae Claude.</p>
                   <textarea value={meetingText} onChange={e => setMeetingText(e.target.value)}
                     className={inputCls + ' resize-y leading-relaxed mb-3'} placeholder="Notas, correo pegado, o dejá vacío y subí imágenes…" rows={6} autoFocus />
 
@@ -778,19 +952,27 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               {tab === 'notas' && (
                 <button onClick={handleExtract} disabled={(!meetingText.trim() && !images.length) || extracting}
                   className="w-full text-xs bg-claude/7 border border-claude/20 text-claude px-4 py-2.5 rounded-lg hover:bg-claude/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed font-medium mb-4">
-                  {extracting ? 'Extrayendo…' : images.length ? `✦ Extraer de ${images.length} imagen(es)${meetingText.trim() ? ' + texto' : ''}` : '✦ Extraer tareas con Claude'}
+                  {extracting ? 'Extrayendo…' : images.length ? `✦ Extraer de ${images.length} imagen(es)${meetingText.trim() ? ' + texto' : ''}` : '✦ Procesar / extraer tareas'}
                 </button>
               )}
 
               {renderSuggestions()}
 
-              <div className="flex gap-2 justify-end">
+              <div className="flex gap-2 justify-end items-center">
                 <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">Cancelar</button>
                 {extracted && suggestions.some(s => s.selected) && (
-                  <button onClick={handleCreateSelected} disabled={savingNotes}
-                    className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                    {savingNotes ? 'Creando…' : `Crear ${suggestions.filter(s => s.selected).length}`}
-                  </button>
+                  <>
+                    {!reviewMode && suggestions.length > 1 && (
+                      <button onClick={() => { setReviewMode(true); setReviewIdx(0) }}
+                        className="text-xs bg-bg3 border border-black/7 text-gray-600 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
+                        Revisar una por una
+                      </button>
+                    )}
+                    <button onClick={handleCreateSelected} disabled={savingNotes}
+                      className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                      {savingNotes ? 'Creando…' : `Crear todas (${suggestions.filter(s => s.selected).length})`}
+                    </button>
+                  </>
                 )}
               </div>
             </>
