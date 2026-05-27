@@ -253,6 +253,17 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 15: Módulo de influencers integrado a contenido
+
+Migración: `tasks` (+ `content_pub_type`, `influencer_name/handle/agency`), `slides` (+ `content_pub_type`, `influencer_name`, `influencer_handle`).
+
+- **Capturar (contenido):** toggle "¿Involucra influencer externo?" → nombre, handle, agencia y **tipo de publicación** (`propia` / `colab_ig` / `tiktok_propia` / `cuenta_influencer`). Aplica a banco y agencia (el influencer se asocia por el contexto/cliente de la tarea). Editable en TaskDetail.
+- **Plataformas/formatos:** + IG Story (FORMATOS) y LinkedIn (PLAT_META); constante `PLATAFORMAS_CONTENIDO` (8 plataformas).
+- **Slide vinculada:** copia tipo/influencer desde la tarea; badges Colab / Influencer / Influencer externo + handle; filas de influencer en el panel de info.
+- **Calendario RRSS:** filtros Todo / Contenido interno / Colab / Influencers externos / Interno + Colab; badges por tipo. Regla: propia/colab/tiktok → grilla; cuenta del influencer solo bajo "Influencers externos".
+- **Seguimiento:** contenido de influencer que vence hoy → "Hoy la agencia debe entregar el contenido del influencer [nombre]".
+- Helpers `pubTypeBadge` / `vaAGrilla`; constante `PUB_TYPES`.
+
 ### 2026-05-27 — Sesion 14: Fix presentaciones (tareas de contenido vinculadas + orden por publicación)
 
 Migración: `tasks.presentation_id` (FK→presentations, ON DELETE SET NULL) + backfill desde `slides.task_id`.
