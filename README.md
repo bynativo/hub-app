@@ -253,6 +253,16 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 13: Flujo de 3 fechas para tareas de contenido
+
+Migración: `tasks.publish_date` (date). Helper `deliveryWarning` (entrega ≥24h antes de publicar).
+
+- **3 fechas con roles:** `requested_at` (solicitud), `due_date` (entrega — de Felipe, obligatoria), `publish_date` (publicación — del CM, opcional).
+- **Capturar** (directa + extracción): con "Es tarea de contenido" se muestran las 3 fechas separadas; valida la regla de 24h y sugiere la entrega mínima.
+- **Tarjeta:** "Entrega …" + badge "📅 Pub DD/MM".
+- **Seguimiento:** el contenido que vence hoy aparece solo, con mensaje "Hoy vence la entrega de este contenido — ¿ya está listo?" y acciones Redactar / Marcar entregado (→ Entregado, cierra el rol de Felipe) / Posponer (+1 día). Sidebar count incluye contenido del día.
+- **Slide vinculada:** `fecha_publicacion`=publish_date, `fecha_validacion` (entrega a CM)=due_date, `grilla_date`=publish_date. Presentación y calendario RRSS ordenados por publish_date. (El editor de slides ya derivaba entrega = publicación − 1 día.)
+
 ### 2026-05-27 — Sesion 12: Parser local del formato estructurado en Capturar/Notas
 
 `src/lib/notesParser.ts` (`parseStructuredNotes`): entiende el formato que Claude genera en otros chats — `BF/INF | Título  Tipo: … | Prioridad: … | Entrega: … | Estimado: … — desc`, en una línea o con la metadata en líneas separadas (parseo por bloques).
