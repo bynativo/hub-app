@@ -108,6 +108,7 @@ export function Sidebar() {
           <NavItem label="Tareas" view="banco-tareas" count={ctxCount('banco')} indent />
           <NavItem label="Proyectos" view="banco-proyectos" indent />
           <NavItem label="Equipo" view="banco-equipo" indent />
+          <NavItem label="Recurrentes" view="banco-recurrentes" indent />
           <NavItem label="Presentaciones" view="banco-presentaciones" indent />
           <NavItem label="Calendario RRSS" view="banco-grilla" indent />
         </>
@@ -119,6 +120,7 @@ export function Sidebar() {
           <NavItem label="Tareas" view="agencia-tareas" count={ctxCount('agencia')} indent />
           <NavItem label="Clientes" view="agencia-clientes" indent />
           <NavItem label="Equipo" view="agencia-equipo" indent />
+          <NavItem label="Recurrentes" view="agencia-recurrentes" indent />
           <NavItem label="Presentaciones" view="agencia-presentaciones" indent />
           <NavItem label="Calendario RRSS" view="agencia-grilla" indent />
         </>
@@ -129,6 +131,7 @@ export function Sidebar() {
         <>
           <NavItem label="Tareas" view="personal-tareas" count={ctxCount('personal')} indent />
           <NavItem label="Proyectos" view="personal-proyectos" indent />
+          <NavItem label="Recurrentes" view="personal-recurrentes" indent />
         </>
       )}
     </aside>
