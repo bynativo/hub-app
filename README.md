@@ -253,6 +253,14 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 16: Recordatorios como pseudo-tareas + subtipo seguimiento de correo
+
+Migración: `tasks.tipo_recordatorio` (default 'general'), `tasks.correo_contexto`.
+
+- **Pseudo-tareas:** los recordatorios pueden vincularse a una tarea padre (parent_task_id se conserva al crearlos desde "+ Nueva subtarea"). En TaskItem y ProjectsView aparecen al final, bajo separador "Recordatorios", con `ReminderRow`: campana 🔔, borde punteado/fondo suave, fecha+hora, badge "Recordatorio" / "Vencido" (rojo). Click → detalle (editar fecha/hora o eliminar). Siguen apareciendo en Seguimiento aunque tengan padre.
+- **TaskDetail:** campo editable de fecha/hora del recordatorio.
+- **Subtipo seguimiento de correo:** en Capturar, selector "Recordatorio general" / "📧 Seguimiento de correo" (+ campo "Asunto o contexto del correo"). En Seguimiento, el de correo muestra 📧, el asunto como subtítulo y acciones "Redactar respuesta con Claude" / "Ya respondí — cerrar" / "Posponer".
+
 ### 2026-05-27 — Sesion 15: Módulo de influencers integrado a contenido
 
 Migración: `tasks` (+ `content_pub_type`, `influencer_name/handle/agency`), `slides` (+ `content_pub_type`, `influencer_name`, `influencer_handle`).
