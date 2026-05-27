@@ -249,6 +249,20 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-26 — Sesion 7: Tanda de 12 mejoras (P1–P12)
+
+- **P1 — Tareas padre colapsables:** `TaskItem` muestra caret ▶/▼ + contador; colapsadas por defecto; click expande/contrae las subtareas. Aplica a todas las listas.
+- **P2 — Panel: edición avanzada:** sección "Organización" (parte de proyecto / subtarea de / convertir a contenido), guarda al instante.
+- **P3 — Extracción completa + imágenes:** Notas/Micrófono pre-rellenan todos los campos (fecha, requested_at, estimado, origen). Subida de imágenes → Claude visión extrae tareas. Bucket Storage `capturas` (+ policies anon) y `attachments.es_contexto`. Fix: la extracción leía `data.reply` en vez de `data.text`.
+- **P4 — `requested_at`:** campo "¿Cuándo te lo pidieron?" en Capturar; badge 📨 en la tarjeta si difiere de la creación.
+- **P5 — `context_readme`:** sección colapsable "Contexto" editable; usado como system prompt del chat de la tarea; pre-rellenado al crear.
+- **P6 — Estimado sugerido:** botón "Sugerir con Claude" → badge "Claude sugiere: Xh ✓/✕" (usa promedio de similares).
+- **P7 — Chat de tarea continuo:** adjuntar imágenes (visión) y dictar; Claude propone fecha/prioridad/contexto/subtareas vía bloque `accion` con card de aprobación.
+- **P8 — Tipo `responder_email`:** toggle "Es solo una respuesta" en Capturar; panel con email recibido + redactar respuesta + marcar respondido; 15min; ícono ✉️; sin subtareas. `fmtHoras` muestra minutos (<1h).
+- **P9 — Google Calendar (arquitectura lista):** tabla `calendar_events` + Edge Function `calendar-proxy` (Google→tabla con `GOOGLE_OAUTH_TOKEN`). Vista "Calendario" (semana/día, eventos + tareas + tiempo libre, crear/sincronizar), "Agenda de hoy" en el dashboard, agenda inyectada al chat. **Pendiente:** cargar el token OAuth como secret.
+- **P10 — Vista Lista:** sección unificada "Próximamente" (Hoy/Mañana/Seguimiento/Próximamente); paridad con Kanban.
+- **P11 / P12 — Esta/Próxima semana y Calendario RRSS:** ya estaban (sesion 6), ahora en prod.
+
 ### 2026-05-26 — Sesion 6: Bugs, vistas de semana y fix de build
 
 - **Vista Lista (dashboard):** ademas de Hoy/Mañana/Seguimiento ahora muestra
