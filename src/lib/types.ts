@@ -199,6 +199,20 @@ export interface Slide {
   presentations?: Presentation | null
 }
 
+export interface CalendarEvent {
+  id: number
+  title: string
+  starts_at: string
+  ends_at: string | null
+  all_day: boolean
+  context: string | null
+  calendar: string | null
+  source: string
+  google_id: string | null
+  location: string | null
+  created_at: string
+}
+
 export interface Recurrente {
   id: number
   title: string

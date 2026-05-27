@@ -5,6 +5,7 @@ import { Sidebar } from './components/layout/Sidebar'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
 import { WeekView } from './components/dashboard/WeekView'
+import { CalendarView } from './components/dashboard/CalendarView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
 import { SeguimientoView } from './components/dashboard/SeguimientoView'
@@ -49,6 +50,7 @@ export default function App() {
       case 'semana': return <WeekView range="esta" />
       case 'proxima-semana': return <WeekView range="proxima" />
       case 'seguimiento': return <SeguimientoView />
+      case 'calendario': return <CalendarView />
       case 'recurrentes': return <RecurrentesView />
       case 'contactos': return <ContactsView />
       // Banco Falabella

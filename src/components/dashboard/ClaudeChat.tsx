@@ -27,6 +27,7 @@ export function ClaudeChat() {
   const tasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
   const projects = useStore(s => s.projects)
+  const calendarEvents = useStore(s => s.calendarEvents)
   const loadAll = useStore(s => s.loadAll)
 
   const [open, setOpen] = useState(false)
@@ -48,6 +49,12 @@ export function ClaudeChat() {
       .join('\n') || '- (ninguna con fecha)'
     const agClients = clients.filter(c => c.context === 'agencia').map(c => `${c.id}=${c.name}`).join(', ') || '(ninguno)'
     const projList = projects.map(p => `${p.id}=${p.name} [${p.context}]`).join(', ') || '(ninguno)'
+    const now = todayISO()
+    const agenda = calendarEvents
+      .filter(e => (e.starts_at || '').slice(0, 10) >= now)
+      .slice(0, 25)
+      .map(e => `- ${(e.starts_at || '').slice(0, 16).replace('T', ' ')} ${e.title}`)
+      .join('\n') || '- (sin reuniones próximas)'
 
     return `Eres el asistente de trabajo de Felipe. Tenés acceso a su Supabase. Cuando te describa una tarea, pedí solo lo necesario: contexto, fecha, y si pertenece a proyecto o cliente. Verificá su carga actual antes de sugerir fechas. Sé directo y práctico. Respondé en español. Cuando tengas toda la info, creá la tarea directamente en Supabase.
 
@@ -59,9 +66,12 @@ ${load}
 CLIENTES DE AGENCIA (id=nombre): ${agClients}
 PROYECTOS (id=nombre): ${projList}
 
+AGENDA / REUNIONES PRÓXIMAS (del Google Calendar):
+${agenda}
+
 REGLAS:
 - Pedí solo lo que falte. Si el contexto no está claro, preguntá (banco/agencia/personal).
-- Si no se menciona fecha, sugerí una razonable mirando la carga; si un día ya tiene varias tareas, avisá de la sobrecarga.
+- Si no se menciona fecha, sugerí una razonable mirando la carga Y la agenda; si ese día/horario tiene reuniones o varias tareas, avisá y proponé el bloque libre más cercano.
 - Si es agencia, preguntá si es de un cliente (usá los ids de arriba).
 - No crees tareas que suenen bien pero no aporten valor real.
 

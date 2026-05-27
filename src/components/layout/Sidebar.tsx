@@ -96,6 +96,7 @@ export function Sidebar() {
       <NavItem label="Esta semana" view="semana" count={semanaCount} />
       <NavItem label="Próxima semana" view="proxima-semana" count={proximaCount} />
       <NavItem label="Seguimiento" view="seguimiento" count={seguimientoCount} />
+      <NavItem label="Calendario" view="calendario" />
       <NavItem label="Recurrentes" view="recurrentes" />
       <NavItem label="Contactos" view="contactos" />
 

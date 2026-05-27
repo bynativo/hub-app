@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { getGreeting, todayISO, tomorrowISO, fmtHoras } from '../../lib/helpers'
+import { getGreeting, todayISO, tomorrowISO, fmtHoras, ctxColor } from '../../lib/helpers'
 import { WAITING_STATES } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
@@ -15,13 +15,21 @@ function SectionHeader({ icon, label, count }: { icon: string; label: string; co
   )
 }
 
+function fmtT(iso: string) { return new Date(iso).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) }
+
 export function Dashboard() {
   const tasks = useStore(s => s.tasks)
+  const calendarEvents = useStore(s => s.calendarEvents)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
   const active = tasks.filter(t => !t.done && !t.parent_task_id)
   const today = todayISO()
   const tomorrow = tomorrowISO()
+
+  const todayEvents = calendarEvents.filter(e => (e.starts_at || '').slice(0, 10) === today)
+    .sort((a, b) => (a.starts_at || '').localeCompare(b.starts_at || ''))
+  const busyMin = todayEvents.filter(e => !e.all_day && e.ends_at).reduce((s, e) => s + (new Date(e.ends_at as string).getTime() - new Date(e.starts_at).getTime()) / 60000, 0)
+  const freeH = Math.max(0, Math.round((720 - busyMin) / 60 * 10) / 10)
 
   const hoy = active.filter(t => t.due_date === today)
   const manana = active.filter(t => t.due_date === tomorrow)
@@ -43,6 +51,25 @@ export function Dashboard() {
         {hoy.length ? ` · ${hoy.length} para hoy` : ''}
         {seguimiento.length ? ` · ${seguimiento.length} en seguimiento` : ''}
       </p>
+
+      {/* Agenda de hoy */}
+      <div className="mb-5 max-w-[900px]">
+        <SectionHeader icon="📆" label="Agenda de hoy" count={todayEvents.length} />
+        {todayEvents.length ? (
+          <div className="flex flex-col gap-1">
+            {todayEvents.map(e => (
+              <div key={e.id} className="flex items-center gap-2.5 text-[13px] bg-bg2 border border-black/7 rounded-lg px-3 py-2">
+                <span className="font-mono text-[11px] text-gray-400 w-[92px] shrink-0">{e.all_day ? 'todo el día' : `${fmtT(e.starts_at)}${e.ends_at ? '–' + fmtT(e.ends_at) : ''}`}</span>
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: e.context ? ctxColor(e.context) : '#7c3aed' }} />
+                <span className="flex-1 leading-snug">{e.title}</span>
+              </div>
+            ))}
+            <div className="text-[11px] text-gray-400 pl-1 mt-0.5">~{freeH}h libres entre reuniones (8–20h)</div>
+          </div>
+        ) : (
+          <div className="text-[12px] text-gray-400 italic pl-1">Sin reuniones hoy · día libre para enfocarte.</div>
+        )}
+      </div>
 
       {/* Toggle Lista / Kanban */}
       <div className="flex items-center gap-2 mb-4">

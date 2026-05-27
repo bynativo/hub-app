@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from './supabase'
 import { WAITING_STATES } from './constants'
-import type { Task, Project, Client, Recurrente, Presentation, Contact } from './types'
+import type { Task, Project, Client, Recurrente, Presentation, Contact, CalendarEvent } from './types'
 
 interface AppState {
   tasks: Task[]
@@ -10,6 +10,7 @@ interface AppState {
   recurrentes: Recurrente[]
   presentations: Presentation[]
   contacts: Contact[]
+  calendarEvents: CalendarEvent[]
   loading: boolean
   initialized: boolean
   activeView: string
@@ -44,6 +45,7 @@ export const useStore = create<AppState>((set, get) => ({
   recurrentes: [],
   presentations: [],
   contacts: [],
+  calendarEvents: [],
   loading: true,
   initialized: false,
   activeView: 'hoy',
@@ -60,13 +62,14 @@ export const useStore = create<AppState>((set, get) => ({
     // Solo el loader de pantalla completa en la carga inicial; los refrescos
     // tras una mutación son silenciosos (no desmontan el árbol ni resetean estado).
     if (!get().initialized) set({ loading: true })
-    const [tc, pc, cc, rc, prc, ct] = await Promise.all([
+    const [tc, pc, cc, rc, prc, ct, ce] = await Promise.all([
       supabase.from('tasks').select('*,projects(name,color),clients(name,email)').order('created_at', { ascending: false }),
       supabase.from('projects').select('*,clients(name)').order('created_at', { ascending: false }),
       supabase.from('clients').select('*').eq('active', true).order('name'),
       supabase.from('recurrentes').select('*,clients(name)').eq('active', true),
       supabase.from('presentations').select('*').order('created_at', { ascending: false }),
       supabase.from('contacts').select('*').order('name'),
+      supabase.from('calendar_events').select('*').order('starts_at'),
     ])
     set({
       tasks: tc.data || [],
@@ -75,6 +78,7 @@ export const useStore = create<AppState>((set, get) => ({
       recurrentes: rc.data || [],
       presentations: prc.data || [],
       contacts: ct.data || [],
+      calendarEvents: ce.data || [],
       loading: false,
       initialized: true,
     })
