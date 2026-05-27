@@ -121,6 +121,19 @@ export function stripPrefix(title: string): string {
   return splitTitle(title).name
 }
 
+// Badge según el tipo de publicación de contenido (influencer/colab). null = producción propia.
+export function pubTypeBadge(pt: string | null): { label: string; color: string } | null {
+  if (pt === 'colab_ig') return { label: 'Colab', color: '#7c3aed' }
+  if (pt === 'tiktok_propia') return { label: 'Influencer', color: '#e1306c' }
+  if (pt === 'cuenta_influencer') return { label: 'Influencer externo', color: '#e1306c' }
+  return null
+}
+
+// Una pieza "va a grilla" (producible) salvo la que se publica desde la cuenta del influencer.
+export function vaAGrilla(pt: string | null): boolean {
+  return pt !== 'cuenta_influencer'
+}
+
 // Contenido: la entrega (due) debe ser al menos 24h antes de la publicación.
 // Devuelve la fecha mínima sugerida de entrega si NO se cumple; null si está OK o faltan datos.
 export function deliveryWarning(due: string | null, publish: string | null): string | null {

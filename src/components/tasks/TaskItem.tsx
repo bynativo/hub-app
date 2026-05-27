@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel, fmtHoras, splitTitle } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 
@@ -96,6 +96,12 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
 
             {task.publish_date && (
               <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">📅 Pub {task.publish_date.slice(5).replace('-', '/')}</Tag>
+            )}
+
+            {pubTypeBadge(task.content_pub_type) && (
+              <Tag bg={pubTypeBadge(task.content_pub_type)!.color + '14'} color={pubTypeBadge(task.content_pub_type)!.color}>
+                {pubTypeBadge(task.content_pub_type)!.label}{task.influencer_handle ? ` ${task.influencer_handle}` : ''}
+              </Tag>
             )}
 
             {task.estimated_hours != null && (

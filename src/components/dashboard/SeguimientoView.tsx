@@ -104,7 +104,11 @@ function FollowupCard({ task }: { task: Task }) {
             )}
           </div>
           {isContentDue && (
-            <div className="text-[12px] text-claude mt-1.5">Hoy vence la entrega de este contenido — ¿ya está listo?</div>
+            <div className="text-[12px] text-claude mt-1.5">
+              {task.influencer_name
+                ? `Hoy la agencia debe entregar el contenido del influencer ${task.influencer_name}`
+                : 'Hoy vence la entrega de este contenido — ¿ya está listo?'}
+            </div>
           )}
         </div>
       </div>

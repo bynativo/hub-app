@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
-import { ESTADOS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
+import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES } from '../../lib/constants'
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
@@ -139,6 +139,10 @@ export function TaskDetail() {
   const [priority, setPriority] = useState('media')
   const [dueDate, setDueDate] = useState('')
   const [publishDate, setPublishDate] = useState('')
+  const [pubType, setPubType] = useState('propia')
+  const [infName, setInfName] = useState('')
+  const [infHandle, setInfHandle] = useState('')
+  const [infAgency, setInfAgency] = useState('')
   const [notes, setNotes] = useState('')
   const [delegatedTo, setDelegatedTo] = useState('')
   const [origin, setOrigin] = useState('propia')
@@ -175,6 +179,7 @@ export function TaskDetail() {
     if (!task) return
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
     setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || '')
+    setPubType(task.content_pub_type || 'propia'); setInfName(task.influencer_name || ''); setInfHandle(task.influencer_handle || ''); setInfAgency(task.influencer_agency || '')
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
@@ -213,6 +218,10 @@ export function TaskDetail() {
     await updateTask(task.id, {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
       publish_date: isContent ? (publishDate || null) : null,
+      content_pub_type: isContent ? pubType : null,
+      influencer_name: isContent ? (infName.trim() || null) : null,
+      influencer_handle: isContent ? (infHandle.trim() || null) : null,
+      influencer_agency: isContent ? (infAgency.trim() || null) : null,
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
     })
@@ -524,6 +533,30 @@ Reglas del bloque:
                   <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5 mt-1.5">
                     ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
                   </div>
+                )}
+              </div>
+            )}
+
+            {isContent && (
+              <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Influencer / tipo de publicación</div>
+                <div>
+                  <label className={labelCls}>Tipo de publicación</label>
+                  <select value={pubType} onChange={e => setInfo(setPubType, e.target.value)} className={fieldCls}>
+                    {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                  </select>
+                </div>
+                {pubType !== 'propia' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><label className={labelCls}>Influencer</label>
+                        <input value={infName} onChange={e => setInfo(setInfName, e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
+                      <div><label className={labelCls}>Handle / cuenta</label>
+                        <input value={infHandle} onChange={e => setInfo(setInfHandle, e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
+                    </div>
+                    <div><label className={labelCls}>Agencia que lo gestiona</label>
+                      <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
+                  </>
                 )}
               </div>
             )}

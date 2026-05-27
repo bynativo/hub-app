@@ -4,6 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning } from '../../lib/helpers'
+import { PUB_TYPES } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
 import type { Client, Project, Task } from '../../lib/types'
@@ -309,6 +310,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [requestedAt, setRequestedAt] = useState(todayISO())
   const [publishDate, setPublishDate] = useState('')
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
+  const [isInfluencer, setIsInfluencer] = useState(false)
+  const [pubType, setPubType] = useState('colab_ig')
+  const [infName, setInfName] = useState('')
+  const [infHandle, setInfHandle] = useState('')
+  const [infAgency, setInfAgency] = useState('')
   const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
   const [isReminder, setIsReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
@@ -370,6 +376,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
       publish_date: (!reminder && isContent) ? (publishDate || null) : null,
+      content_pub_type: isContent ? (isInfluencer ? pubType : 'propia') : null,
+      influencer_name: (isContent && isInfluencer) ? (infName.trim() || null) : null,
+      influencer_handle: (isContent && isInfluencer) ? (infHandle.trim() || null) : null,
+      influencer_agency: (isContent && isInfluencer) ? (infAgency.trim() || null) : null,
       requested_at: requestedAt || todayISO(),
       estimated_hours: emailReply ? 0.25 : estHours,
       notes: desc.trim() || null,
@@ -935,6 +945,43 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   <div className="text-[11px] text-gray-400">Se crea con task_type='contenido' y activa la vista de slide</div>
                 </div>
               </div>
+
+              {/* Influencer — solo para tareas de contenido */}
+              {isContent && (
+                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={() => setIsInfluencer(v => !v)} className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isInfluencer ? 'bg-claude' : 'bg-bg4'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isInfluencer ? 'left-5.5' : 'left-0.5'}`} />
+                    </button>
+                    <span className="text-[13px]">¿Involucra influencer externo?</span>
+                  </label>
+                  {isInfluencer && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><label className={labelCls}>Nombre del influencer</label>
+                          <input value={infName} onChange={e => setInfName(e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
+                        <div><label className={labelCls}>Handle / cuenta</label>
+                          <input value={infHandle} onChange={e => setInfHandle(e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
+                      </div>
+                      <div><label className={labelCls}>Agencia que lo gestiona (opcional)</label>
+                        <input value={infAgency} onChange={e => setInfAgency(e.target.value)} className={fieldCls} placeholder="Agencia / representante" /></div>
+                      <div>
+                        <label className={labelCls}>Tipo de publicación</label>
+                        <select value={pubType} onChange={e => setPubType(e.target.value)} className={fieldCls}>
+                          {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                        </select>
+                        <div className="text-[10px] text-gray-400 mt-1">
+                          {pubType === 'cuenta_influencer'
+                            ? 'No va a la grilla; aparece en el calendario con filtro "Influencers externos".'
+                            : pubType === 'colab_ig' ? 'Va a la grilla con badge "Colab".'
+                            : pubType === 'tiktok_propia' ? 'Va a la grilla con badge "Influencer".'
+                            : 'Va a la grilla normalmente.'}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="mb-4">
                 <label className={labelCls}>Descripción (opcional)</label>

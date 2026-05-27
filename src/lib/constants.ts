@@ -86,8 +86,12 @@ export const PLAT_META: Record<string, { label: string; css: string; color: stri
   youtube_shorts: { label: 'YT Shorts', css: 'yt', color: '#ff0000' },
   facebook: { label: 'Facebook', css: 'fb', color: '#1877f2' },
   x: { label: 'X', css: 'x', color: '#333' },
+  linkedin: { label: 'LinkedIn', css: 'li', color: '#0a66c2' },
   anuncio_pauta: { label: 'Pauta', css: 'pauta', color: '#7c3aed' },
 }
+
+// Plataformas de contenido disponibles en todo el sistema
+export const PLATAFORMAS_CONTENIDO = ['ig_feed', 'ig_story', 'ig_reels', 'tiktok', 'youtube', 'facebook', 'x', 'linkedin']
 
 export const TIPO_META: Record<string, { label: string }> = {
   video: { label: 'Video' },
@@ -110,7 +114,15 @@ export const REDES: { v: string; label: string; color: string }[] = [
   { v: 'linkedin', label: 'LinkedIn', color: '#0a66c2' },
 ]
 
-export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab']
+export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab', 'IG Story']
+
+// Tipo de publicación de una pieza de contenido (define grilla/calendario e influencer)
+export const PUB_TYPES: { v: string; label: string }[] = [
+  { v: 'propia', label: 'Producción propia' },
+  { v: 'colab_ig', label: 'Colab IG' },
+  { v: 'tiktok_propia', label: 'TikTok para nuestra cuenta' },
+  { v: 'cuenta_influencer', label: 'Desde cuenta del influencer' },
+]
 
 // Tipos de proyecto de agencia
 export const TIPO_AGENCIA = ['Marca', 'Proyecto puntual', 'Presupuesto nuevo cliente']

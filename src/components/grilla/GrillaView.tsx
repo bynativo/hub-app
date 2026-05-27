@@ -2,7 +2,24 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { REDES } from '../../lib/constants'
 import { useStore } from '../../lib/store'
-import { ctxLabel, ctxColor } from '../../lib/helpers'
+import { ctxLabel, ctxColor, pubTypeBadge } from '../../lib/helpers'
+
+const PUB_FILTERS: { v: string; label: string }[] = [
+  { v: 'all', label: 'Todo' },
+  { v: 'interno', label: 'Contenido interno' },
+  { v: 'colab', label: 'Colab' },
+  { v: 'externos', label: 'Influencers externos' },
+  { v: 'interno_colab', label: 'Interno + Colab' },
+]
+
+function pubMatches(pt: string | null, filter: string): boolean {
+  const t = pt || 'propia'
+  if (filter === 'interno') return t === 'propia'
+  if (filter === 'colab') return t === 'colab_ig'
+  if (filter === 'externos') return t === 'cuenta_influencer'
+  if (filter === 'interno_colab') return t === 'propia' || t === 'colab_ig'
+  return true // 'all'
+}
 import type { Slide } from '../../lib/types'
 
 type GSlide = Slide & { presentations?: { title: string; kv_color: string; context: string; client_id: number | null } | null }
@@ -11,11 +28,12 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
   const clients = useStore(s => s.clients)
   const [redFilter, setRedFilter] = useState('all')
   const [clientFilter, setClientFilter] = useState<'all' | 'interna' | number>('all')
+  const [pubFilter, setPubFilter] = useState('all')
   const [slides, setSlides] = useState<GSlide[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { loadGrilla() }, [])
-  useEffect(() => { setClientFilter('all'); setRedFilter('all') }, [context])
+  useEffect(() => { setClientFilter('all'); setRedFilter('all'); setPubFilter('all') }, [context])
 
   async function loadGrilla() {
     setLoading(true)
@@ -43,6 +61,7 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
       return s.presentations?.client_id === clientFilter
     })
     .filter(s => redFilter === 'all' || (s.redes || []).includes(redFilter))
+    .filter(s => pubMatches(s.content_pub_type, pubFilter))
 
   // Agrupar por fecha
   const byDate: Record<string, GSlide[]> = {}
@@ -87,6 +106,17 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
           ))}
         </div>
       )}
+
+      {/* Filtro por tipo de publicación (interno / colab / influencers externos) */}
+      <div className="flex gap-2 mb-3 flex-wrap items-center">
+        <span className="text-xs text-gray-500 font-mono">Tipo:</span>
+        {PUB_FILTERS.map(f => (
+          <button key={f.v} onClick={() => setPubFilter(f.v)}
+            className={`text-[11px] font-mono px-2.5 py-1 rounded-full border cursor-pointer transition-all ${pubFilter === f.v ? 'border-claude/30 bg-claude/10 text-claude font-semibold' : 'border-black/7 text-gray-400 bg-bg3 hover:border-black/13'}`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       {/* Filtro por red */}
       <div className="flex gap-2 mb-3.5 flex-wrap items-center">
@@ -150,6 +180,11 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
                         <div className="text-[13px] font-medium leading-snug mb-1">{s.title}</div>
                         <div className="flex gap-1.5 flex-wrap items-center">
                           {s.formato && <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-blue-600/10 text-blue-600">{s.formato}</span>}
+                          {pubTypeBadge(s.content_pub_type) && (
+                            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded" style={{ background: pubTypeBadge(s.content_pub_type)!.color + '18', color: pubTypeBadge(s.content_pub_type)!.color }}>
+                              {pubTypeBadge(s.content_pub_type)!.label}{s.influencer_handle ? ` · ${s.influencer_handle}` : ''}
+                            </span>
+                          )}
                           {s.presentations?.client_id && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{clients.find(c => c.id === s.presentations!.client_id)?.name || 'cliente'}</span>
                           )}

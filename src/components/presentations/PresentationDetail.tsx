@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
-import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS } from '../../lib/constants'
-import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning } from '../../lib/helpers'
+import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS, PUB_TYPES } from '../../lib/constants'
+import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning, pubTypeBadge } from '../../lib/helpers'
 import type { Slide, Task } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
@@ -125,6 +125,7 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, title: t.title, task_id: t.id, position: (count || 0) + 1,
       fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, grilla_date: t.publish_date,
+      content_pub_type: t.content_pub_type || 'propia', influencer_name: t.influencer_name, influencer_handle: t.influencer_handle,
     }).select().single()
     if (error || !data) { alert('Error creando slide: ' + error?.message); return }
     setSlides(prev => [...prev, data as Slide])
@@ -324,6 +325,12 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   <div className="text-[10px] font-mono text-gray-400 mb-0.5">#{slide.position || activeIdx + 1} · {pres.month_label}</div>
                   <div className="text-xl font-medium leading-snug mb-2" style={{ color: kv }}>{slide.title}</div>
                   <div className="flex gap-1.5 items-center flex-wrap">
+                    {pubTypeBadge(slide.content_pub_type) && (
+                      <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full font-medium"
+                        style={{ background: pubTypeBadge(slide.content_pub_type)!.color + '18', color: pubTypeBadge(slide.content_pub_type)!.color }}>
+                        {pubTypeBadge(slide.content_pub_type)!.label}{slide.influencer_handle ? ` · ${slide.influencer_handle}` : ''}
+                      </span>
+                    )}
                     <span className={`text-[11px] font-mono px-2.5 py-0.5 rounded-full border font-medium ${PROD_CSS[slide.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
                       🎬 {slide.status_prod || 'Pendiente'}
                     </span>
@@ -419,6 +426,8 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                     { k: 'Campaña', v: (slide as Record<string, any>)['campaña'] || (slide as Record<string, any>)['campaña_nombre'] || '' },
                     { k: 'Formato', v: slide.formato ? `${slide.formato}${slide.formato === 'Colab' && slide.colab_nombre ? ` · ${slide.colab_nombre}` : ''}` : '' },
                     { k: 'Redes', v: (slide.redes || []).map(r => REDES.find(x => x.v === r)?.label || r).join(' · ') },
+                    { k: 'Influencer', v: (slide.influencer_name || slide.influencer_handle) ? `${slide.influencer_name || ''}${slide.influencer_handle ? ` (${slide.influencer_handle})` : ''}`.trim() : '' },
+                    { k: 'Publicación', v: (slide.content_pub_type && slide.content_pub_type !== 'propia') ? (PUB_TYPES.find(p => p.v === slide.content_pub_type)?.label || '') : '' },
                     { k: 'Responsable', v: slide.responsable || '' },
                   ].filter(r => r.v).map(row => (
                     <div key={row.k} className="flex border-b border-black/7">
@@ -797,6 +806,11 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   </div>
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Tarea de contenido</span>
+                    {pubTypeBadge(t.content_pub_type) && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: pubTypeBadge(t.content_pub_type)!.color + '18', color: pubTypeBadge(t.content_pub_type)!.color }}>
+                        {pubTypeBadge(t.content_pub_type)!.label}{t.influencer_handle ? ` · ${t.influencer_handle}` : ''}
+                      </span>
+                    )}
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: ctxColor(t.context) + '12', color: ctxColor(t.context) }}>{ctxLabel(t.context)}</span>
                     {t.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{t.clients.name}</span>}
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{t.status}</span>

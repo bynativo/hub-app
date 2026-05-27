@@ -86,6 +86,10 @@ export interface Task {
   requested_at: string | null
   context_readme: string | null
   archived_at: string | null
+  content_pub_type: string | null
+  influencer_name: string | null
+  influencer_handle: string | null
+  influencer_agency: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }
@@ -204,6 +208,9 @@ export interface Slide {
   texto_contenido: string | null
   media_url: string | null
   carrusel_archivos: string[] | null
+  content_pub_type: string | null
+  influencer_name: string | null
+  influencer_handle: string | null
   presentations?: Presentation | null
 }
 
