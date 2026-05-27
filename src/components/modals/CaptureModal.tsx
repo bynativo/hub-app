@@ -120,6 +120,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [estHours, setEstHours] = useState<number | null>(null)
   const [isReminder, setIsReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
+  const [isEmailReply, setIsEmailReply] = useState(false)
   const [desc, setDesc] = useState('')
   const [saving, setSaving] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
@@ -140,9 +141,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     if (isReminder && !reminderAt) return
     setSaving(true)
     const reminder = isReminder && !!reminderAt
+    const emailReply = isEmailReply && origin === 'gmail-agencia'
 
     let resolvedProjectId: number | null = null
-    if (!reminder && tipo === 'proyecto') {
+    if (!reminder && !emailReply && tipo === 'proyecto') {
       if (projectId === '__new__' || (!projectId && newProject.trim())) {
         const { data, error } = await supabase.from('projects').insert({
           name: newProject.trim(), context, client_id: context === 'agencia' ? clientId : null, type: 'proyecto',
@@ -160,12 +162,12 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       priority,
       origin,
       client_id: context === 'agencia' ? clientId : null,
-      project_id: resolvedProjectId,
-      parent_task_id: reminder ? null : (tipo === 'subtarea' ? parentId : null),
-      task_type: isContent ? 'contenido' : 'independiente',
+      project_id: emailReply ? null : resolvedProjectId,
+      parent_task_id: (reminder || emailReply) ? null : (tipo === 'subtarea' ? parentId : null),
+      task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
       requested_at: requestedAt || todayISO(),
-      estimated_hours: estHours,
+      estimated_hours: emailReply ? 0.25 : estHours,
       notes: desc.trim() || null,
       context_readme: desc.trim() || null,
       status: reminder ? 'Recordatorio' : 'Inbox',
@@ -409,7 +411,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {!isReminder && (<>
+              {!isReminder && !isEmailReply && (<>
               {/* Tipo / jerarquía */}
               <div className="mb-3">
                 <label className={labelCls}>Tipo</label>
@@ -482,6 +484,18 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               </div>
 
+              {origin === 'gmail-agencia' && (
+                <div className="mb-3 flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
+                  <button type="button" onClick={() => setIsEmailReply(!isEmailReply)} className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isEmailReply ? 'bg-claude' : 'bg-bg4'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isEmailReply ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                  <div>
+                    <div className="text-[13px]">✉️ Es solo una respuesta</div>
+                    <div className="text-[11px] text-gray-400">Tarea simple de responder email · 15 min, sin subtareas ni proyecto</div>
+                  </div>
+                </div>
+              )}
+
               {!isReminder && (
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
@@ -534,7 +548,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">Cancelar</button>
                 <button onClick={handleSaveTask} disabled={!title.trim() || saving || (isReminder && !reminderAt)}
                   className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                  {saving ? 'Guardando…' : isReminder ? 'Crear recordatorio' : 'Guardar tarea'}
+                  {saving ? 'Guardando…' : isReminder ? 'Crear recordatorio' : (isEmailReply && origin === 'gmail-agencia') ? 'Crear respuesta de email' : 'Guardar tarea'}
                 </button>
               </div>
             </>

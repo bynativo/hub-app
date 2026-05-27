@@ -49,8 +49,9 @@ export function daysUntil(due: string | null): number | null {
   return Math.round((d.getTime() - td.getTime()) / 86400000)
 }
 
-// Formatea horas estimadas: 2 -> "2h", 1.5 -> "1.5h"
+// Formatea horas estimadas: 0.25 -> "15min", 0.5 -> "30min", 2 -> "2h", 1.5 -> "1.5h"
 export function fmtHoras(h: number): string {
+  if (h < 1) return `${Math.round(h * 60)}min`
   return `${h % 1 === 0 ? h : h.toFixed(1)}h`
 }
 

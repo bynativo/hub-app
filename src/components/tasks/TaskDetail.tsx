@@ -164,7 +164,7 @@ export function TaskDetail() {
 
   useEffect(() => {
     if (!task) return
-    setTab('info')
+    setTab(task.task_type === 'responder_email' ? 'email' : 'info')
     setTitle(task.title); setPriority(task.priority); setDueDate(task.due_date || '')
     setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
@@ -184,12 +184,13 @@ export function TaskDetail() {
 
   const ctxStates = ESTADOS[task.context] || ESTADOS.banco
   const isContent = task.task_type === 'contenido'
+  const isEmailReply = task.task_type === 'responder_email'
   const tabs: { id: Tab; label: string }[] = [
     { id: 'info', label: '📋 Info' },
-    { id: 'subtareas', label: `✓ Subtareas${subtasks.length ? ` (${subtasks.length})` : ''}` },
+    ...(isEmailReply ? [] : [{ id: 'subtareas' as Tab, label: `✓ Subtareas${subtasks.length ? ` (${subtasks.length})` : ''}` }]),
     { id: 'checklist', label: '☑ Checklist' },
     { id: 'chat', label: '💬 Chat' },
-    { id: 'email', label: '📩 Email' },
+    { id: 'email', label: isEmailReply ? '✉️ Responder' : '📩 Email' },
     ...(isContent ? [{ id: 'slide' as Tab, label: '🎬 Slide' }] : []),
   ]
 
@@ -355,7 +356,7 @@ Reglas del bloque:
     setEmailLoading(true)
     try {
       const reply = await callClaudeProxy(
-        [{ role: 'user', content: `Redacta un email profesional sobre esta tarea.\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\nNotas: ${task.notes || 'ninguna'}\nDevuelve SOLO JSON: {"asunto":"...","cuerpo":"..."}` }],
+        [{ role: 'user', content: `Redactá ${isEmailReply ? 'la RESPUESTA a este email' : 'un email'}, profesional y humano, en español.\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\n${contextReadme ? `Contexto: ${contextReadme}\n` : ''}Email recibido / hilo:\n${notes || '(no pegado)'}\nDevolvé SOLO JSON: {"asunto":"...","cuerpo":"..."}` }],
         'Redactas emails humanos y profesionales, en español. Que no se note IA.'
       )
       const parsed = JSON.parse(reply.replace(/```json|```/g, '').trim())
@@ -539,6 +540,7 @@ Reglas del bloque:
             <div className="border-t border-black/7 pt-3 mt-1 flex flex-col gap-3">
               <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Organización · se guarda al instante</div>
 
+              {!isEmailReply && (<>
               <div>
                 <label className={labelCls}>Parte de proyecto</label>
                 <select value={task.project_id ?? ''} className={fieldCls}
@@ -556,6 +558,7 @@ Reglas del bloque:
                   {tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
                 </select>
               </div>
+              </>)}
 
               <div className="flex items-center gap-3 p-3 bg-bg2 rounded-lg border border-black/7">
                 <button onClick={async () => { const next = !isContent; await updateTask(task.id, { task_type: next ? 'contenido' : 'independiente' }); if (next) setTab('slide') }}
@@ -685,24 +688,36 @@ Reglas del bloque:
 
         {/* EMAIL */}
         {tab === 'email' && (
-          <div className="animate-fade-in">
+          <div className="animate-fade-in flex flex-col gap-3">
+            <div>
+              <label className={labelCls}>Email recibido</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                onBlur={() => updateTask(task.id, { notes: notes.trim() || null })}
+                rows={5} className={fieldCls + ' resize-y'}
+                placeholder="Pegá acá el email/hilo recibido. Claude lo usa para redactar la respuesta." />
+            </div>
+
             <button onClick={generateEmail} disabled={emailLoading}
-              className="w-full text-xs bg-claude/7 border border-claude/20 text-claude px-4 py-2.5 rounded-lg hover:bg-claude/15 cursor-pointer disabled:opacity-40 font-medium mb-4">
-              {emailLoading ? 'Redactando…' : '✦ Generar borrador con Claude'}
+              className="w-full text-xs bg-claude/7 border border-claude/20 text-claude px-4 py-2.5 rounded-lg hover:bg-claude/15 cursor-pointer disabled:opacity-40 font-medium">
+              {emailLoading ? 'Redactando…' : '✦ Redactar respuesta con Claude'}
             </button>
+
             {task.draft_body ? (
               <div>
-                <div className="space-y-2 mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-[11px] font-mono text-gray-400 w-12 uppercase">Asunto</span>
-                    <span className="text-[13px] font-medium">{task.draft_subject || '—'}</span>
-                  </div>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <span className="text-[11px] font-mono text-gray-400 w-12 uppercase">Asunto</span>
+                  <span className="text-[13px] font-medium">{task.draft_subject || '—'}</span>
                 </div>
                 <div className="bg-bg2 border border-black/7 rounded-[10px] p-3.5 text-[13px] leading-relaxed whitespace-pre-wrap">{task.draft_body}</div>
               </div>
             ) : (
-              <div className="text-center py-7 text-gray-400 text-[13px]">Sin borrador. Generá uno con Claude.</div>
+              <div className="text-center py-5 text-gray-400 text-[13px]">Aún no hay borrador. Pegá el email y redactá la respuesta.</div>
             )}
+
+            <button onClick={async () => { await updateTask(task.id, { done: true }); closeDetail() }}
+              className="self-start text-xs bg-success/10 border border-success/30 text-success px-4 py-2 rounded-lg cursor-pointer hover:bg-success/18 transition-colors">
+              ✓ Marcar respondido (cierra la tarea)
+            </button>
           </div>
         )}
 
