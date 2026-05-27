@@ -15,6 +15,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
   const [clientId, setClientId] = useState<number | null>(null)
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [noDueDate, setNoDueDate] = useState(false)
   const [status, setStatus] = useState('activo')
   const [tipoAgencia, setTipoAgencia] = useState(TIPO_AGENCIA[0])
   const [saving, setSaving] = useState(false)
@@ -24,7 +25,7 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
     setSaving(true)
     const { error } = await supabase.from('projects').insert({
       name: name.trim(), context, client_id: context === 'agencia' ? clientId : null,
-      description: description.trim() || null, due_date: dueDate || null, status, type: 'proyecto',
+      description: description.trim() || null, due_date: noDueDate ? null : (dueDate || null), status, type: 'proyecto',
       tipo_agencia: context === 'agencia' ? tipoAgencia : null,
     })
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
@@ -82,8 +83,18 @@ export function NewProjectModal({ onClose, defaultContext = 'banco' }: { onClose
         )}
 
         <div className="mb-3">
-          <label className={labelCls}>Fecha estimada</label>
-          <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />
+          <div className="flex items-center justify-between mb-1">
+            <label className={labelCls + ' mb-0'}>Fecha de término</label>
+            <button type="button" onClick={() => setNoDueDate(v => !v)} className="flex items-center gap-1.5 text-[11px] text-gray-500 cursor-pointer">
+              <span className={`w-8 h-4 rounded-full relative transition-colors ${noDueDate ? 'bg-claude' : 'bg-bg4'}`}>
+                <span className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all ${noDueDate ? 'left-[18px]' : 'left-0.5'}`} />
+              </span>
+              Sin fecha de término definida
+            </button>
+          </div>
+          {noDueDate
+            ? <div className="text-[11px] text-gray-400">El proyecto quedará como <span className="text-claude font-medium">Ongoing</span> (sin fecha de término).</div>
+            : <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fieldCls} />}
         </div>
 
         <div className="mb-4">

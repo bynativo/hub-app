@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
+import { supabase } from '../../lib/supabase'
 import { ctxColor, ctxLabel, splitTitle } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { NewProjectModal } from '../modals/NewProjectModal'
@@ -10,6 +11,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const presentations = useStore(s => s.presentations)
   const openDetail = useStore(s => s.openDetail)
   const openCapture = useStore(s => s.openCapture)
+  const loadAll = useStore(s => s.loadAll)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newOpen, setNewOpen] = useState(false)
 
@@ -66,7 +68,9 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
                 {p.tipo_agencia && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {p.tipo_agencia}</span>}
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{all.length} tareas · {pend} pendientes</span>
                 {p.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{p.clients.name}</span>}
-                {p.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {p.due_date.slice(5).replace('-', '/')}</span>}
+                {p.due_date
+                  ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {p.due_date.slice(5).replace('-', '/')}</span>
+                  : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Ongoing</span>}
               </div>
             </div>
           )
@@ -84,7 +88,9 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded capitalize" style={{ background: (STATUS_COLOR[selected.status || ''] || '#6b7280') + '14', color: STATUS_COLOR[selected.status || ''] || '#6b7280' }}>{selected.status || 'activo'}</span>
                 {selected.tipo_agencia && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {selected.tipo_agencia}</span>}
                 {selected.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{selected.clients.name}</span>}
-                {selected.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {selected.due_date}</span>}
+                {selected.due_date
+                  ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {selected.due_date}</span>
+                  : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Ongoing</span>}
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -106,6 +112,18 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
           </div>
 
           <div className="p-4">
+            {/* Fecha de término — opcional, se puede agregar o quitar en cualquier momento */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <span className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Fecha de término</span>
+              <input type="date" value={selected.due_date || ''}
+                onChange={async e => { await supabase.from('projects').update({ due_date: e.target.value || null }).eq('id', selected.id); await loadAll() }}
+                className="bg-bg2 border border-black/7 rounded-md px-2 py-1 text-xs outline-none focus:border-claude/20" />
+              {selected.due_date
+                ? <button onClick={async () => { await supabase.from('projects').update({ due_date: null }).eq('id', selected.id); await loadAll() }}
+                    className="text-[11px] text-gray-500 hover:text-danger cursor-pointer">Quitar (Ongoing)</button>
+                : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Ongoing</span>}
+            </div>
+
             <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">Tareas del proyecto</div>
             {selectedTasks.length ? (
               <div className="flex flex-col gap-1">
