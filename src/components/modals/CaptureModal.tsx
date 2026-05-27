@@ -89,12 +89,13 @@ async function extractFromImages(images: { media_type: string; data: string }[],
   return parseSuggested(await callProxy(content))
 }
 
-export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId }: {
+export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId, template }: {
   onClose: () => void
   preselectContext?: string
   preselectClientId?: number | null
   preselectProjectId?: number | null
   preselectParentId?: number | null
+  template?: { title?: string; context?: string; priority?: string; origin?: string; notes?: string | null; estimated_hours?: number | null; task_type?: string }
 }) {
   const loadAll = useStore(s => s.loadAll)
   const clients = useStore(s => s.clients)
@@ -105,23 +106,23 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const agClients = clients.filter(c => c.context === 'agencia')
 
   // ===== Tab Tarea =====
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(template?.title ?? '')
   const [tipo, setTipo] = useState<TipoTarea>(preselectParentId ? 'subtarea' : preselectProjectId ? 'proyecto' : 'independiente')
   const [parentId, setParentId] = useState<number | null>(preselectParentId ?? null)
   const [projectId, setProjectId] = useState<number | '' | '__new__'>(preselectProjectId ?? '')
   const [newProject, setNewProject] = useState('')
-  const [context, setContext] = useState(preselectContext ?? 'banco')
+  const [context, setContext] = useState(preselectContext ?? template?.context ?? 'banco')
   const [clientId, setClientId] = useState<number | null>(preselectClientId ?? null)
-  const [priority, setPriority] = useState('media')
-  const [origin, setOrigin] = useState('propia')
+  const [priority, setPriority] = useState(template?.priority ?? 'media')
+  const [origin, setOrigin] = useState(template?.origin ?? 'propia')
   const [dueDate, setDueDate] = useState('')
   const [requestedAt, setRequestedAt] = useState(todayISO())
-  const [isContent, setIsContent] = useState(false)
-  const [estHours, setEstHours] = useState<number | null>(null)
+  const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
+  const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
   const [isReminder, setIsReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
   const [isEmailReply, setIsEmailReply] = useState(false)
-  const [desc, setDesc] = useState('')
+  const [desc, setDesc] = useState(template?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
 

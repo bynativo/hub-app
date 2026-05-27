@@ -22,8 +22,11 @@ interface AppState {
   captureContext: string | null
   captureProjectId: number | null
   pendingFollowupTaskId: number | null
+  searchOpen: boolean
 
   loadAll: () => Promise<void>
+  openSearch: () => void
+  closeSearch: () => void
   setView: (view: string) => void
   setActiveClient: (id: number | null) => void
   openDetail: (id: number) => void
@@ -57,6 +60,10 @@ export const useStore = create<AppState>((set, get) => ({
   captureContext: null,
   captureProjectId: null,
   pendingFollowupTaskId: null,
+  searchOpen: false,
+
+  openSearch: () => set({ searchOpen: true }),
+  closeSearch: () => set({ searchOpen: false }),
 
   loadAll: async () => {
     // Solo el loader de pantalla completa en la carga inicial; los refrescos

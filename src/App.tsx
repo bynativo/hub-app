@@ -17,6 +17,7 @@ import { PresentationDetail } from './components/presentations/PresentationDetai
 import { GrillaView } from './components/grilla/GrillaView'
 import { CaptureModal } from './components/modals/CaptureModal'
 import { FollowupModal } from './components/modals/FollowupModal'
+import { SearchModal } from './components/modals/SearchModal'
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -28,9 +29,20 @@ export default function App() {
   const captureClientId = useStore(s => s.captureClientId)
   const captureProjectId = useStore(s => s.captureProjectId)
   const closeCapture = useStore(s => s.closeCapture)
+  const searchOpen = useStore(s => s.searchOpen)
+  const openSearch = useStore(s => s.openSearch)
+  const closeSearch = useStore(s => s.closeSearch)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openSearch])
 
   if (loading) {
     return (
@@ -101,6 +113,8 @@ export default function App() {
       {openPresId !== null && (
         <PresentationDetail presId={openPresId} onClose={() => setOpenPresId(null)} />
       )}
+
+      {searchOpen && <SearchModal onClose={closeSearch} onOpenPres={setOpenPresId} />}
     </>
   )
 }
