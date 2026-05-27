@@ -20,7 +20,8 @@ export function WeekView({ range }: { range: 'esta' | 'proxima' }) {
     ? { from: todayISO(), to: addDaysISO(todayISO(), 7), title: 'Esta semana' }
     : { ...nextWeekRange(), title: 'Próxima semana' }
 
-  const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
+  // Incluye subtareas: tienen su propio due_date y deben aparecer en el día que vencen.
+  const active = tasks.filter(t => !t.done && !t.es_recordatorio && !t.archived_at)
   const weekTasks = active.filter(t => t.due_date && t.due_date >= from && t.due_date <= to)
 
   // Agrupar por día (solo días con tareas)
@@ -50,7 +51,7 @@ export function WeekView({ range }: { range: 'esta' | 'proxima' }) {
       </div>
 
       {mode === 'kanban' ? (
-        <KanbanBoard items={weekTasks} />
+        <KanbanBoard items={weekTasks.filter(t => !t.parent_task_id)} />
       ) : !days.length ? (
         <div className="text-center py-10 text-gray-400 text-[13px]">Sin tareas con fecha en este rango.</div>
       ) : (

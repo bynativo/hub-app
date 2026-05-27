@@ -66,14 +66,16 @@ export function Sidebar() {
     })
   }
 
+  // Contadores por fecha: incluyen subtareas (tienen due_date propio), igual que las vistas.
+  const dated = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio)
   const today = todayISO()
-  const hoyCount = active.filter(t => t.due_date === today).length
-  const semanaCount = active.filter(t => {
+  const hoyCount = dated.filter(t => t.due_date === today).length
+  const semanaCount = dated.filter(t => {
     const d = daysUntil(t.due_date)
     return d !== null && d >= 0 && d <= 7
   }).length
   const pw = nextWeekRange()
-  const proximaCount = active.filter(t => t.due_date && t.due_date >= pw.from && t.due_date <= pw.to).length
+  const proximaCount = dated.filter(t => t.due_date && t.due_date >= pw.from && t.due_date <= pw.to).length
   const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length
 
   const ctxCount = (ctx: string) => active.filter(t => t.context === ctx && !t.es_recordatorio).length

@@ -23,6 +23,9 @@ export function Dashboard() {
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
   const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at)
+  // Vistas por fecha: incluyen subtareas, que tienen su propio due_date. Comparamos
+  // contra la fecha LOCAL del usuario (todayISO/tomorrowISO), no UTC.
+  const dated = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio)
   const today = todayISO()
   const tomorrow = tomorrowISO()
 
@@ -31,8 +34,8 @@ export function Dashboard() {
   const busyMin = todayEvents.filter(e => !e.all_day && e.ends_at).reduce((s, e) => s + (new Date(e.ends_at as string).getTime() - new Date(e.starts_at).getTime()) / 60000, 0)
   const freeH = Math.max(0, Math.round((720 - busyMin) / 60 * 10) / 10)
 
-  const hoy = active.filter(t => t.due_date === today)
-  const manana = active.filter(t => t.due_date === tomorrow)
+  const hoy = dated.filter(t => t.due_date === today)
+  const manana = dated.filter(t => t.due_date === tomorrow)
   const seguimiento = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status))
   const horasHoy = hoy.reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
 
