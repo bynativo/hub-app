@@ -253,6 +253,15 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 
 ## Changelog
 
+### 2026-05-27 — Sesion 12: Parser local del formato estructurado en Capturar/Notas
+
+`src/lib/notesParser.ts` (`parseStructuredNotes`): entiende el formato que Claude genera en otros chats — `BF/INF | Título  Tipo: … | Prioridad: … | Entrega: … | Estimado: … — desc`, en una línea o con la metadata en líneas separadas (parseo por bloques).
+
+- **Sin API:** si el texto pegado trae ese patrón (prefijo + alguna metadata), se parsea local (0 tokens) y se pre-rellenan los formularios; si no, cae a Claude. Fechas en español/relativas y estimados (3h/30min) se parsean localmente.
+- **Updates:** si una tarea menciona renombrar/ajustar/cambiar/actualizar y hay una existente parecida (mismo contexto, match por título normalizado), se ofrece "Actualizar existente" / "Crear nueva" (UPDATE vs INSERT).
+- **Proyecto:** encabezados `PROYECTO …`/`FASE …` se detectan → se crea el proyecto primero y las tareas se vinculan por project_id; la fase queda en la descripción. Banner editable para confirmar/renombrar.
+- **Lote:** "Crear todas (N)" y "Revisar una por una" (stepper).
+
 ### 2026-05-27 — Sesion 11: Proyectos como tarea padre, proyectos en agencia (+internos), editar/eliminar proyectos + fix tareas invisibles
 
 - **FIX CRÍTICO — tareas invisibles en toda la app:** existen dos FKs entre tasks y projects (tasks.project_id→projects y projects.task_id→tasks), así que el embed `projects(name,color)` de `loadAll` era ambiguo → PostgREST devolvía error PGRST201 → `tasks: tc.data || []` quedaba en []. Desambiguado con `projects!tasks_project_id_fkey(...)`. Además `loadAll` ahora loguea errores (antes el fallo era silencioso).
