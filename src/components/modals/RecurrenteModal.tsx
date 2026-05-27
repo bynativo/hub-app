@@ -1,45 +1,56 @@
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
+import type { Recurrente } from '../../lib/types'
 
 const DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
 
-export function RecurrenteModal({ onClose, preselectContext, preselectClientId }: {
+export function RecurrenteModal({ onClose, preselectContext, preselectClientId, recurrente }: {
   onClose: () => void
   preselectContext?: string
   preselectClientId?: number | null
+  recurrente?: Recurrente
 }) {
+  const isEdit = !!recurrente
   const loadAll = useStore(s => s.loadAll)
   const clients = useStore(s => s.clients)
-  const [title, setTitle] = useState('')
-  const [context, setContext] = useState(preselectContext ?? 'banco')
-  const [clientId, setClientId] = useState<number | null>(preselectClientId ?? null)
+  const [title, setTitle] = useState(recurrente?.title ?? '')
+  const [context, setContext] = useState(recurrente?.context ?? preselectContext ?? 'banco')
+  const [clientId, setClientId] = useState<number | null>(recurrente?.client_id ?? preselectClientId ?? null)
   const agClients = clients.filter(c => c.context === 'agencia')
-  const [freq, setFreq] = useState('mensual')
-  const [dayOfMonth, setDayOfMonth] = useState('1')
-  const [weekday, setWeekday] = useState('lunes')
-  const [notes, setNotes] = useState('')
+  const [freq, setFreq] = useState(recurrente?.freq ?? 'mensual')
+  // El día de la semana (semanal) se guarda en day_of_month, igual que en la vista.
+  const [dayOfMonth, setDayOfMonth] = useState(recurrente && recurrente.freq !== 'semanal' ? recurrente.day_of_month : '1')
+  const [weekday, setWeekday] = useState(recurrente && recurrente.freq === 'semanal' ? recurrente.day_of_month : 'lunes')
+  const [notes, setNotes] = useState(recurrente?.description ?? '')
   const [saving, setSaving] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   async function handleSave() {
     if (!title.trim()) return
     setSaving(true)
-    const { error } = await supabase.from('recurrentes').insert({
+    const row = {
       title: title.trim(),
       context,
       client_id: context === 'agencia' ? clientId : null,
       freq,
       day_of_month: freq === 'semanal' ? weekday : dayOfMonth,
-      priority: 'media',
-      active: true,
-      cats: [],
-      time_minutes: 60,
-    })
-    if (error) {
-      alert('Error: ' + error.message)
-      setSaving(false)
-      return
+      description: notes.trim() || null,
     }
+    const { error } = isEdit
+      ? await supabase.from('recurrentes').update(row).eq('id', recurrente!.id)
+      : await supabase.from('recurrentes').insert({ ...row, priority: 'media', active: true, cats: [], time_minutes: 60 })
+    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    await loadAll()
+    onClose()
+  }
+
+  async function handleDelete() {
+    if (!recurrente) return
+    setDeleting(true)
+    const { error } = await supabase.from('recurrentes').delete().eq('id', recurrente.id)
+    if (error) { alert('Error: ' + error.message); setDeleting(false); return }
     await loadAll()
     onClose()
   }
@@ -47,7 +58,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId }
   return (
     <div className="fixed inset-0 bg-black/40 z-[300] flex items-start justify-center pt-8 overflow-y-auto backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-bg2 border border-black/7 rounded-2xl p-6 w-[520px] max-w-[96vw] mb-10 shadow-lg">
-        <div className="font-serif text-xl font-light mb-4">Nueva recurrente</div>
+        <div className="font-serif text-xl font-light mb-4">{isEdit ? 'Editar recurrente' : 'Nueva recurrente'}</div>
 
         <div className="mb-3">
           <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Titulo *</label>
@@ -133,19 +144,42 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId }
           />
         </div>
 
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!title.trim() || saving}
-            className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving ? 'Guardando...' : 'Crear recurrente'}
-          </button>
+        <div className="flex gap-2 justify-between items-center">
+          {isEdit ? (
+            <button onClick={() => setConfirmDel(true)}
+              className="text-xs text-danger bg-danger/7 border border-danger/25 px-4 py-2 rounded-lg hover:bg-danger/15 transition-colors cursor-pointer">
+              🗑 Eliminar recurrente
+            </button>
+          ) : <span />}
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!title.trim() || saving}
+              className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear recurrente'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {confirmDel && recurrente && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmDel(false) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[400px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">Eliminar recurrente</div>
+            <p className="text-[13px] text-gray-500 mb-4">¿Eliminar esta recurrente permanentemente? "<span className="font-medium text-gray-700">{recurrente.title}</span>" no se puede recuperar.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDel(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
+              <button onClick={handleDelete} disabled={deleting} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer disabled:opacity-40">
+                {deleting ? 'Eliminando…' : 'Eliminar permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

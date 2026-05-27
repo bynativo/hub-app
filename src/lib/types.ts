@@ -230,5 +230,6 @@ export interface Recurrente {
   priority: string
   active: boolean
   created_at: string
+  description: string | null
   clients?: { name: string } | null
 }

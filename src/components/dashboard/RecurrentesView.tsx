@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { ctxColor, ctxLabel } from '../../lib/helpers'
 import { RecurrenteModal } from '../modals/RecurrenteModal'
+import type { Recurrente } from '../../lib/types'
 
 function freqDetail(r: { freq: string; day_of_month: string }) {
   if (r.freq === 'diaria') return 'Todos los días'
@@ -15,6 +16,7 @@ export function RecurrentesView({ context }: { context?: string } = {}) {
   const recurrentes = useStore(s => s.recurrentes)
   const clients = useStore(s => s.clients)
   const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Recurrente | null>(null)
   const [ctxFilter, setCtxFilter] = useState('all')
   const [clientFilter, setClientFilter] = useState<number | 'all'>('all')
 
@@ -87,7 +89,8 @@ export function RecurrentesView({ context }: { context?: string } = {}) {
 
       <div className="flex flex-col gap-2 max-w-[760px]">
         {sorted.map(r => (
-          <div key={r.id} className="bg-bg2 border border-black/7 rounded-xl p-3.5 shadow-sm flex items-start gap-3">
+          <div key={r.id} onClick={() => setEditing(r)}
+            className="bg-bg2 border border-black/7 rounded-xl p-3.5 shadow-sm flex items-start gap-3 cursor-pointer hover:border-black/13 hover:shadow-md transition-all">
             <div className="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style={{ background: ctxColor(r.context) }} title={ctxLabel(r.context)} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 mb-1">
@@ -111,6 +114,7 @@ export function RecurrentesView({ context }: { context?: string } = {}) {
       </div>
 
       {modalOpen && <RecurrenteModal onClose={() => setModalOpen(false)} preselectContext={context} />}
+      {editing && <RecurrenteModal onClose={() => setEditing(null)} recurrente={editing} />}
     </div>
   )
 }

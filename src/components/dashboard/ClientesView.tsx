@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { REDES } from '../../lib/constants'
 import { RecurrenteModal } from '../modals/RecurrenteModal'
 import { QuickClientModal } from '../modals/QuickClientModal'
+import type { Recurrente } from '../../lib/types'
 
 interface ClientForm {
   name: string
@@ -32,6 +33,7 @@ export function ClientesView() {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [recurrenteOpen, setRecurrenteOpen] = useState(false)
+  const [editingRec, setEditingRec] = useState<Recurrente | null>(null)
   const [newClientOpen, setNewClientOpen] = useState(false)
 
   const agClients = clients.filter(c => c.context === 'agencia')
@@ -302,7 +304,8 @@ export function ClientesView() {
             {clientRecurrentes.length ? (
               <div className="flex flex-col gap-1.5">
                 {clientRecurrentes.map(r => (
-                  <div key={r.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-black/7 bg-bg3">
+                  <div key={r.id} onClick={() => setEditingRec(r)}
+                    className="flex items-center gap-2 p-2.5 rounded-lg border border-black/7 bg-bg3 cursor-pointer hover:border-black/13 hover:shadow-sm transition-all">
                     <span className="text-[13px] flex-1">{r.title}</span>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{r.freq}</span>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">
@@ -320,6 +323,9 @@ export function ClientesView() {
 
       {recurrenteOpen && selected && (
         <RecurrenteModal onClose={() => setRecurrenteOpen(false)} preselectContext="agencia" preselectClientId={selected.id} />
+      )}
+      {editingRec && (
+        <RecurrenteModal onClose={() => setEditingRec(null)} recurrente={editingRec} />
       )}
       {newClientOpen && (
         <QuickClientModal onClose={() => setNewClientOpen(false)} onCreated={id => setSelectedId(id)} />
