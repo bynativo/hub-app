@@ -22,7 +22,7 @@ export function Dashboard() {
   const calendarEvents = useStore(s => s.calendarEvents)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
-  const active = tasks.filter(t => !t.done && !t.parent_task_id)
+  const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at)
   const today = todayISO()
   const tomorrow = tomorrowISO()
 

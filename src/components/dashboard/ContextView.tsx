@@ -9,7 +9,7 @@ export function ContextView({ context }: { context: string }) {
   const { tasks, activeClientId } = useStore()
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
-  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio)
+  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
   const filtered = context === 'agencia' && activeClientId
     ? active.filter(t => t.client_id === activeClientId)
     : active

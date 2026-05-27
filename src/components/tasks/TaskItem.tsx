@@ -19,7 +19,7 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
   const due = fmtDue(task.due_date)
   const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
   // Subtareas (un nivel) — colapsadas por defecto; solo se ven al expandir la padre.
-  const children = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done)
+  const children = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
   const hasChildren = children.length > 0
   const isEmail = task.task_type === 'responder_email'
 

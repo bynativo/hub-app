@@ -35,7 +35,7 @@ export function CalendarView() {
 
   const eventsOfDay = (iso: string) => events.filter(e => (e.starts_at || '').slice(0, 10) === iso)
     .sort((a, b) => (a.starts_at || '').localeCompare(b.starts_at || ''))
-  const tasksOfDay = (iso: string) => tasks.filter(t => !t.done && !t.parent_task_id && t.due_date === iso)
+  const tasksOfDay = (iso: string) => tasks.filter(t => !t.done && !t.parent_task_id && t.due_date === iso && !t.archived_at)
 
   function freeGaps(iso: string, dayEvents: CalendarEvent[]) {
     const slots = dayEvents.filter(e => !e.all_day && e.ends_at)

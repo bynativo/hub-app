@@ -55,7 +55,7 @@ function CollapsibleHeader({ label, color, open, onToggle }: { label: string; co
 export function Sidebar() {
   const tasks = useStore(s => s.tasks)
   const openCapture = useStore(s => s.openCapture)
-  const active = tasks.filter(t => !t.done && !t.parent_task_id)
+  const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at)
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed)
   function toggle(key: string) {

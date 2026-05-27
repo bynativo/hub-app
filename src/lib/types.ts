@@ -78,6 +78,7 @@ export interface Task {
   recordatorio_at: string | null
   requested_at: string | null
   context_readme: string | null
+  archived_at: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }

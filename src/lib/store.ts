@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from './supabase'
-import { WAITING_STATES } from './constants'
+import { WAITING_STATES, CLOSING_STATES } from './constants'
 import type { Task, Project, Client, Recurrente, Presentation, Contact, CalendarEvent } from './types'
 
 interface AppState {
@@ -105,8 +105,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateTaskStatus: async (id, status) => {
     const prev = get().tasks.find(t => t.id === id)
-    await supabase.from('tasks').update({ status }).eq('id', id)
-    set({ tasks: get().tasks.map(t => t.id === id ? { ...t, status } : t) })
+    // Al pasar a un estado de cierre se archiva; al reabrir se desarchiva.
+    const archived_at = CLOSING_STATES.includes(status) ? new Date().toISOString() : null
+    await supabase.from('tasks').update({ status, archived_at }).eq('id', id)
+    set({ tasks: get().tasks.map(t => t.id === id ? { ...t, status, archived_at } : t) })
     // Si la tarea entra a un estado "Esperando" (y no lo estaba), pedir alarma de seguimiento
     const wasWaiting = prev ? WAITING_STATES.includes(prev.status) : false
     if (WAITING_STATES.includes(status) && !wasWaiting) {

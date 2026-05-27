@@ -58,6 +58,9 @@ export const KANBAN_GROUPS: { key: string; label: string; statuses: string[] }[]
 // Estados que disparan alarma de seguimiento ("Esperando")
 export const WAITING_STATES = ['Delegado', 'Pend. validación', 'En revisión cliente', 'Bloqueado']
 
+// Estados de cierre: al pasar a uno de estos, la tarea se archiva (archived_at) y se oculta de las vistas
+export const CLOSING_STATES = ['Cerrado', 'Entregado', 'Descartado']
+
 export const STATUS_ICON: Record<string, string> = {
   Inbox: '○', Trabajando: '▶', 'Pend. validación': '⌛', Cerrado: '✓',
   Propuesta: '◎', 'En ejecución': '▶', 'Revisión interna': '◐',

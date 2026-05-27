@@ -126,7 +126,7 @@ function FollowupCard({ task }: { task: Task }) {
 
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
-  const waiting = tasks.filter(t => !t.done && !t.parent_task_id && (t.es_recordatorio || WAITING_STATES.includes(t.status)))
+  const waiting = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at && (t.es_recordatorio || WAITING_STATES.includes(t.status)))
   // Tiempo de alarma unificado: recordatorio_at para recordatorios, followup_at para seguimientos.
   const alarmTime = (t: Task) => {
     const at = t.es_recordatorio ? t.recordatorio_at : t.followup_at

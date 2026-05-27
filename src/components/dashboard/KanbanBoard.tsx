@@ -47,7 +47,7 @@ export function KanbanBoard({ items, columns }: { items?: Task[]; columns?: { ke
   // `columns` = columnas por contexto (1 estado por columna); por defecto las 4 universales.
   const cols = columns || KANBAN_GROUPS
   // Si recibe `items` los usa; si no, todas las tareas activas (sin recordatorios, que viven en Seguimiento).
-  const active = items ?? tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio)
+  const active = items ?? tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
   const groupKeyOf = (status: string) => cols.find(g => g.statuses.includes(status))?.key || cols[0].key
 
   function handleDragStart(id: number, e: React.DragEvent) {

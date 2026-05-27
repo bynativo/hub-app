@@ -20,7 +20,7 @@ export function WeekView({ range }: { range: 'esta' | 'proxima' }) {
     ? { from: todayISO(), to: addDaysISO(todayISO(), 7), title: 'Esta semana' }
     : { ...nextWeekRange(), title: 'Próxima semana' }
 
-  const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio)
+  const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
   const weekTasks = active.filter(t => t.due_date && t.due_date >= from && t.due_date <= to)
 
   // Agrupar por día (solo días con tareas)

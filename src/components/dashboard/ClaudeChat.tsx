@@ -41,7 +41,7 @@ export function ClaudeChat() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, loading])
 
   function buildSystem() {
-    const active = tasks.filter(t => !t.done)
+    const active = tasks.filter(t => !t.done && !t.archived_at)
     const load = active
       .filter(t => t.due_date)
       .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
