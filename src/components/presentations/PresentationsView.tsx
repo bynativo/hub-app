@@ -3,6 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { ctxLabel } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
+import { exportPresentationPDF } from '../../lib/pdfExport'
 import type { Presentation } from '../../lib/types'
 
 function slugify(s: string): string {
@@ -82,7 +83,10 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
         <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setDeleting(null) }}>
           <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[420px] max-w-[94vw] shadow-lg">
             <div className="font-serif text-lg font-light mb-1">Eliminar presentación</div>
-            <p className="text-[13px] text-gray-500 mb-4">¿Eliminar "<span className="font-medium text-gray-700">{deleting.title}</span>"? Se borran sus slides. Las tareas de contenido vinculadas quedan sin presentación asignada.</p>
+            <p className="text-[13px] text-gray-500 mb-4">
+              ¿Eliminar esta presentación permanentemente? Las slides vinculadas también se eliminarán. Las tareas de contenido vinculadas quedarán sin presentación asignada.
+              <br/><span className="block mt-2 text-gray-700 font-medium">"{deleting.title}"</span>
+            </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setDeleting(null)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
               <button onClick={deletePres} disabled={busy} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer disabled:opacity-40">{busy ? 'Eliminando…' : 'Eliminar presentación'}</button>
@@ -112,6 +116,9 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
           <div className="absolute right-1.5 top-9 bg-bg2 border border-black/7 rounded-lg shadow-lg py-1 z-10 w-44" onClick={e => e.stopPropagation()}>
             <button onClick={() => { setRenaming({ id: p.id, title: p.title }); setMenuFor(null) }}
               className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer">✎ Editar título</button>
+            <button onClick={() => { exportPresentationPDF(p); setMenuFor(null) }}
+              className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer">📄 Exportar PDF</button>
+            <div className="my-0.5 mx-2 border-t border-black/7" />
             <button onClick={() => { setDeleting(p); setMenuFor(null) }}
               className="w-full text-left px-3 py-1.5 text-[13px] text-danger hover:bg-danger/10 cursor-pointer">🗑 Eliminar presentación</button>
           </div>

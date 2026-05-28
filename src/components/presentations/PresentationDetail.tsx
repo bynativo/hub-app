@@ -4,6 +4,7 @@ import { useStore } from '../../lib/store'
 import { PLAT_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS, PUB_TYPES } from '../../lib/constants'
 import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning, pubTypeBadge } from '../../lib/helpers'
 import { callClaudeProxy } from '../../lib/claude'
+import { exportPresentationPDF } from '../../lib/pdfExport'
 import type { Slide, Task } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
@@ -409,6 +410,10 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
           </button>
           <div className="font-serif text-base font-light leading-snug mb-0.5" style={{ color: kv }}>{pres.title}</div>
           <div className="text-[11px] text-gray-400 font-mono">{entries.length} ideas · {pres.month_label}</div>
+          <button onClick={() => exportPresentationPDF(pres)}
+            className="mt-2 w-full text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-1 rounded-md cursor-pointer hover:bg-claude/15">
+            📄 Exportar PDF
+          </button>
         </div>
 
         <div className="p-2 flex-1">
