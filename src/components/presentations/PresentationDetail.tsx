@@ -24,6 +24,67 @@ function isImageUrl(u?: string | null) {
   return !!u && /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(u)
 }
 
+// Detecta el tipo de URL y devuelve la mejor estrategia de embed.
+type PreviewKind = 'image' | 'sharepoint' | 'tiktok' | 'instagram' | 'drive' | 'pdf' | 'other'
+function detectPreview(url: string): { kind: PreviewKind; embedUrl?: string; fileName?: string } {
+  const u = url.toLowerCase()
+  if (isImageUrl(url)) return { kind: 'image' }
+  if (u.includes('sharepoint.com') || u.includes('onedrive.live') || u.includes('1drv.ms')) {
+    const name = decodeURIComponent(url.split('?')[0].split('/').pop() || 'Archivo')
+    return { kind: 'sharepoint', fileName: name }
+  }
+  // TikTok: /@user/video/123  o /video/123
+  let m = url.match(/tiktok\.com\/(?:@[^/]+\/)?video\/(\d+)/i)
+  if (m) return { kind: 'tiktok', embedUrl: `https://www.tiktok.com/embed/v2/${m[1]}` }
+  // Instagram: /p/CODE/  /reel/CODE/  /tv/CODE/
+  m = url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/i)
+  if (m) return { kind: 'instagram', embedUrl: `https://www.instagram.com/p/${m[1]}/embed` }
+  // Google Drive: /file/d/ID/...   /document/d/ID/...
+  m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/i)
+  if (m) return { kind: 'drive', embedUrl: `https://drive.google.com/file/d/${m[1]}/preview` }
+  m = url.match(/docs\.google\.com\/(?:document|presentation|spreadsheets)\/d\/([^/]+)/i)
+  if (m) {
+    const seg = url.includes('/presentation/') ? 'presentation' : url.includes('/spreadsheets/') ? 'spreadsheets' : 'document'
+    return { kind: 'drive', embedUrl: `https://docs.google.com/${seg}/d/${m[1]}/preview` }
+  }
+  if (/\.pdf(\?|$)/i.test(u)) return { kind: 'pdf', embedUrl: url }
+  return { kind: 'other' }
+}
+
+// Previsualización inteligente del contenido de una slide según el tipo de URL.
+function ContentPreview({ url }: { url: string }) {
+  const p = detectPreview(url)
+  if (p.kind === 'image') return <img src={url} alt="" className="w-full h-full object-cover" />
+  if (p.kind === 'sharepoint') {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1.5 p-3 text-center">
+        <div className="text-2xl">🔷</div>
+        <div className="text-[11px] font-medium text-gray-700 break-all line-clamp-2">{p.fileName}</div>
+        <a href={url} target="_blank" rel="noreferrer" className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md hover:bg-claude/15">Abrir en SharePoint ↗</a>
+        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 mt-1">Requiere acceso corporativo</span>
+      </div>
+    )
+  }
+  if (p.embedUrl) {
+    return (
+      <iframe src={p.embedUrl} className="w-full h-full border-0" title="preview"
+        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; autoplay" allowFullScreen />
+    )
+  }
+  // Drive con link de carpeta o privado, o cualquier otro link → botón
+  if (url.includes('drive.google')) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-1.5 p-3 text-center">
+        <div className="text-2xl">📁</div>
+        <a href={url} target="_blank" rel="noreferrer" className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md hover:bg-claude/15">Abrir en Drive ↗</a>
+      </div>
+    )
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="text-[11px] text-claude px-2 text-center break-all hover:underline">Ver ↗</a>
+  )
+}
+
 function VisualFrame({ label, url, feedRed }: { label: string; url?: string | null; feedRed?: string }) {
   const redMeta = feedRed ? REDES.find(x => x.v === feedRed) : undefined
   return (
@@ -37,13 +98,7 @@ function VisualFrame({ label, url, feedRed }: { label: string; url?: string | nu
           </div>
         )}
         <div className="aspect-[9/16] bg-bg4 flex items-center justify-center relative">
-          {isImageUrl(url) ? (
-            <img src={url!} alt={label} className="w-full h-full object-cover" />
-          ) : url ? (
-            <a href={url} target="_blank" rel="noreferrer" className="text-[11px] text-claude px-2 text-center break-all hover:underline">Ver ↗</a>
-          ) : (
-            <span className="text-[10px] text-gray-400">Sin {label.toLowerCase()}</span>
-          )}
+          {url ? <ContentPreview url={url} /> : <span className="text-[10px] text-gray-400">Sin {label.toLowerCase()}</span>}
         </div>
         {feedRed && (
           <div className="px-2 py-1.5">
@@ -317,7 +372,9 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   {slide.media_url && (
                     isImageUrl(slide.media_url)
                       ? <img src={slide.media_url} alt="" className="rounded-lg border border-black/10 max-h-[420px] w-full object-contain bg-bg3" />
-                      : <a href={slide.media_url} target="_blank" rel="noreferrer" className="inline-block text-[12px] text-claude bg-claude/7 border border-claude/20 px-3 py-1.5 rounded-md hover:bg-claude/15 break-all">▶ Ver media ↗</a>
+                      : <div className="aspect-[9/16] max-h-[480px] mx-auto rounded-lg border border-black/10 overflow-hidden bg-bg3">
+                          <ContentPreview url={slide.media_url} />
+                        </div>
                   )}
                 </div>
               </div>
