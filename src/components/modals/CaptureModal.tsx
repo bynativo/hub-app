@@ -4,7 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning } from '../../lib/helpers'
-import { PUB_TYPES } from '../../lib/constants'
+import { PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
 import type { Client, Project, Task } from '../../lib/types'
@@ -315,6 +315,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [infName, setInfName] = useState('')
   const [infHandle, setInfHandle] = useState('')
   const [infAgency, setInfAgency] = useState('')
+  const [contentFormat, setContentFormat] = useState('')
   const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
   const [isReminder, setIsReminder] = useState(false)
   const [reminderAt, setReminderAt] = useState('')
@@ -378,10 +379,12 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
       publish_date: (!reminder && isContent) ? (publishDate || null) : null,
-      content_pub_type: isContent ? (isInfluencer ? pubType : 'propia') : null,
-      influencer_name: (isContent && isInfluencer) ? (infName.trim() || null) : null,
+      es_influencer: isContent ? isInfluencer : null,
+      tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
+      influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
       influencer_handle: (isContent && isInfluencer) ? (infHandle.trim() || null) : null,
-      influencer_agency: (isContent && isInfluencer) ? (infAgency.trim() || null) : null,
+      influencer_agencia: (isContent && isInfluencer) ? (infAgency.trim() || null) : null,
+      content_format: isContent ? (contentFormat || null) : null,
       requested_at: requestedAt || todayISO(),
       estimated_hours: emailReply ? 0.25 : estHours,
       notes: desc.trim() || null,
@@ -941,6 +944,13 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                       ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
                     </div>
                   )}
+                  <div>
+                    <label className={labelCls}>Formato</label>
+                    <select value={contentFormat} onChange={e => setContentFormat(e.target.value)} className={fieldCls}>
+                      <option value="">— Sin definir —</option>
+                      {FORMATOS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
                 </div>
               )}
 

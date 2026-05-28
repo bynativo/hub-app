@@ -197,7 +197,10 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, title: t.title, task_id: t.id, position: (count || 0) + 1,
       fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, grilla_date: t.publish_date,
-      content_pub_type: t.content_pub_type || 'propia', influencer_name: t.influencer_name, influencer_handle: t.influencer_handle,
+      content_pub_type: t.tipo_publicacion || t.content_pub_type || 'propia',
+      influencer_name: t.influencer_nombre || t.influencer_name,
+      influencer_handle: t.influencer_handle,
+      formato: t.content_format || null,
     }).select().single()
     if (error || !data) { alert('Error creando slide: ' + error?.message); return }
     setSlides(prev => [...prev, data as Slide])
@@ -1044,11 +1047,14 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   </div>
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Tarea de contenido</span>
-                    {pubTypeBadge(t.content_pub_type) && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: pubTypeBadge(t.content_pub_type)!.color + '18', color: pubTypeBadge(t.content_pub_type)!.color }}>
-                        {pubTypeBadge(t.content_pub_type)!.label}{t.influencer_handle ? ` · ${t.influencer_handle}` : ''}
-                      </span>
-                    )}
+                    {(() => {
+                      const b = pubTypeBadge(t.tipo_publicacion || t.content_pub_type)
+                      return b ? (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: b.color + '18', color: b.color }}>
+                          {b.label}{t.influencer_handle ? ` · ${t.influencer_handle}` : ''}
+                        </span>
+                      ) : null
+                    })()}
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: ctxColor(t.context) + '12', color: ctxColor(t.context) }}>{ctxLabel(t.context)}</span>
                     {t.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{t.clients.name}</span>}
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{t.status}</span>

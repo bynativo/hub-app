@@ -113,8 +113,8 @@ function FollowupCard({ task }: { task: Task }) {
           </div>
           {isContentDue && (
             <div className="text-[12px] text-claude mt-1.5">
-              {task.influencer_name
-                ? `Hoy la agencia debe entregar el contenido del influencer ${task.influencer_name}`
+              {(task.influencer_nombre || task.influencer_name)
+                ? `Hoy la agencia debe entregar el contenido del influencer ${task.influencer_nombre || task.influencer_name}`
                 : 'Hoy vence la entrega de este contenido — ¿ya está listo?'}
             </div>
           )}

@@ -102,11 +102,15 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
               <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">📅 Pub {task.publish_date.slice(5).replace('-', '/')}</Tag>
             )}
 
-            {pubTypeBadge(task.content_pub_type) && (
-              <Tag bg={pubTypeBadge(task.content_pub_type)!.color + '14'} color={pubTypeBadge(task.content_pub_type)!.color}>
-                {pubTypeBadge(task.content_pub_type)!.label}{task.influencer_handle ? ` ${task.influencer_handle}` : ''}
-              </Tag>
-            )}
+            {(() => {
+              const pt = task.tipo_publicacion || task.content_pub_type
+              const b = pubTypeBadge(pt)
+              return b ? (
+                <Tag bg={b.color + '14'} color={b.color}>
+                  {b.label}{task.influencer_handle ? ` ${task.influencer_handle}` : ''}
+                </Tag>
+              ) : null
+            })()}
 
             {task.estimated_hours != null && (
               <Tag bg="rgba(124,58,237,0.07)" color="#7c3aed">⏱ {fmtHoras(task.estimated_hours)}</Tag>

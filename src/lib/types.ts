@@ -92,6 +92,11 @@ export interface Task {
   influencer_name: string | null
   influencer_handle: string | null
   influencer_agency: string | null
+  // Columnas canónicas para el módulo influencers (las anteriores quedan como legacy):
+  es_influencer: boolean | null
+  influencer_nombre: string | null
+  influencer_agencia: string | null
+  tipo_publicacion: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }
