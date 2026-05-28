@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
-import { ctxLabel, ctxColor } from '../../lib/helpers'
+import { ctxLabel, ctxColor, todayISO } from '../../lib/helpers'
 import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import type { Task } from '../../lib/types'
 
@@ -16,10 +16,17 @@ export function ContextView({ context }: { context: string }) {
     ? active.filter(t => t.client_id === activeClientId)
     : active
 
+  // Atrasadas: due_date < hoy. Se muestran arriba en su propia sección y se
+  // excluyen del agrupado por status/cliente para no duplicar.
+  const today = todayISO()
+  const atrasadas = filtered.filter(t => t.due_date && t.due_date < today)
+    .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
+  const restFiltered = filtered.filter(t => !(t.due_date && t.due_date < today))
+
   const columns = STATUS_COLUMNS[context] || STATUS_COLUMNS.banco
   const kanbanCols = columns.map(s => ({ key: s, label: s, statuses: [s] }))
   // Estados a mostrar en Lista: las columnas del contexto + cualquier otro estado presente.
-  const extra = [...new Set(filtered.map(t => t.status || 'Inbox').filter(s => !columns.includes(s)))]
+  const extra = [...new Set(restFiltered.map(t => t.status || 'Inbox').filter(s => !columns.includes(s)))]
   const groupOrder = [...columns, ...extra]
 
   // En Agencia sin filtro de cliente, agrupamos primero por cliente/marca.
@@ -28,7 +35,7 @@ export function ContextView({ context }: { context: string }) {
   const clientEntries = (() => {
     if (!groupByClient) return null
     const byClient = new Map<number | null, Task[]>()
-    for (const t of filtered) {
+    for (const t of restFiltered) {
       const key = t.client_id ?? null
       const arr = byClient.get(key)
       if (arr) arr.push(t)
@@ -86,6 +93,15 @@ export function ContextView({ context }: { context: string }) {
         <div className="text-center py-7 text-gray-400 text-[13px]">Sin tareas</div>
       ) : (
         <div className="max-w-[860px]">
+          {atrasadas.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[11px] font-mono tracking-wider uppercase text-danger">🚨 Atrasadas</span>
+                <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{atrasadas.length}</span>
+              </div>
+              <TaskList tasks={atrasadas} />
+            </div>
+          )}
           {groupByClient && clientEntries ? (
             clientEntries.map(({ cid, name, tasks: clientTasks }) => (
               <div key={cid ?? 'sin'} className="mb-6">
@@ -99,7 +115,7 @@ export function ContextView({ context }: { context: string }) {
               </div>
             ))
           ) : (
-            renderStatusGroups(filtered)
+            renderStatusGroups(restFiltered)
           )}
         </div>
       )}
