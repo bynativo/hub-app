@@ -477,7 +477,13 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [contentFormat, setContentFormat] = useState('')
   const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
   const [isReminder, setIsReminder] = useState(!!preselectReminder)
-  const [reminderAt, setReminderAt] = useState('')
+  // Selector de recordatorio en dos pasos: primero la fecha (date), después
+  // una hora clave (preset) o "Otra hora" (input manual). reminderAt se deriva
+  // al guardar combinando ambos.
+  const [reminderDate, setReminderDate] = useState('')
+  const [reminderTime, setReminderTime] = useState('')
+  const [reminderCustomTime, setReminderCustomTime] = useState(false)
+  const reminderAt = reminderDate && reminderTime ? `${reminderDate}T${reminderTime}` : ''
   const [reminderType, setReminderType] = useState('general')
   const [correoCtx, setCorreoCtx] = useState('')
   const [desc, setDesc] = useState(template?.notes ?? '')
@@ -1152,9 +1158,53 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                     </div>
                   )}
                   <div>
-                    <label className={labelCls}>Fecha y hora del recordatorio *</label>
-                    <input type="datetime-local" value={reminderAt} onChange={e => setReminderAt(e.target.value)} className={fieldCls} />
+                    <label className={labelCls}>Fecha del recordatorio *</label>
+                    <input type="date" value={reminderDate}
+                      onChange={e => setReminderDate(e.target.value)}
+                      className={fieldCls} />
                   </div>
+                  {reminderDate && (
+                    <div>
+                      <label className={labelCls}>Hora *</label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {([
+                          { v: '09:00', l: '9:00 AM', s: 'Inicio del día' },
+                          { v: '11:00', l: '11:00 AM', s: 'Media mañana' },
+                          { v: '15:00', l: '3:00 PM', s: 'Inicio de la tarde' },
+                          { v: '17:00', l: '5:00 PM', s: 'Fin del día' },
+                        ]).map(p => {
+                          const active = !reminderCustomTime && reminderTime === p.v
+                          return (
+                            <button key={p.v} type="button"
+                              onClick={() => { setReminderTime(p.v); setReminderCustomTime(false) }}
+                              className={`flex flex-col items-center py-1.5 px-1 border rounded-lg cursor-pointer transition-all ${
+                                active ? 'border-claude/30 bg-claude/10 text-claude font-medium' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
+                              }`}>
+                              <span className="text-[12px] leading-tight">{p.l}</span>
+                              <span className="text-[9px] font-mono mt-0.5 opacity-70">{p.s}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <button type="button"
+                        onClick={() => setReminderCustomTime(c => !c)}
+                        className={`mt-2 w-full text-[11px] py-1.5 px-2 border rounded-md cursor-pointer transition-all ${
+                          reminderCustomTime ? 'border-claude/30 bg-claude/7 text-claude font-medium' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
+                        }`}>
+                        {reminderCustomTime ? '▼ Otra hora' : '▸ Otra hora'}
+                      </button>
+                      {reminderCustomTime && (
+                        <input type="time" value={reminderTime}
+                          onChange={e => setReminderTime(e.target.value)}
+                          className={fieldCls + ' mt-1.5'} />
+                      )}
+                      {reminderTime && (
+                        <div className="mt-2 text-[11px] text-gray-500 bg-claude/5 border border-claude/15 rounded-md px-2.5 py-1.5">
+                          Te avisaremos el <span className="font-medium text-claude">{new Date(`${reminderDate}T00:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}</span> a las <span className="font-medium text-claude">{reminderTime}</span>.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
