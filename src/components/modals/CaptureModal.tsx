@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
+import { QuickProjectModal } from './QuickProjectModal'
 import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning } from '../../lib/helpers'
 import { PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
@@ -84,7 +85,7 @@ function parseSuggested(reply: string): Suggested[] {
 }
 
 // Formulario completo y editable por cada tarea extraída (igual al tab Tarea directa)
-function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showError }: {
+function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showError, onCreateProject }: {
   s: Suggested
   onChange: (patch: Partial<Suggested>) => void
   onRemove: () => void
@@ -92,6 +93,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
   projects: Project[]
   tasks: Task[]
   showError?: boolean
+  onCreateProject: (ctx: string, clientId: number | null, cb: (id: number) => void) => void
 }) {
   const fld = 'w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20'
   const lbl = 'text-[10px] font-mono text-gray-400 uppercase block mb-1'
@@ -162,7 +164,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
               <div className="grid grid-cols-3 gap-1.5">
                 {(['independiente', 'subtarea', 'proyecto'] as TipoTarea[]).map(tp => (
                   <button key={tp} onClick={() => onChange({ tipo: tp })} className={`py-1.5 border rounded-md text-[11px] cursor-pointer transition-all ${s.tipo === tp ? 'border-claude/20 text-claude bg-claude/7' : 'border-black/7 text-gray-500 bg-bg2 hover:bg-bg4'}`}>
-                    {tp === 'independiente' ? 'Independiente' : tp === 'subtarea' ? 'Subtarea' : 'Proyecto'}
+                    {tp === 'independiente' ? 'Independiente' : tp === 'subtarea' ? 'Subtarea' : 'Proyecto / Campaña'}
                   </button>
                 ))}
               </div>
@@ -176,10 +178,18 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
               </select></div>
           )}
           {!s.isReminder && s.tipo === 'proyecto' && (
-            <div><label className={lbl}>Proyecto</label>
-              <select value={s.projectId ?? ''} onChange={e => onChange({ projectId: e.target.value ? Number(e.target.value) : null })} className={fld}>
+            <div><label className={lbl}>Proyecto / Campaña</label>
+              <select value={s.projectId ?? ''} onChange={e => {
+                const v = e.target.value
+                if (v === '__new__') {
+                  onCreateProject(s.contexto, s.clientId, id => onChange({ projectId: id }))
+                } else {
+                  onChange({ projectId: v ? Number(v) : null })
+                }
+              }} className={fld}>
                 <option value="">Seleccionar…</option>
                 {ctxProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                <option value="__new__">+ Crear nuevo proyecto / campaña</option>
               </select></div>
           )}
 
@@ -300,8 +310,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [title, setTitle] = useState(stripPrefix(template?.title ?? ''))
   const [tipo, setTipo] = useState<TipoTarea>(preselectParentId ? 'subtarea' : preselectProjectId ? 'proyecto' : 'independiente')
   const [parentId, setParentId] = useState<number | null>(preselectParentId ?? null)
-  const [projectId, setProjectId] = useState<number | '' | '__new__'>(preselectProjectId ?? '')
-  const [newProject, setNewProject] = useState('')
+  const [projectId, setProjectId] = useState<number | ''>(preselectProjectId ?? '')
   const [context, setContext] = useState(preselectContext ?? template?.context ?? 'banco')
   const [clientId, setClientId] = useState<number | null>(preselectClientId ?? null)
   const [priority, setPriority] = useState(template?.priority ?? 'media')
@@ -326,6 +335,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [saving, setSaving] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
+  const [quickProject, setQuickProject] = useState<{ ctx: string; clientId: number | null; onCreated: (id: number) => void } | null>(null)
   // Fecha de entrega obligatoria salvo recordatorios (usan reminderAt como fecha)
   const dueError = showErrors && !isReminder && !dueDate
   const ctxError = showErrors && !context
@@ -356,16 +366,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     const emailReply = isEmailReply && origin === 'gmail-agencia'
 
     let resolvedProjectId: number | null = null
-    if (!reminder && !emailReply && tipo === 'proyecto') {
-      if (projectId === '__new__' || (!projectId && newProject.trim())) {
-        const { data, error } = await supabase.from('projects').insert({
-          name: newProject.trim(), context, client_id: context === 'agencia' ? clientId : null, type: 'proyecto',
-        }).select().single()
-        if (error || !data) { alert('Error creando proyecto: ' + error?.message); setSaving(false); return }
-        resolvedProjectId = data.id
-      } else if (projectId) {
-        resolvedProjectId = Number(projectId)
-      }
+    if (!reminder && !emailReply && tipo === 'proyecto' && projectId) {
+      resolvedProjectId = Number(projectId)
     }
 
     const { error } = await supabase.from('tasks').insert({
@@ -706,7 +708,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               <button onClick={() => setReviewMode(false)} className="text-[10px] text-gray-400 hover:text-claude cursor-pointer">Ver todas</button>
             </div>
             <SuggestionForm s={{ ...suggestions[idx], expanded: true }} onChange={p => update(idx, p)} onRemove={() => { remove(idx); setReviewIdx(i => Math.max(0, i - 1)) }}
-              clients={clients} projects={projects} tasks={tasks} showError={showErrors} />
+              clients={clients} projects={projects} tasks={tasks} showError={showErrors}
+              onCreateProject={(ctx, cId, cb) => setQuickProject({ ctx, clientId: cId, onCreated: cb })} />
             <div className="flex items-center justify-between mt-2">
               <button disabled={idx === 0} onClick={() => setReviewIdx(i => Math.max(0, i - 1))}
                 className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-3 py-1 rounded-md cursor-pointer hover:bg-bg4 disabled:opacity-40 disabled:cursor-not-allowed">← Anterior</button>
@@ -718,7 +721,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
           <div className="flex flex-col gap-1.5">
             {suggestions.map((s, i) => (
               <SuggestionForm key={i} s={s} onChange={p => update(i, p)} onRemove={() => remove(i)}
-                clients={clients} projects={projects} tasks={tasks} showError={showErrors} />
+                clients={clients} projects={projects} tasks={tasks} showError={showErrors}
+                onCreateProject={(ctx, cId, cb) => setQuickProject({ ctx, clientId: cId, onCreated: cb })} />
             ))}
           </div>
         )}
@@ -824,7 +828,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   {([
                     { v: 'independiente', l: 'Independiente' },
                     { v: 'subtarea', l: 'Subtarea de…' },
-                    { v: 'proyecto', l: 'Parte de proyecto' },
+                    { v: 'proyecto', l: 'Parte de proyecto / campaña' },
                   ] as { v: TipoTarea; l: string }[]).map(o => (
                     <button key={o.v} onClick={() => setTipo(o.v)}
                       className={`py-2 px-1 border rounded-lg text-[11px] text-center cursor-pointer transition-all ${
@@ -848,15 +852,19 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
               {tipo === 'proyecto' && (
                 <div className="mb-3">
-                  <label className={labelCls}>Proyecto</label>
-                  <select value={projectId} onChange={e => setProjectId(e.target.value === '' ? '' : e.target.value === '__new__' ? '__new__' : Number(e.target.value))} className={fieldCls}>
-                    <option value="">Seleccionar proyecto…</option>
+                  <label className={labelCls}>Proyecto / Campaña</label>
+                  <select value={projectId} onChange={e => {
+                    const v = e.target.value
+                    if (v === '__new__') {
+                      setQuickProject({ ctx: context, clientId, onCreated: id => setProjectId(id) })
+                    } else {
+                      setProjectId(v === '' ? '' : Number(v))
+                    }
+                  }} className={fieldCls}>
+                    <option value="">Seleccionar proyecto / campaña…</option>
                     {ctxProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    <option value="__new__">+ Crear proyecto nuevo</option>
+                    <option value="__new__">+ Crear nuevo proyecto / campaña</option>
                   </select>
-                  {String(projectId) === '__new__' && (
-                    <input value={newProject} onChange={e => setNewProject(e.target.value)} className={inputCls + ' mt-2'} placeholder="Nombre del nuevo proyecto" />
-                  )}
                 </div>
               )}
               </>)}
@@ -1115,6 +1123,14 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
       {quickClientOpen && (
         <QuickClientModal onClose={() => setQuickClientOpen(false)} onCreated={id => { setContext('agencia'); setClientId(id) }} />
+      )}
+      {quickProject && (
+        <QuickProjectModal
+          onClose={() => setQuickProject(null)}
+          onCreated={id => quickProject.onCreated(id)}
+          defaultContext={quickProject.ctx}
+          defaultClientId={quickProject.clientId}
+        />
       )}
     </div>
   )
