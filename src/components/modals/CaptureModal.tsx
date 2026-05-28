@@ -404,11 +404,31 @@ async function extractTasks(text: string, fixedContext?: string, clientName?: st
   return parseSuggested(reply, fixedContext)
 }
 
-// Extracción por visión: manda el prompt + imágenes (base64) al proxy.
-async function extractFromImages(images: { media_type: string; data: string }[], extraText: string, fixedContext?: string, clientName?: string | null): Promise<Suggested[]> {
-  const content = [
-    { type: 'text', text: extractPrompt(extraText || '(Las tareas están en las imágenes adjuntas: correos, WhatsApp o documentos.)', fixedContext, clientName) },
-    ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })),
+// Extracción multi-tipo: imágenes (vision), PDFs (document blocks de Claude) y
+// archivos de texto (concatenados al prompt). El proxy reenvía el array tal
+// cual; document blocks requieren un modelo que los soporte (claude-sonnet-4-6 sí).
+async function extractFromAttachments(
+  atts: { kind: 'image' | 'pdf' | 'text'; name: string; media_type: string; base64?: string; text?: string }[],
+  extraText: string,
+  fixedContext?: string,
+  clientName?: string | null,
+): Promise<Suggested[]> {
+  const images = atts.filter(a => a.kind === 'image' && a.base64)
+  const pdfs = atts.filter(a => a.kind === 'pdf' && a.base64)
+  const texts = atts.filter(a => a.kind === 'text' && a.text)
+  // Texto plano (txt/md) se inyecta como anexos al final del prompt.
+  let fullText = extraText || ''
+  for (const tf of texts) {
+    fullText += `\n\n--- archivo adjunto: ${tf.name} ---\n${tf.text}`
+  }
+  // Si no hay imágenes ni PDFs, basta con el endpoint de texto.
+  if (!images.length && !pdfs.length) {
+    return parseSuggested(await callProxy(extractPrompt(fullText, fixedContext, clientName)), fixedContext)
+  }
+  const content: any[] = [
+    { type: 'text', text: extractPrompt(fullText || '(Las tareas están en los adjuntos: imágenes, PDFs o documentos.)', fixedContext, clientName) },
+    ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.base64 } })),
+    ...pdfs.map(p => ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.base64 } })),
   ]
   return parseSuggested(await callProxy(content), fixedContext)
 }
@@ -582,7 +602,23 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [suggestions, setSuggestions] = useState<Suggested[]>([])
   const [extracted, setExtracted] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
-  const [images, setImages] = useState<{ name: string; url: string; media_type: string; data: string; file: File }[]>([])
+  // Attachments soporta imágenes (visión), PDFs (document blocks) y txt/md
+  // (texto inyectado al prompt). Drag&drop + file picker llenan el mismo array.
+  type Attachment = {
+    id: number
+    name: string
+    kind: 'image' | 'pdf' | 'text'
+    media_type: string
+    size: number
+    base64?: string
+    url?: string  // solo imágenes (para preview)
+    text?: string // solo txt/md
+    file: File
+  }
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const dragCounterRef = useRef(0)
+  const attachIdRef = useRef(1)
   // Formato estructurado parseado localmente (sin API), proyecto detectado y modo revisión
   const [localParsed, setLocalParsed] = useState(false)
   const [parsedProjectName, setParsedProjectName] = useState<string | null>(null)
@@ -631,17 +667,39 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     }
   }
 
-  async function addImages(files: FileList | null) {
+  // Procesa un FileList y agrega los soportados (image/* | application/pdf |
+  // text/* | .txt/.md) al state de attachments. Archivos no soportados se ignoran.
+  async function addFiles(files: FileList | File[] | null) {
     if (!files) return
-    const arr = await Promise.all(Array.from(files).map(f => new Promise<{ name: string; url: string; media_type: string; data: string; file: File }>(resolve => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = reader.result as string // data:<mime>;base64,XXXX
-        resolve({ name: f.name, url: result, media_type: f.type || 'image/png', data: result.split(',')[1] || '', file: f })
+    const list = Array.from(files)
+    const next: Attachment[] = []
+    for (const f of list) {
+      const ext = f.name.toLowerCase().split('.').pop() || ''
+      const isImage = (f.type || '').startsWith('image/') || ['jpg','jpeg','png','gif','webp'].includes(ext)
+      const isPdf = f.type === 'application/pdf' || ext === 'pdf'
+      const isText = (f.type || '').startsWith('text/') || ['txt','md','markdown'].includes(ext)
+      if (!isImage && !isPdf && !isText) continue
+      if (isText) {
+        const text = await f.text()
+        next.push({ id: attachIdRef.current++, name: f.name, kind: 'text', media_type: f.type || 'text/plain', size: f.size, text, file: f })
+        continue
       }
-      reader.readAsDataURL(f)
-    })))
-    setImages(prev => [...prev, ...arr])
+      const dataUrl = await new Promise<string>(resolve => {
+        const r = new FileReader()
+        r.onload = () => resolve(r.result as string)
+        r.readAsDataURL(f)
+      })
+      const base64 = dataUrl.split(',')[1] || ''
+      const media_type = f.type || (isImage ? 'image/png' : 'application/pdf')
+      next.push({
+        id: attachIdRef.current++, name: f.name,
+        kind: isImage ? 'image' : 'pdf',
+        media_type, size: f.size, base64,
+        url: isImage ? dataUrl : undefined,
+        file: f,
+      })
+    }
+    if (next.length) setAttachments(prev => [...prev, ...next])
   }
 
   function resetParseExtras() {
@@ -668,15 +726,16 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     }
   }
 
-  // Extrae de notas y/o imágenes. Primero intenta el parser local (sin gastar API);
-  // si el texto no viene en el formato estructurado, recurre a Claude.
+  // Extrae de notas y/o adjuntos (imagen + PDF + texto). Primero intenta el
+  // parser local del formato estructurado (sin gastar API); si no matchea,
+  // recurre a Claude con todo el material adjunto.
   async function handleExtract() {
-    const hasImages = images.length > 0
-    if (!meetingText.trim() && !hasImages) return
+    const hasAttachments = attachments.length > 0
+    if (!meetingText.trim() && !hasAttachments) return
     setShowErrors(false)
     resetParseExtras()
 
-    if (meetingText.trim() && !hasImages) {
+    if (meetingText.trim() && !hasAttachments) {
       const parsed = parseStructuredNotes(meetingText)
       if (parsed && parsed.tasks.length) {
         setSuggestions(parsed.tasks.map(r => rawToSuggested(r, !!parsed.project)))
@@ -695,8 +754,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       const clientName = context === 'agencia' && clientId
         ? (clients.find(c => c.id === clientId)?.name || null)
         : null
-      const items = hasImages
-        ? await extractFromImages(images.map(im => ({ media_type: im.media_type, data: im.data })), meetingText, context, clientName)
+      const items = hasAttachments
+        ? await extractFromAttachments(
+            attachments.map(a => ({ kind: a.kind, name: a.name, media_type: a.media_type, base64: a.base64, text: a.text })),
+            meetingText, context, clientName,
+          )
         : await extractTasks(meetingText, context, clientName)
       // Defensa adicional: forzamos el contexto y el clientId (cuando agencia)
       // por si Claude ignoró la instrucción o devolvió un cliente distinto.
@@ -787,7 +849,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         requested_at: s.requested_at || todayISO(),
         estimated_hours: s.estimated_hours,
         notes: s.desc.trim() || null,
-        context_readme: s.desc.trim() || meetingText.trim() || (images.length ? 'Extraído de imágenes adjuntas.' : null),
+        context_readme: s.desc.trim() || meetingText.trim() || (attachments.length ? `Extraído de ${attachments.length} adjunto(s).` : null),
         status: reminder ? 'Recordatorio' : 'Inbox',
         es_recordatorio: reminder,
         recordatorio_at: reminder ? new Date(s.reminderAt).toISOString() : null,
@@ -822,14 +884,17 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         }
       }
     }
-    // Guardar las imágenes como contexto (es_contexto=true), vinculadas a la primera tarea creada
-    if (images.length && firstTaskId) {
-      for (const im of images) {
-        const path = `${firstTaskId}/${Date.now()}-${im.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`
-        const up = await supabase.storage.from('capturas').upload(path, im.file, { contentType: im.media_type })
+    // Subir adjuntos persistibles (image / pdf) al bucket como contexto vinculado
+    // a la primera tarea creada. Los txt/md ya quedaron inyectados al prompt y
+    // viven en context_readme — no se suben a storage.
+    const persistable = attachments.filter(a => a.kind === 'image' || a.kind === 'pdf')
+    if (persistable.length && firstTaskId) {
+      for (const a of persistable) {
+        const path = `${firstTaskId}/${Date.now()}-${a.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`
+        const up = await supabase.storage.from('capturas').upload(path, a.file, { contentType: a.media_type })
         if (!up.error) {
           const { data: pub } = supabase.storage.from('capturas').getPublicUrl(path)
-          await supabase.from('attachments').insert({ task_id: firstTaskId, name: im.name, url: pub.publicUrl, es_contexto: true, size_kb: Math.round(im.file.size / 1024) })
+          await supabase.from('attachments').insert({ task_id: firstTaskId, name: a.name, url: pub.publicUrl, es_contexto: true, size_kb: Math.round(a.file.size / 1024) })
         }
       }
     }
@@ -948,9 +1013,56 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     )
   }
 
+  // Drag & drop sobre todo el modal (solo activo en tab Notas). Usamos un
+  // contador para tolerar dragenter/leave anidados sin parpadeo del overlay.
+  function isFileDrag(e: React.DragEvent): boolean {
+    const types = e.dataTransfer?.types
+    if (!types) return false
+    for (let i = 0; i < types.length; i++) if (types[i] === 'Files') return true
+    return false
+  }
+  function onDragEnter(e: React.DragEvent) {
+    if (tab !== 'notas') return
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    dragCounterRef.current++
+    setDragOver(true)
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (tab !== 'notas') return
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (tab !== 'notas') return
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1)
+    if (dragCounterRef.current === 0) setDragOver(false)
+  }
+  async function onDrop(e: React.DragEvent) {
+    if (tab !== 'notas') return
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    dragCounterRef.current = 0
+    setDragOver(false)
+    await addFiles(e.dataTransfer.files)
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-[300] flex items-start justify-center pt-8 overflow-y-auto backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-bg2 border border-black/7 rounded-2xl w-[580px] max-w-[96vw] mb-10 shadow-lg overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 z-[300] flex items-start justify-center pt-8 overflow-y-auto backdrop-blur-sm"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+      <div className="bg-bg2 border border-black/7 rounded-2xl w-[580px] max-w-[96vw] mb-10 shadow-lg overflow-hidden relative">
+        {dragOver && (
+          <div className="absolute inset-0 z-[10] pointer-events-none flex items-center justify-center bg-claude/10 backdrop-blur-sm border-2 border-dashed border-claude rounded-2xl">
+            <div className="text-claude text-base font-medium flex flex-col items-center gap-2">
+              <span className="text-3xl">📎</span>
+              Soltá aquí para adjuntar
+              <span className="text-[11px] text-claude/70 font-normal">imágenes · PDF · txt/md</span>
+            </div>
+          </div>
+        )}
         <div className="flex border-b border-black/7">
           <button className={tabCls('tarea')} onClick={() => setTab('tarea')}>📋 Tarea directa</button>
           <button className={tabCls('notas')} onClick={() => setTab('notas')}>📝 Reunión / Notas</button>
@@ -1345,21 +1457,36 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
             <>
               {tab === 'notas' ? (
                 <>
-                  <p className="text-[13px] text-gray-400 mb-3">Pegá lo que te pidieron y/o subí imágenes (correos, WhatsApp, documentos). Si el texto ya viene en formato estructurado (<span className="font-mono text-[11px]">BF | … Tipo: … | Prioridad: … | Entrega: …</span>) se parsea local sin gastar API; si no, lo extrae Claude.</p>
+                  <p className="text-[13px] text-gray-400 mb-3">Pegá lo que te pidieron y/o adjuntá archivos (imágenes, PDFs, texto). También podés arrastrar archivos a cualquier parte del modal. Si el texto ya viene en formato estructurado (<span className="font-mono text-[11px]">BF | … Tipo: … | Prioridad: … | Entrega: …</span>) se parsea local sin gastar API; si no, lo extrae Claude.</p>
                   <textarea value={meetingText} onChange={e => setMeetingText(e.target.value)}
-                    className={inputCls + ' resize-y leading-relaxed mb-3'} placeholder="Notas, correo pegado, o dejá vacío y subí imágenes…" rows={6} autoFocus />
+                    className={inputCls + ' resize-y leading-relaxed mb-3'} placeholder="Notas, correo pegado, o dejá vacío y subí adjuntos…" rows={6} autoFocus />
 
                   <div className="mb-3">
-                    <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Imágenes (opcional)</label>
-                    <input type="file" accept="image/*" multiple onChange={e => { addImages(e.target.files); e.target.value = '' }}
-                      className="text-[12px] text-gray-500 file:mr-2 file:text-[11px] file:bg-claude/7 file:text-claude file:border file:border-claude/20 file:rounded-md file:px-2 file:py-1 file:cursor-pointer" />
-                    {images.length > 0 && (
-                      <div className="flex gap-2 flex-wrap mt-2">
-                        {images.map((im, i) => (
-                          <div key={i} className="relative">
-                            <img src={im.url} alt={im.name} className="w-16 h-16 object-cover rounded-md border border-black/10" />
-                            <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
-                              className="absolute -top-1.5 -right-1.5 bg-danger text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center cursor-pointer">✕</button>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Adjuntos (opcional)</label>
+                      <label className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors font-medium">
+                        + Adjuntar archivo
+                        <input type="file" accept="image/*,application/pdf,text/plain,.txt,.md" multiple
+                          className="hidden"
+                          onChange={e => { addFiles(e.target.files); e.target.value = '' }} />
+                      </label>
+                      <span className="text-[10px] text-gray-400">imágenes · PDF · txt/md</span>
+                    </div>
+                    {attachments.length > 0 && (
+                      <div className="flex gap-2 flex-wrap mt-1">
+                        {attachments.map(a => (
+                          <div key={a.id} className="relative">
+                            {a.kind === 'image' && a.url ? (
+                              <img src={a.url} alt={a.name} title={a.name} className="w-16 h-16 object-cover rounded-md border border-black/10" />
+                            ) : (
+                              <div title={a.name} className="w-16 h-16 rounded-md border border-black/10 bg-bg3 flex flex-col items-center justify-center gap-0.5 px-1">
+                                <span className="text-lg leading-none">{a.kind === 'pdf' ? '📄' : '📝'}</span>
+                                <span className="text-[9px] font-mono text-gray-500 truncate max-w-full leading-tight">{a.name}</span>
+                              </div>
+                            )}
+                            <button onClick={() => setAttachments(prev => prev.filter(x => x.id !== a.id))}
+                              className="absolute -top-1.5 -right-1.5 bg-danger text-white rounded-full w-4 h-4 text-[10px] leading-none flex items-center justify-center cursor-pointer"
+                              title="Quitar">✕</button>
                           </div>
                         ))}
                       </div>
@@ -1388,9 +1515,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               )}
 
               {tab === 'notas' && (
-                <button onClick={handleExtract} disabled={(!meetingText.trim() && !images.length) || extracting}
+                <button onClick={handleExtract} disabled={(!meetingText.trim() && !attachments.length) || extracting}
                   className="w-full text-xs bg-claude/7 border border-claude/20 text-claude px-4 py-2.5 rounded-lg hover:bg-claude/15 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed font-medium mb-4">
-                  {extracting ? 'Extrayendo…' : images.length ? `✦ Extraer de ${images.length} imagen(es)${meetingText.trim() ? ' + texto' : ''}` : '✦ Procesar / extraer tareas'}
+                  {extracting ? 'Extrayendo…' : attachments.length ? `✦ Extraer de ${attachments.length} adjunto${attachments.length === 1 ? '' : 's'}${meetingText.trim() ? ' + texto' : ''}` : '✦ Procesar / extraer tareas'}
                 </button>
               )}
 
