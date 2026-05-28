@@ -55,6 +55,7 @@ export interface Task {
   due_date: string | null
   publish_date: string | null
   recording_date: string | null
+  profile_request_date: string | null
   time_minutes: number
   notes: string | null
   done: boolean

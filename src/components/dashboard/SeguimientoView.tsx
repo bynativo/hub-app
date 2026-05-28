@@ -36,11 +36,18 @@ function FollowupCard({ task }: { task: Task }) {
   const openFollowup = useStore(s => s.openFollowup)
   const openDetail = useStore(s => s.openDetail)
   const toggleTask = useStore(s => s.toggleTask)
+  const allTasks = useStore(s => s.tasks)
   const [draft, setDraft] = useState('')
   const [drafting, setDrafting] = useState(false)
 
   const isRem = task.es_recordatorio
   const isMailReminder = isRem && task.tipo_recordatorio === 'seguimiento_correo'
+  // Recordatorio "Solicitar perfil del influencer" creado al guardar la tarea de influencer.
+  // Se detecta por el prefijo del correo_contexto que pone createProfileRequestReminder.
+  const isProfileRequest = isMailReminder && (task.correo_contexto || '').startsWith('Solicitar perfil de influencer')
+  const parent = isProfileRequest && task.parent_task_id
+    ? allTasks.find(t => t.id === task.parent_task_id)
+    : null
   const isContentDue = !isRem && isContentDueToday(task) // contenido cuya entrega vence hoy
   const alarmAt = isRem ? task.recordatorio_at : task.followup_at
   const stColor = STATUS_COLOR[task.status] || '#6b7280'
@@ -57,12 +64,22 @@ function FollowupCard({ task }: { task: Task }) {
   async function redactar() {
     setDrafting(true); setDraft('')
     try {
-      const prompt = isMailReminder
-        ? `Redactá una respuesta breve y profesional a este correo, en español, tono humano (que no se note IA). Asunto/contexto del correo:\n${task.correo_contexto || task.title}\nDevolvé solo el cuerpo de la respuesta.`
-        : `Redacta un mensaje breve y profesional de seguimiento para esta tarea que está en "${task.status}" (esperando respuesta).\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\nContexto: ${ctxLabel(task.context)}\nTono humano y directo, en español. Solo el mensaje.`
-      const system = isMailReminder
-        ? 'Redactás respuestas de correo humanas y profesionales, en español.'
-        : 'Eres el asistente de Felipe. Redactas mensajes de seguimiento humanos y concisos.'
+      let prompt: string
+      let system: string
+      if (isProfileRequest && parent) {
+        const inf = parent.influencer_nombre || parent.influencer_name || ''
+        const handle = parent.influencer_handle || ''
+        const target = [inf, handle].filter(Boolean).join(' / ') || 'el influencer'
+        const grab = parent.recording_date || 'fecha por confirmar'
+        prompt = `Redacta el email de solicitud del perfil del influencer ${target} para la campaña "${parent.title}". La grabación está estimada para ${grab}. Cliente: ${parent.clients?.name || 'interno'}. Tono profesional pero cercano. Devolvé asunto + cuerpo.`
+        system = 'Redacta un email profesional en español para solicitar la confirmación del perfil de influencer [nombre/handle] para la campaña [título de tarea]. La grabación está estimada para [recording_date]. Incluir solicitud de confirmación de disponibilidad, tarifas si aplica, y brief de la campaña. Tono profesional pero cercano.'
+      } else if (isMailReminder) {
+        prompt = `Redactá una respuesta breve y profesional a este correo, en español, tono humano (que no se note IA). Asunto/contexto del correo:\n${task.correo_contexto || task.title}\nDevolvé solo el cuerpo de la respuesta.`
+        system = 'Redactás respuestas de correo humanas y profesionales, en español.'
+      } else {
+        prompt = `Redacta un mensaje breve y profesional de seguimiento para esta tarea que está en "${task.status}" (esperando respuesta).\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\nContexto: ${ctxLabel(task.context)}\nTono humano y directo, en español. Solo el mensaje.`
+        system = 'Eres el asistente de Felipe. Redactas mensajes de seguimiento humanos y concisos.'
+      }
       const reply = await callClaudeProxy([{ role: 'user', content: prompt }], system)
       setDraft(reply)
     } catch {
@@ -86,7 +103,7 @@ function FollowupCard({ task }: { task: Task }) {
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium leading-snug cursor-pointer hover:text-claude" onClick={() => openDetail(task.id)}>
             {due && <span className="text-claude mr-1 animate-pulse">●</span>}
-            {isRem && <span className="mr-1">{isMailReminder ? '📧' : '🔔'}</span>}
+            {isRem && <span className="mr-1">{isProfileRequest ? '🤝' : isMailReminder ? '📧' : '🔔'}</span>}
             {task.title}
           </div>
           {isMailReminder && task.correo_contexto && (
@@ -126,11 +143,11 @@ function FollowupCard({ task }: { task: Task }) {
           <>
             <button onClick={redactar} disabled={drafting}
               className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
-              {drafting ? 'Redactando…' : '✦ Redactar respuesta con Claude'}
+              {drafting ? 'Redactando…' : isProfileRequest ? '✦ Redactar solicitud con Claude' : '✦ Redactar respuesta con Claude'}
             </button>
             <button onClick={() => toggleTask(task.id)}
               className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
-              ✓ Ya respondí — cerrar
+              {isProfileRequest ? '✓ Solicitud enviada — cerrar' : '✓ Ya respondí — cerrar'}
             </button>
             <button onClick={() => openFollowup(task.id)}
               className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">

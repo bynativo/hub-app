@@ -149,6 +149,7 @@ export function TaskDetail() {
   const [dueDate, setDueDate] = useState('')
   const [publishDate, setPublishDate] = useState('')
   const [recordingDate, setRecordingDate] = useState('')
+  const [profileRequestDate, setProfileRequestDate] = useState('')
   const [recordatorioAt, setRecordatorioAt] = useState('')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('propia')
@@ -191,7 +192,7 @@ export function TaskDetail() {
   useEffect(() => {
     if (!task) return
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
-    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || ''); setRecordingDate(task.recording_date || '')
+    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || ''); setRecordingDate(task.recording_date || ''); setProfileRequestDate(task.profile_request_date || '')
     setIsInfluencer(!!task.es_influencer)
     setPubType(task.tipo_publicacion || task.content_pub_type || 'propia')
     setInfName(task.influencer_nombre || task.influencer_name || '')
@@ -239,6 +240,7 @@ export function TaskDetail() {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
       publish_date: isContent ? (publishDate || null) : null,
       recording_date: isContent ? (recordingDate || null) : null,
+      profile_request_date: (isContent && isInfluencer) ? (profileRequestDate || null) : null,
       es_influencer: isContent ? isInfluencer : null,
       tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
       influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
@@ -605,6 +607,11 @@ Reglas del bloque:
                     </div>
                     <div><label className={labelCls}>Agencia que lo gestiona</label>
                       <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
+                    <div>
+                      <label className={labelCls}>Fecha de solicitud del perfil a la agencia</label>
+                      <input type="date" value={profileRequestDate} onChange={e => setInfo(setProfileRequestDate, e.target.value)} className={fieldCls} />
+                      <div className="text-[10px] text-gray-400 mt-1">Opcional. Solo afecta a esta tarea; el recordatorio automático se crea al capturar inicialmente.</div>
+                    </div>
                   </>
                 )}
                 <div>

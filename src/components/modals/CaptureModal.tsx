@@ -22,6 +22,7 @@ interface Suggested {
   due_date: string | null
   publish_date: string | null
   recording_date: string | null
+  profile_request_date: string | null
   requested_at: string | null
   estimated_hours: number | null
   origen: string
@@ -47,6 +48,39 @@ interface Suggested {
 
 function normTipo(t: string): TipoTarea {
   return t === 'subtarea' ? 'subtarea' : t === 'proyecto' ? 'proyecto' : 'independiente'
+}
+
+// Cuando se guarda una tarea de influencer con profile_request_date, se crea
+// automáticamente un recordatorio hijo (tipo 'seguimiento_correo') para a las
+// 9:00 de ese día acordarse de pedir el perfil a la agencia. SeguimientoView
+// detecta el prefijo del correo_contexto para ofrecer "Redactar solicitud con Claude".
+async function createProfileRequestReminder(opts: {
+  parentTaskId: number
+  taskTitle: string
+  context: string
+  clientId: number | null
+  influencerName: string
+  influencerHandle: string
+  influencerAgency: string
+  profileRequestDate: string
+}) {
+  const target = opts.influencerName.trim() || opts.influencerHandle.trim() || opts.taskTitle
+  const agencia = opts.influencerAgency.trim() || 'la agencia de influencers'
+  await supabase.from('tasks').insert({
+    title: `Solicitar perfil — ${target}`,
+    context: opts.context,
+    client_id: opts.context === 'agencia' ? opts.clientId : null,
+    parent_task_id: opts.parentTaskId,
+    priority: 'media',
+    origin: 'propia',
+    status: 'Recordatorio',
+    es_recordatorio: true,
+    recordatorio_at: new Date(`${opts.profileRequestDate}T09:00:00`).toISOString(),
+    tipo_recordatorio: 'seguimiento_correo',
+    correo_contexto: `Solicitar perfil de influencer para ${opts.taskTitle} a ${agencia}`,
+    done: false,
+    cats: [], plan: [], meeting_agenda: [],
+  })
 }
 
 const PROXY_URL = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-proxy'
@@ -81,6 +115,7 @@ function parseSuggested(reply: string): Suggested[] {
     due_date: t.due_date || null,
     publish_date: t.publish_date || null,
     recording_date: t.recording_date || null,
+    profile_request_date: t.profile_request_date || null,
     requested_at: t.requested_at || null,
     estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
     origen: t.origen || t.origin || 'propia',
@@ -290,6 +325,11 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
                 <div><label className={lbl}>Handle</label><input value={s.infHandle} onChange={e => onChange({ infHandle: e.target.value })} className={fld} placeholder="@usuario" /></div>
               </div>
               <div><label className={lbl}>Agencia (opcional)</label><input value={s.infAgency} onChange={e => onChange({ infAgency: e.target.value })} className={fld} placeholder="Agencia / representante" /></div>
+              <div>
+                <label className={lbl}>Fecha de solicitud del perfil a la agencia</label>
+                <input type="date" value={s.profile_request_date || ''} onChange={e => onChange({ profile_request_date: e.target.value || null })} className={fld} />
+                <div className="text-[10px] text-gray-400 mt-0.5">Al guardar se crea un recordatorio 🔔 a las 9:00 de ese día para enviar la solicitud.</div>
+              </div>
             </div>
           )}
 
@@ -360,6 +400,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [requestedAt, setRequestedAt] = useState(todayISO())
   const [publishDate, setPublishDate] = useState('')
   const [recordingDate, setRecordingDate] = useState('')
+  const [profileRequestDate, setProfileRequestDate] = useState('')
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('colab_ig')
@@ -413,8 +454,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       resolvedProjectId = Number(projectId)
     }
 
-    const { error } = await supabase.from('tasks').insert({
-      title: buildTitle(titlePrefix, title.trim()),
+    const builtTitle = buildTitle(titlePrefix, title.trim())
+    const { data: inserted, error } = await supabase.from('tasks').insert({
+      title: builtTitle,
       context,
       priority,
       origin,
@@ -425,6 +467,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       due_date: reminder ? null : (dueDate || null),
       publish_date: (!reminder && isContent) ? (publishDate || null) : null,
       recording_date: (!reminder && isContent) ? (recordingDate || null) : null,
+      profile_request_date: (!reminder && isContent && isInfluencer) ? (profileRequestDate || null) : null,
       es_influencer: isContent ? isInfluencer : null,
       tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
       influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
@@ -442,8 +485,21 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       correo_contexto: (reminder && reminderType === 'seguimiento_correo') ? (correoCtx.trim() || null) : null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
-    })
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    }).select('id').single()
+    if (error || !inserted) { alert('Error: ' + (error?.message || 'no data')); setSaving(false); return }
+    // Recordatorio automático: pedir el perfil del influencer a la agencia el día indicado a las 9:00.
+    if (!reminder && isContent && isInfluencer && profileRequestDate) {
+      await createProfileRequestReminder({
+        parentTaskId: inserted.id,
+        taskTitle: builtTitle,
+        context,
+        clientId,
+        influencerName: infName,
+        influencerHandle: infHandle,
+        influencerAgency: infAgency,
+        profileRequestDate,
+      })
+    }
     await loadAll()
     onClose()
   }
@@ -492,7 +548,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     const tipo: TipoTarea = hasProject ? 'proyecto' : (/subtarea/i.test(r.tipoRaw) ? 'subtarea' : /proyecto/i.test(r.tipoRaw) ? 'proyecto' : 'independiente')
     return {
       titulo: r.title, contexto: r.context, tipo, prioridad: r.prioridad,
-      due_date: r.due_date, publish_date: null, recording_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
+      due_date: r.due_date, publish_date: null, recording_date: null, profile_request_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
       parentId: null, projectId: null,
       clientId: r.context === 'agencia' ? (client?.id ?? null) : null,
       isContent: false, isInfluencer: false, pubType: 'colab_ig', infName: '', infHandle: '', infAgency: '',
@@ -617,6 +673,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       if (s.isContent) {
         patch.publish_date = s.publish_date || null
         patch.recording_date = s.recording_date || null
+        if (s.isInfluencer) patch.profile_request_date = s.profile_request_date || null
       }
       const linked = projectFor(s)
       if (linked) patch.project_id = linked
@@ -637,6 +694,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         due_date: reminder ? null : (s.due_date || null),
         publish_date: (!reminder && s.isContent) ? (s.publish_date || null) : null,
         recording_date: (!reminder && s.isContent) ? (s.recording_date || null) : null,
+        profile_request_date: (!reminder && s.isContent && s.isInfluencer) ? (s.profile_request_date || null) : null,
         es_influencer: s.isContent ? s.isInfluencer : null,
         tipo_publicacion: s.isContent ? (s.isInfluencer ? s.pubType : 'propia') : null,
         influencer_nombre: (s.isContent && s.isInfluencer) ? (s.infName.trim() || null) : null,
@@ -657,6 +715,28 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       const { data, error } = await supabase.from('tasks').insert(taskRows).select('id')
       if (error) { alert('Error: ' + error.message); setSavingNotes(false); return }
       firstTaskId = data?.[0]?.id ?? null
+      // Recordatorios automáticos por solicitud de perfil (uno por tarea de
+      // influencer con profile_request_date). data viene en el mismo orden que creates.
+      const created = data || []
+      for (let i = 0; i < creates.length; i++) {
+        const s = creates[i]
+        const row = created[i]
+        if (!row) continue
+        const reminder = s.isReminder && !!s.reminderAt
+        if (!reminder && s.isContent && s.isInfluencer && s.profile_request_date) {
+          const prefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
+          await createProfileRequestReminder({
+            parentTaskId: row.id,
+            taskTitle: buildTitle(prefix, s.titulo),
+            context: s.contexto,
+            clientId: s.clientId,
+            influencerName: s.infName,
+            influencerHandle: s.infHandle,
+            influencerAgency: s.infAgency,
+            profileRequestDate: s.profile_request_date,
+          })
+        }
+      }
     }
     // Guardar las imágenes como contexto (es_contexto=true), vinculadas a la primera tarea creada
     if (images.length && firstTaskId) {
@@ -978,7 +1058,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {/* Tareas de contenido: 4 fechas en orden cronológico del flujo */}
+              {/* Tareas de contenido: 4 o 5 fechas en orden cronológico del flujo
+                  (con perfil de influencer = 5; producción propia = 4). */}
               {!isReminder && isContent && (
                 <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
                   <div className="text-[11px] font-mono text-claude tracking-wider uppercase">📅 Fechas del contenido</div>
@@ -987,6 +1068,12 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                       <label className={labelCls}>¿Cuándo fue solicitado?</label>
                       <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
                     </div>
+                    {isInfluencer && (
+                      <div>
+                        <label className={labelCls}>Fecha de solicitud del perfil a la agencia</label>
+                        <input type="date" value={profileRequestDate} onChange={e => setProfileRequestDate(e.target.value)} className={fieldCls} />
+                      </div>
+                    )}
                     <div>
                       <label className={labelCls}>Fecha de grabación 🎬</label>
                       <input type="date" value={recordingDate} onChange={e => setRecordingDate(e.target.value)} className={fieldCls} />
@@ -1004,6 +1091,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   </div>
                   <div className="text-[10px] text-gray-400 leading-snug">
                     <b>Grabación</b> = cuándo se filma (opcional). <b>Entrega</b> = tu responsabilidad (listo para revisión). <b>Publicación</b> = la define el CM; si no está definida aún, la puede completar después.
+                    {isInfluencer && <> Al guardar con <b>fecha de solicitud del perfil</b> se crea un recordatorio 🔔 a las 9:00 de ese día.</>}
                   </div>
                   {recWarn && (
                     <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
