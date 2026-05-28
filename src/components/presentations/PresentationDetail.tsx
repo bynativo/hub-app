@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { PLAT_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS, PUB_TYPES } from '../../lib/constants'
 import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning, pubTypeBadge } from '../../lib/helpers'
+import { callClaudeProxy } from '../../lib/claude'
 import type { Slide, Task } from '../../lib/types'
 
 const PROD_CSS: Record<string, string> = {
@@ -125,6 +126,11 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   const [activeIdx, setActiveIdx] = useState(0)
   const [loading, setLoading] = useState(true)
   const [approvalKey, setApprovalKey] = useState<string | null>(null)
+  // Sugerencias de Claude (mejorar idea)
+  const [aiKind, setAiKind] = useState<'idea' | 'insight' | null>(null)
+  const [aiText, setAiText] = useState('')
+  const [aiBusy, setAiBusy] = useState(false)
+  const [ideaVer, setIdeaVer] = useState(0)
   const [approverName, setApproverName] = useState('')
   const [feedbackMode, setFeedbackMode] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
@@ -194,6 +200,29 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   async function unlinkTask(t: Task) {
     await updateTask(t.id, { presentation_id: null })
   }
+
+  // Mejorar la idea con Claude (reformula más claro y ejecutable)
+  async function improveIdea(s: Slide) {
+    const text = (s.idea_descripcion || s.title || '').trim()
+    if (!text) return
+    setAiBusy(true); setAiKind('idea'); setAiText('')
+    try {
+      const reply = await callClaudeProxy(
+        [{ role: 'user', content: `Reformulá esta idea para una pieza de contenido de redes sociales: más clara, ejecutable y directa. Conservá la intención. Tono humano en español. Devolvé solo la versión mejorada, sin preámbulos.\n\nIdea actual:\n${text}` }],
+        'Sos un editor de ideas de contenido para redes. Reformulás de forma clara, accionable y directa.'
+      )
+      setAiText(reply.trim())
+    } catch {
+      alert('No se pudo mejorar la idea (proxy de Claude no disponible).')
+      setAiKind(null)
+    } finally { setAiBusy(false) }
+  }
+  async function applyAiSuggestion(s: Slide) {
+    if (!aiKind || !aiText.trim()) return
+    if (aiKind === 'idea') { await updateRaw(s.id, { idea_descripcion: aiText.trim() }); setIdeaVer(v => v + 1) }
+    setAiKind(null); setAiText('')
+  }
+  function dismissAi() { setAiKind(null); setAiText('') }
 
   if (!pres) return null
   const kv = pres.kv_color || '#16a34a'
@@ -765,13 +794,31 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   </div>
                 ))}
                 <div className="mb-2">
-                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Idea / concepto</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono text-gray-400 uppercase">Idea / concepto</span>
+                    <button onClick={() => improveIdea(slide)} disabled={aiBusy || !(slide.idea_descripcion || slide.title)}
+                      className="text-[10px] text-claude hover:underline disabled:opacity-40 cursor-pointer">
+                      {aiBusy && aiKind === 'idea' ? 'Mejorando…' : '✦ Mejorar con Claude'}
+                    </button>
+                  </div>
                   <textarea
+                    key={`idea-${slide.id}-${ideaVer}`}
                     defaultValue={slide.idea_descripcion || ''}
                     onBlur={e => updateField(slide.id, 'idea_descripcion', e.target.value)}
                     rows={3}
                     className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none resize-y focus:border-claude/20"
                   />
+                  {aiKind === 'idea' && (
+                    <div className="mt-2 bg-claude/5 border border-claude/20 rounded-md p-2">
+                      <div className="text-[10px] font-mono text-claude uppercase mb-1.5">✦ Sugerencia — editá si querés</div>
+                      <textarea value={aiText} onChange={e => setAiText(e.target.value)} rows={3}
+                        className="w-full bg-bg2 border border-black/7 rounded-md px-2 py-1.5 text-xs outline-none mb-2" />
+                      <div className="flex gap-1.5">
+                        <button onClick={() => applyAiSuggestion(slide)} className="text-[11px] bg-claude text-white px-2.5 py-1 rounded-md cursor-pointer hover:bg-purple-700">Aplicar</button>
+                        <button onClick={dismissAi} className="text-[11px] bg-bg3 border border-black/7 text-gray-500 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4">Descartar</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Insight (opcional)</span>
