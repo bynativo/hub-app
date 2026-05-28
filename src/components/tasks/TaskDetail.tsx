@@ -6,6 +6,7 @@ import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES } from '../../lib/constan
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
+import { TaskAttachments } from './TaskAttachments'
 import type { Checklist, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -710,6 +711,8 @@ Reglas del bloque:
                 </div>
               </div>
             </div>
+
+            <TaskAttachments taskId={task.id} />
           </div>
         )}
 
