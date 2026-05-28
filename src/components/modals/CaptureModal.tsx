@@ -12,7 +12,7 @@ import type { Client, Project, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type CaptureTab = 'tarea' | 'notas' | 'micro'
-type TipoTarea = 'independiente' | 'subtarea' | 'proyecto'
+type TipoTarea = 'independiente' | 'subtarea' | 'proyecto' | 'solicitud_influencers'
 
 interface Suggested {
   titulo: string
@@ -48,6 +48,38 @@ interface Suggested {
 
 function normTipo(t: string): TipoTarea {
   return t === 'subtarea' ? 'subtarea' : t === 'proyecto' ? 'proyecto' : 'independiente'
+}
+
+// Crea las N subtareas "Perfil 1..N — {título}" para una solicitud de influencers.
+// Cada perfil queda en task_type='influencer' con todos los campos del influencer
+// vacíos; se completan a medida que la agencia confirma cada uno.
+async function createPerfilSubtasks(opts: {
+  parentTaskId: number
+  parentTitle: string
+  num: number
+  context: string
+  clientId: number | null
+  projectId: number | null
+  dueDate: string | null
+}) {
+  if (opts.num < 1) return
+  const rows = Array.from({ length: opts.num }, (_, i) => ({
+    title: `Perfil ${i + 1} — ${opts.parentTitle}`,
+    context: opts.context,
+    client_id: opts.context === 'agencia' ? opts.clientId : null,
+    project_id: opts.projectId,
+    parent_task_id: opts.parentTaskId,
+    task_type: 'influencer',
+    priority: 'media',
+    origin: 'propia',
+    status: 'Inbox',
+    due_date: opts.dueDate,
+    requested_at: todayISO(),
+    es_influencer: true,
+    done: false,
+    cats: [], plan: [], meeting_agenda: [],
+  }))
+  await supabase.from('tasks').insert(rows)
 }
 
 // Cuando se guarda una tarea de influencer con profile_request_date, se crea
@@ -325,11 +357,6 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
                 <div><label className={lbl}>Handle</label><input value={s.infHandle} onChange={e => onChange({ infHandle: e.target.value })} className={fld} placeholder="@usuario" /></div>
               </div>
               <div><label className={lbl}>Agencia (opcional)</label><input value={s.infAgency} onChange={e => onChange({ infAgency: e.target.value })} className={fld} placeholder="Agencia / representante" /></div>
-              <div>
-                <label className={lbl}>Fecha de solicitud del perfil a la agencia</label>
-                <input type="date" value={s.profile_request_date || ''} onChange={e => onChange({ profile_request_date: e.target.value || null })} className={fld} />
-                <div className="text-[10px] text-gray-400 mt-0.5">Al guardar se crea un recordatorio 🔔 a las 9:00 de ese día para enviar la solicitud.</div>
-              </div>
             </div>
           )}
 
@@ -401,7 +428,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [requestedAt, setRequestedAt] = useState(todayISO())
   const [publishDate, setPublishDate] = useState('')
   const [recordingDate, setRecordingDate] = useState('')
-  const [profileRequestDate, setProfileRequestDate] = useState('')
+  const [briefDate, setBriefDate] = useState('')
+  const [numPerfiles, setNumPerfiles] = useState<number>(1)
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('colab_ig')
@@ -423,6 +451,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   // Fecha de entrega obligatoria salvo recordatorios (usan reminderAt como fecha)
   const dueError = showErrors && !isReminder && !dueDate
   const ctxError = showErrors && !context
+  const briefError = showErrors && tipo === 'solicitud_influencers' && !briefDate
+  const isSolicitud = tipo === 'solicitud_influencers'
   // Contenido: la entrega debe ser ≥24h antes de la publicación
   const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
   const recWarn = isContent ? recordingWarning(recordingDate || null, dueDate || null) : null
@@ -446,6 +476,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     if (isReminder && !reminderAt) return
     // Contexto y fecha de entrega son obligatorios (la fecha no aplica a recordatorios)
     if (!context || (!isReminder && !dueDate)) { setShowErrors(true); return }
+    // Para "Solicitar influencers" además es obligatoria la fecha de envío del brief.
+    if (isSolicitud && !briefDate) { setShowErrors(true); return }
     setSaving(true)
     const reminder = isReminder && !!reminderAt
     const emailReply = isEmailReply && origin === 'gmail-agencia'
@@ -466,11 +498,16 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       // la vista del proyecto), respetar ese vínculo.
       project_id: emailReply ? null : (reminder ? (preselectProjectId ?? null) : resolvedProjectId),
       parent_task_id: emailReply ? null : (reminder ? (parentId ?? null) : (tipo === 'subtarea' ? parentId : null)),
-      task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
+      task_type: emailReply ? 'responder_email'
+        : isSolicitud ? 'solicitud_influencers'
+        : isContent ? 'contenido'
+        : 'independiente',
       due_date: reminder ? null : (dueDate || null),
       publish_date: (!reminder && isContent) ? (publishDate || null) : null,
-      recording_date: (!reminder && isContent) ? (recordingDate || null) : null,
-      profile_request_date: (!reminder && isContent && isInfluencer) ? (profileRequestDate || null) : null,
+      recording_date: (!reminder && (isContent || isSolicitud)) ? (recordingDate || null) : null,
+      profile_request_date: null,
+      brief_date: isSolicitud ? (briefDate || null) : null,
+      num_perfiles: isSolicitud ? Math.max(1, numPerfiles) : null,
       es_influencer: isContent ? isInfluencer : null,
       tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
       influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
@@ -492,17 +529,31 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       cats: [], plan: [], meeting_agenda: [],
     }).select('id').single()
     if (error || !inserted) { alert('Error: ' + (error?.message || 'no data')); setSaving(false); return }
-    // Recordatorio automático: pedir el perfil del influencer a la agencia el día indicado a las 9:00.
-    if (!reminder && isContent && isInfluencer && profileRequestDate) {
-      await createProfileRequestReminder({
+    // Solicitar influencers: crear brief (recordatorio enviar_correo) + N subtareas Perfil X.
+    if (!reminder && isSolicitud && briefDate) {
+      await supabase.from('tasks').insert({
+        title: `Enviar brief — ${builtTitle}`,
+        context,
+        client_id: context === 'agencia' ? clientId : null,
+        parent_task_id: inserted.id,
+        priority: 'media',
+        origin: 'propia',
+        status: 'Recordatorio',
+        es_recordatorio: true,
+        recordatorio_at: new Date(`${briefDate}T09:00:00`).toISOString(),
+        tipo_recordatorio: 'enviar_correo',
+        correo_contexto: `Enviar brief de influencers para ${builtTitle} a la agencia`,
+        done: false,
+        cats: [], plan: [], meeting_agenda: [],
+      })
+      await createPerfilSubtasks({
         parentTaskId: inserted.id,
-        taskTitle: builtTitle,
+        parentTitle: builtTitle,
+        num: Math.max(1, numPerfiles),
         context,
         clientId,
-        influencerName: infName,
-        influencerHandle: infHandle,
-        influencerAgency: infAgency,
-        profileRequestDate,
+        projectId: resolvedProjectId,
+        dueDate: dueDate || null,
       })
     }
     await loadAll()
@@ -968,15 +1019,17 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               )}
 
               {!isReminder && !isEmailReply && (<>
-              {/* Tipo / jerarquía */}
+              {/* Tipo / jerarquía. "Solicitar influencers" es un flujo aparte (genera
+                  un brief + N subtareas de perfil pendientes) y solo aplica a banco/agencia. */}
               <div className="mb-3">
                 <label className={labelCls}>Tipo</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
+                <div className="grid grid-cols-2 gap-2">
+                  {(([
                     { v: 'independiente', l: 'Independiente' },
                     { v: 'subtarea', l: 'Subtarea de…' },
                     { v: 'proyecto', l: 'Parte de proyecto / campaña' },
-                  ] as { v: TipoTarea; l: string }[]).map(o => (
+                    ...(context === 'banco' || context === 'agencia' ? [{ v: 'solicitud_influencers' as TipoTarea, l: '🎬 Solicitar influencers' }] : []),
+                  ]) as { v: TipoTarea; l: string }[]).map(o => (
                     <button key={o.v} onClick={() => setTipo(o.v)}
                       className={`py-2 px-1 border rounded-lg text-[11px] text-center cursor-pointer transition-all ${
                         tipo === o.v ? 'border-claude/20 text-claude bg-claude/7' : 'border-black/7 text-gray-500 bg-bg3 hover:bg-bg4'
@@ -1056,7 +1109,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {!isReminder && !isContent && (
+              {!isReminder && !isContent && !isSolicitud && (
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div>
                     <label className={labelCls}>Fecha de entrega <span className="text-danger">*</span></label>
@@ -1071,6 +1124,46 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
+              {/* Solicitud de influencers: 4 fechas + cuántos perfiles. Genera al
+                  guardar un brief (recordatorio enviar_correo en briefDate 9:00) y
+                  N subtareas de perfil pendientes (task_type='influencer'). */}
+              {!isReminder && isSolicitud && (
+                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-claude/15 flex flex-col gap-2.5">
+                  <div className="text-[11px] font-mono text-claude tracking-wider uppercase">🎬 Solicitud de influencers</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={labelCls}>¿Cuándo fue solicitado?</label>
+                      <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Fecha de envío del brief <span className="text-danger">*</span></label>
+                      <input type="date" value={briefDate} onChange={e => setBriefDate(e.target.value)}
+                        className={fieldCls + (briefError ? ' border-danger/60 bg-danger/5' : '')} />
+                      {briefError && <span className="text-[10px] text-danger">Obligatoria</span>}
+                    </div>
+                    <div>
+                      <label className={labelCls}>Fecha de grabación o evento 🎬</label>
+                      <input type="date" value={recordingDate} onChange={e => setRecordingDate(e.target.value)} className={fieldCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Fecha de entrega de perfiles <span className="text-danger">*</span></label>
+                      <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                        className={fieldCls + (dueError ? ' border-danger/60 bg-danger/5' : '')} />
+                      {dueError && <span className="text-[10px] text-danger">Obligatoria</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>¿Cuántos perfiles necesitás?</label>
+                    <input type="number" min={1} value={numPerfiles}
+                      onChange={e => setNumPerfiles(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className={fieldCls} />
+                  </div>
+                  <div className="text-[10px] text-gray-400 leading-snug">
+                    Al guardar: se crea un recordatorio 🔔 a las 9:00 del día del envío del brief y {numPerfiles} subtarea{numPerfiles === 1 ? '' : 's'} "Perfil X" pendientes de confirmar.
+                  </div>
+                </div>
+              )}
+
               {/* Tareas de contenido: 4 o 5 fechas en orden cronológico del flujo
                   (con perfil de influencer = 5; producción propia = 4). */}
               {!isReminder && isContent && (
@@ -1081,12 +1174,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                       <label className={labelCls}>¿Cuándo fue solicitado?</label>
                       <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
                     </div>
-                    {isInfluencer && (
-                      <div>
-                        <label className={labelCls}>Fecha de solicitud del perfil a la agencia</label>
-                        <input type="date" value={profileRequestDate} onChange={e => setProfileRequestDate(e.target.value)} className={fieldCls} />
-                      </div>
-                    )}
                     <div>
                       <label className={labelCls}>Fecha de grabación 🎬</label>
                       <input type="date" value={recordingDate} onChange={e => setRecordingDate(e.target.value)} className={fieldCls} />
@@ -1104,7 +1191,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   </div>
                   <div className="text-[10px] text-gray-400 leading-snug">
                     <b>Grabación</b> = cuándo se filma (opcional). <b>Entrega</b> = tu responsabilidad (listo para revisión). <b>Publicación</b> = la define el CM; si no está definida aún, la puede completar después.
-                    {isInfluencer && <> Al guardar con <b>fecha de solicitud del perfil</b> se crea un recordatorio 🔔 a las 9:00 de ese día.</>}
                   </div>
                   {recWarn && (
                     <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
@@ -1147,7 +1233,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               </div>
 
               {/* Dos toggles independientes: "Es contenido" y "Es influencer".
-                  Activar influencer auto-activa contenido (toda tarea de influencer es contenido). */}
+                  Activar influencer auto-activa contenido (toda tarea de influencer es contenido).
+                  No aplica para "Solicitud de influencers" (que tiene su propio flujo). */}
+              {!isSolicitud && (
               <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
                 <div className="grid grid-cols-2 gap-3">
                   <label className="flex items-center gap-3 cursor-pointer">
@@ -1196,6 +1284,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   </>
                 )}
               </div>
+              )}
 
               <div className="mb-4">
                 <label className={labelCls}>Descripción (opcional)</label>

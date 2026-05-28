@@ -607,11 +607,6 @@ Reglas del bloque:
                     </div>
                     <div><label className={labelCls}>Agencia que lo gestiona</label>
                       <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
-                    <div>
-                      <label className={labelCls}>Fecha de solicitud del perfil a la agencia</label>
-                      <input type="date" value={profileRequestDate} onChange={e => setInfo(setProfileRequestDate, e.target.value)} className={fieldCls} />
-                      <div className="text-[10px] text-gray-400 mt-1">Opcional. Solo afecta a esta tarea; el recordatorio automático se crea al capturar inicialmente.</div>
-                    </div>
                   </>
                 )}
                 <div>

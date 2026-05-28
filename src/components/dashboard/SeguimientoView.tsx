@@ -47,11 +47,17 @@ function FollowupCard({ task }: { task: Task }) {
   const isMailReminder = isResponder || isEnviar
   const isSeguimientoRem = isRem && remType === 'seguimiento'
   // Recordatorio "Solicitar perfil del influencer" creado al guardar la tarea de influencer.
-  // Se detecta por el prefijo del correo_contexto que pone createProfileRequestReminder.
+  // Detectado por prefijo del correo_contexto que pone createProfileRequestReminder.
   const isProfileRequest = isEnviar && (task.correo_contexto || '').startsWith('Solicitar perfil de influencer')
-  const parent = isProfileRequest && task.parent_task_id
+  // Recordatorio "Enviar brief de influencers" creado al guardar una tarea
+  // task_type='solicitud_influencers'. Detectado por prefijo del correo_contexto.
+  const isBriefRequest = isEnviar && (task.correo_contexto || '').startsWith('Enviar brief de influencers')
+  const parent = (isProfileRequest || isBriefRequest) && task.parent_task_id
     ? allTasks.find(t => t.id === task.parent_task_id)
     : null
+  const briefPerfiles = isBriefRequest && parent
+    ? allTasks.filter(t => t.parent_task_id === parent.id && t.task_type === 'influencer' && !t.archived_at)
+    : []
   const isContentDue = !isRem && isContentDueToday(task) // contenido cuya entrega vence hoy
   const alarmAt = isRem ? task.recordatorio_at : task.followup_at
   const stColor = STATUS_COLOR[task.status] || '#6b7280'
@@ -70,7 +76,14 @@ function FollowupCard({ task }: { task: Task }) {
     try {
       let prompt: string
       let system: string
-      if (isProfileRequest && parent) {
+      if (isBriefRequest && parent) {
+        const n = parent.num_perfiles || briefPerfiles.length || 1
+        const grab = parent.recording_date || 'fecha por confirmar'
+        const entrega = parent.due_date || 'fecha por confirmar'
+        const cliente = parent.clients?.name || (parent.context === 'agencia' ? 'agencia interna' : ctxLabel(parent.context))
+        prompt = `Redacta el email de brief para la agencia de influencers solicitando ${n} perfil${n === 1 ? '' : 'es'} para la campaña "${parent.title}". Cliente: ${cliente}. Grabación / evento: ${grab}. Fecha de entrega de perfiles: ${entrega}. Pedir perfiles que encajen con el brief de la campaña, con confirmación de disponibilidad y tarifas. Tono profesional pero cercano. Devolvé asunto + cuerpo del email, y al final una tabla resumen con: #Perfil, Campaña, Grabación, Entrega.`
+        system = 'Redactás briefs profesionales para agencias de influencers en español. Tono profesional pero cercano, claro y al grano. Devolvés asunto + cuerpo + una tabla resumen al final.'
+      } else if (isProfileRequest && parent) {
         const inf = parent.influencer_nombre || parent.influencer_name || ''
         const handle = parent.influencer_handle || ''
         const target = [inf, handle].filter(Boolean).join(' / ') || 'el influencer'
@@ -110,7 +123,7 @@ function FollowupCard({ task }: { task: Task }) {
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium leading-snug cursor-pointer hover:text-claude" onClick={() => openDetail(task.id)}>
             {due && <span className="text-claude mr-1 animate-pulse">●</span>}
-            {isRem && <span className="mr-1">{isProfileRequest ? '🤝' : isResponder ? '📧' : isEnviar ? '📨' : isSeguimientoRem ? '👀' : '🔔'}</span>}
+            {isRem && <span className="mr-1">{isBriefRequest ? '🎬' : isProfileRequest ? '🤝' : isResponder ? '📧' : isEnviar ? '📨' : isSeguimientoRem ? '👀' : '🔔'}</span>}
             {task.title}
           </div>
           {isMailReminder && task.correo_contexto && (
@@ -163,11 +176,11 @@ function FollowupCard({ task }: { task: Task }) {
           <>
             <button onClick={redactar} disabled={drafting}
               className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
-              {drafting ? 'Redactando…' : isProfileRequest ? '✦ Redactar solicitud con Claude' : '✦ Redactar email con Claude'}
+              {drafting ? 'Redactando…' : isBriefRequest ? '✦ Redactar brief con Claude' : isProfileRequest ? '✦ Redactar solicitud con Claude' : '✦ Redactar email con Claude'}
             </button>
             <button onClick={() => toggleTask(task.id)}
               className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
-              {isProfileRequest ? '✓ Solicitud enviada — cerrar' : '✓ Enviado — cerrar'}
+              {isBriefRequest ? '✓ Brief enviado — cerrar' : isProfileRequest ? '✓ Solicitud enviada — cerrar' : '✓ Enviado — cerrar'}
             </button>
             <button onClick={() => openFollowup(task.id)}
               className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">↻ Posponer</button>
