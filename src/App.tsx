@@ -18,6 +18,7 @@ import { GrillaView } from './components/grilla/GrillaView'
 import { CaptureModal } from './components/modals/CaptureModal'
 import { FollowupModal } from './components/modals/FollowupModal'
 import { SearchModal } from './components/modals/SearchModal'
+import { RecurrenteModal } from './components/modals/RecurrenteModal'
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -32,6 +33,11 @@ export default function App() {
   const searchOpen = useStore(s => s.searchOpen)
   const openSearch = useStore(s => s.openSearch)
   const closeSearch = useStore(s => s.closeSearch)
+  const recurrentEditId = useStore(s => s.recurrentEditId)
+  const closeRecurrentEdit = useStore(s => s.closeRecurrentEdit)
+  const recurrentCreate = useStore(s => s.recurrentCreate)
+  const closeRecurrentCreate = useStore(s => s.closeRecurrentCreate)
+  const recurrentes = useStore(s => s.recurrentes)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
@@ -121,6 +127,17 @@ export default function App() {
       )}
 
       {searchOpen && <SearchModal onClose={closeSearch} onOpenPres={setOpenPresId} />}
+
+      {recurrentEditId !== null && (() => {
+        const rec = recurrentes.find(r => r.id === recurrentEditId)
+        return rec ? <RecurrenteModal onClose={closeRecurrentEdit} recurrente={rec} /> : null
+      })()}
+
+      {recurrentCreate && (
+        <RecurrenteModal onClose={closeRecurrentCreate}
+          preselectContext={recurrentCreate.context}
+          preselectClientId={recurrentCreate.clientId ?? null} />
+      )}
     </>
   )
 }

@@ -121,6 +121,49 @@ export function stripPrefix(title: string): string {
   return splitTitle(title).name
 }
 
+// Próxima fecha ISO (YYYY-MM-DD) en que una recurrente "toca". Calculada según
+// freq + day_of_month + last_executed_at:
+//  - diaria: hoy, o mañana si ya se ejecutó hoy
+//  - semanal: próximo día de la semana (lun..vie); si es hoy y ya se ejecutó hoy, +7
+//  - mensual: día N (o último) del mes actual; si ya pasó o ya se ejecutó este mes, mes siguiente
+// Siempre devuelve una fecha >= hoy — no hay "atrasadas" para recurrentes
+// (cada instancia perdida se sustituye por la siguiente).
+export function nextRecurringDueDate(r: { freq: string; day_of_month: string; last_executed_at: string | null }): string {
+  const today = todayISO()
+  const lastExec = r.last_executed_at ? r.last_executed_at.slice(0, 10) : null
+
+  if (r.freq === 'diaria') {
+    return lastExec === today ? addDaysISO(today, 1) : today
+  }
+
+  if (r.freq === 'semanal') {
+    const map: Record<string, number> = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5, sabado: 6, sábado: 6 }
+    const target = map[(r.day_of_month || '').toLowerCase()] ?? 1
+    const todayIdx = new Date().getDay()
+    let diff = target - todayIdx
+    if (diff < 0) diff += 7
+    if (diff === 0 && lastExec === today) diff = 7
+    return addDaysISO(today, diff)
+  }
+
+  if (r.freq === 'mensual') {
+    const now = new Date()
+    const buildIso = (y: number, m: number) => {
+      const d = r.day_of_month === 'ultimo'
+        ? new Date(y, m + 1, 0)
+        : new Date(y, m, Math.min(parseInt(r.day_of_month, 10) || 1, new Date(y, m + 1, 0).getDate()))
+      return localISO(d)
+    }
+    const candIso = buildIso(now.getFullYear(), now.getMonth())
+    const sameMonthExec = lastExec && lastExec.slice(0, 7) === candIso.slice(0, 7) && lastExec >= candIso
+    if (candIso > today || (candIso === today && lastExec !== today && !sameMonthExec)) return candIso
+    const nm = now.getMonth() + 1
+    return buildIso(nm > 11 ? now.getFullYear() + 1 : now.getFullYear(), nm > 11 ? 0 : nm)
+  }
+
+  return today
+}
+
 // Badge corto del cliente: sigla (o 3 primeras letras del nombre) + color del cliente.
 // Para mostrar en cada tarjeta de tarea. Devuelve null si la tarea no tiene cliente.
 export function clientBadge(

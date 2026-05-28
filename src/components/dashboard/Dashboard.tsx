@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { getGreeting, todayISO, tomorrowISO, fmtHoras, ctxColor } from '../../lib/helpers'
+import { getGreeting, todayISO, tomorrowISO, fmtHoras, ctxColor, nextRecurringDueDate } from '../../lib/helpers'
 import { WAITING_STATES } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
+import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 
 function SectionHeader({ icon, label, count }: { icon: string; label: string; count: number }) {
   return (
@@ -20,6 +21,7 @@ function fmtT(iso: string) { return new Date(iso).toLocaleTimeString('es', { hou
 export function Dashboard() {
   const tasks = useStore(s => s.tasks)
   const calendarEvents = useStore(s => s.calendarEvents)
+  const recurrentes = useStore(s => s.recurrentes)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
   const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at)
@@ -41,6 +43,15 @@ export function Dashboard() {
   const manana = dated.filter(t => t.due_date === tomorrow)
   const seguimiento = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status))
   const horasHoy = hoy.reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
+
+  // Instancias próximas de recurrentes — solo la siguiente por cada definición.
+  // nextRecurringDueDate ya respeta last_executed_at, así que estas listas son
+  // estables incluso si el usuario marcó alguna como hecha hoy.
+  const recInstances = recurrentes.map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
+  const recHoy = recInstances.filter(i => i.date === today)
+  const recManana = recInstances.filter(i => i.date === tomorrow)
+  const recProxima = recInstances.filter(i => i.date > tomorrow)
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   // El resto de las tareas activas (ni hoy, ni mañana, ni en seguimiento) para que
   // ninguna quede invisible en la vista Lista — misma fuente que el Kanban.
@@ -109,8 +120,15 @@ export function Dashboard() {
               <TaskList tasks={atrasadas} />
             </>
           )}
-          <SectionHeader icon="📌" label="Hoy" count={hoy.length} />
-          <TaskList tasks={hoy} emptyText="Nada vence hoy" />
+          <SectionHeader icon="📌" label="Hoy" count={hoy.length + recHoy.length} />
+          {hoy.length > 0
+            ? <TaskList tasks={hoy} />
+            : recHoy.length === 0 && <div className="text-center py-7 text-gray-400 text-[13px]">Nada vence hoy</div>}
+          {recHoy.length > 0 && (
+            <div className={`flex flex-col gap-1 ${hoy.length ? 'mt-1' : ''}`}>
+              {recHoy.map(i => <RecurrentInstanceCard key={i.rec.id} recurrente={i.rec} date={i.date} />)}
+            </div>
+          )}
           {hoy.length > 0 && (
             <div className="flex justify-end mt-1.5 pr-1">
               <span className="font-mono text-[11px] text-gray-400">
@@ -119,16 +137,28 @@ export function Dashboard() {
             </div>
           )}
 
-          <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
-          <TaskList tasks={manana} emptyText="Nada para mañana" compactEmpty />
+          <SectionHeader icon="🌅" label="Mañana" count={manana.length + recManana.length} />
+          {manana.length > 0
+            ? <TaskList tasks={manana} />
+            : recManana.length === 0 && <div className="text-gray-300 text-[12px] italic pl-1 pb-1">Nada para mañana</div>}
+          {recManana.length > 0 && (
+            <div className={`flex flex-col gap-1 ${manana.length ? 'mt-1' : ''}`}>
+              {recManana.map(i => <RecurrentInstanceCard key={i.rec.id} recurrente={i.rec} date={i.date} />)}
+            </div>
+          )}
 
           <SectionHeader icon="⏳" label="Seguimiento" count={seguimiento.length} />
           <TaskList tasks={seguimiento} emptyText="Nada esperando respuesta" />
 
-          {proximamente.length > 0 && (
+          {(proximamente.length > 0 || recProxima.length > 0) && (
             <>
-              <SectionHeader icon="📅" label="Próximamente" count={proximamente.length} />
-              <TaskList tasks={proximamente} />
+              <SectionHeader icon="📅" label="Próximamente" count={proximamente.length + recProxima.length} />
+              {proximamente.length > 0 && <TaskList tasks={proximamente} />}
+              {recProxima.length > 0 && (
+                <div className={`flex flex-col gap-1 ${proximamente.length ? 'mt-1' : ''}`}>
+                  {recProxima.map(i => <RecurrentInstanceCard key={i.rec.id} recurrente={i.rec} date={i.date} />)}
+                </div>
+              )}
             </>
           )}
         </div>

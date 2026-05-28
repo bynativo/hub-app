@@ -23,6 +23,8 @@ interface AppState {
   captureProjectId: number | null
   pendingFollowupTaskId: number | null
   searchOpen: boolean
+  recurrentEditId: number | null
+  recurrentCreate: { context?: string; clientId?: number | null } | null
 
   loadAll: () => Promise<void>
   openSearch: () => void
@@ -39,6 +41,11 @@ interface AppState {
   openFollowup: (id: number) => void
   closeFollowup: () => void
   setFollowup: (id: number, at: string | null, type: string) => Promise<void>
+  markRecurrentExecuted: (id: number) => Promise<void>
+  openRecurrentEdit: (id: number) => void
+  closeRecurrentEdit: () => void
+  openRecurrentCreate: (opts?: { context?: string; clientId?: number | null }) => void
+  closeRecurrentCreate: () => void
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -61,6 +68,8 @@ export const useStore = create<AppState>((set, get) => ({
   captureProjectId: null,
   pendingFollowupTaskId: null,
   searchOpen: false,
+  recurrentEditId: null,
+  recurrentCreate: null,
 
   openSearch: () => set({ searchOpen: true }),
   closeSearch: () => set({ searchOpen: false }),
@@ -133,6 +142,17 @@ export const useStore = create<AppState>((set, get) => ({
     await supabase.from('tasks').update(patch).eq('id', id)
     set({ tasks: get().tasks.map(t => t.id === id ? { ...t, ...patch } : t) })
   },
+
+  markRecurrentExecuted: async (id) => {
+    const now = new Date().toISOString()
+    await supabase.from('recurrentes').update({ last_executed_at: now }).eq('id', id)
+    set({ recurrentes: get().recurrentes.map(r => r.id === id ? { ...r, last_executed_at: now } : r) })
+  },
+
+  openRecurrentEdit: (id) => set({ recurrentEditId: id }),
+  closeRecurrentEdit: () => set({ recurrentEditId: null }),
+  openRecurrentCreate: (opts) => set({ recurrentCreate: opts ?? {} }),
+  closeRecurrentCreate: () => set({ recurrentCreate: null }),
 
   openFollowup: (id) => set({ pendingFollowupTaskId: id }),
   closeFollowup: () => set({ pendingFollowupTaskId: null }),

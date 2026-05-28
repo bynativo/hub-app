@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { ctxColor, ctxLabel } from '../../lib/helpers'
-import { RecurrenteModal } from '../modals/RecurrenteModal'
+import { ctxColor, ctxLabel, nextRecurringDueDate } from '../../lib/helpers'
+import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import type { Recurrente } from '../../lib/types'
 
 function freqDetail(r: { freq: string; day_of_month: string }) {
@@ -10,13 +10,58 @@ function freqDetail(r: { freq: string; day_of_month: string }) {
   return r.day_of_month === 'ultimo' ? 'Último día del mes' : `Día ${r.day_of_month} del mes`
 }
 
+// Tarjeta de la DEFINICIÓN de una recurrente. Click en el caret expande la card
+// y muestra la próxima instancia como pseudo-tarea hija (RecurrentInstanceCard).
+// Click en el cuerpo abre el modal de edición.
+function RecurrenteCard({ r, defaultExpanded }: { r: Recurrente; defaultExpanded: boolean }) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  const openEdit = useStore(s => s.openRecurrentEdit)
+  const accent = ctxColor(r.context)
+
+  return (
+    <div>
+      <div
+        onClick={() => openEdit(r.id)}
+        className="bg-bg2 border border-black/7 rounded-xl p-3.5 shadow-sm flex items-start gap-3 cursor-pointer hover:border-black/13 hover:shadow-md transition-all"
+      >
+        <button
+          onClick={e => { e.stopPropagation(); setExpanded(x => !x) }}
+          className="text-[10px] text-gray-400 hover:text-claude shrink-0 mt-1 w-3 cursor-pointer"
+          title={expanded ? 'Contraer próxima instancia' : 'Ver próxima instancia'}
+        >
+          {expanded ? '▼' : '▶'}
+        </button>
+        <div className="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style={{ background: accent }} title={ctxLabel(r.context)} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="text-[13px] font-medium">{r.title}</div>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0" style={{ background: accent + '12', color: accent }}>{r.freq}</span>
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{ctxLabel(r.context)}</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{freqDetail(r)} · {r.time_minutes}min</span>
+            {r.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{r.clients.name}</span>}
+            {(r.cats || []).slice(0, 3).map(c => (
+              <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">#{c}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+      {expanded && (
+        <div className="ml-6 mt-1 border-l-2 border-claude/15 pl-2.5">
+          <RecurrentInstanceCard recurrente={r} date={nextRecurringDueDate(r)} variant="nested" />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // `context` indefinido = vista global (todos los contextos, con filtro por contexto).
 // `context` definido = vista por contexto (subconjunto filtrado; agencia agrega filtro por cliente).
 export function RecurrentesView({ context }: { context?: string } = {}) {
   const recurrentes = useStore(s => s.recurrentes)
   const clients = useStore(s => s.clients)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState<Recurrente | null>(null)
+  const openCreate = useStore(s => s.openRecurrentCreate)
   const [ctxFilter, setCtxFilter] = useState('all')
   const [clientFilter, setClientFilter] = useState<number | 'all'>('all')
 
@@ -42,7 +87,7 @@ export function RecurrentesView({ context }: { context?: string } = {}) {
             {context ? `${ctxLabel(context)} · ` : 'Todos los contextos · '}{scoped.length} configuradas
           </p>
         </div>
-        <button onClick={() => setModalOpen(true)}
+        <button onClick={() => openCreate({ context })}
           className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
           + Nueva recurrente
         </button>
@@ -88,33 +133,11 @@ export function RecurrentesView({ context }: { context?: string } = {}) {
       )}
 
       <div className="flex flex-col gap-2 max-w-[760px]">
-        {sorted.map(r => (
-          <div key={r.id} onClick={() => setEditing(r)}
-            className="bg-bg2 border border-black/7 rounded-xl p-3.5 shadow-sm flex items-start gap-3 cursor-pointer hover:border-black/13 hover:shadow-md transition-all">
-            <div className="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style={{ background: ctxColor(r.context) }} title={ctxLabel(r.context)} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <div className="text-[13px] font-medium">{r.title}</div>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0" style={{ background: ctxColor(r.context) + '12', color: ctxColor(r.context) }}>{r.freq}</span>
-              </div>
-              <div className="flex gap-1.5 flex-wrap">
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{ctxLabel(r.context)}</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{freqDetail(r)} · {r.time_minutes}min</span>
-                {r.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{r.clients.name}</span>}
-                {(r.cats || []).slice(0, 3).map(c => (
-                  <span key={c} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">#{c}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
+        {sorted.map(r => <RecurrenteCard key={r.id} r={r} defaultExpanded={false} />)}
         {!sorted.length && (
           <div className="text-center py-7 text-gray-400 text-[13px]">Sin recurrentes configuradas</div>
         )}
       </div>
-
-      {modalOpen && <RecurrenteModal onClose={() => setModalOpen(false)} preselectContext={context} />}
-      {editing && <RecurrenteModal onClose={() => setEditing(null)} recurrente={editing} />}
     </div>
   )
 }

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
-import { ctxLabel, ctxColor, todayISO } from '../../lib/helpers'
+import { ctxLabel, ctxColor, todayISO, nextRecurringDueDate } from '../../lib/helpers'
 import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
+import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import type { Task } from '../../lib/types'
 
 // Filtro local por cliente en la vista de tareas de agencia.
@@ -15,6 +16,7 @@ type ClientFilter = 'all' | 'none' | number
 export function ContextView({ context }: { context: string }) {
   const tasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
+  const recurrentes = useStore(s => s.recurrentes)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
   const [clientFilter, setClientFilter] = useState<ClientFilter>('all')
 
@@ -41,6 +43,19 @@ export function ContextView({ context }: { context: string }) {
   const atrasadas = filtered.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
   const restFiltered = filtered.filter(t => !(t.due_date && t.due_date < today))
+
+  // Recurrentes del contexto (respetando el filtro por cliente en agencia)
+  // ordenadas por su próxima fecha. Sección dedicada arriba — no se agrupan
+  // por status porque las instancias virtuales no tienen status.
+  const recScope = recurrentes.filter(r => r.context === context)
+  const recForClient = context !== 'agencia' || clientFilter === 'all'
+    ? recScope
+    : clientFilter === 'none'
+      ? recScope.filter(r => !r.client_id)
+      : recScope.filter(r => r.client_id === clientFilter)
+  const recInstances = recForClient
+    .map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   const columns = STATUS_COLUMNS[context] || STATUS_COLUMNS.banco
   const kanbanCols = columns.map(s => ({ key: s, label: s, statuses: [s] }))
@@ -140,7 +155,7 @@ export function ContextView({ context }: { context: string }) {
 
       {mode === 'kanban' ? (
         <KanbanBoard items={filtered} columns={kanbanCols} />
-      ) : !filtered.length ? (
+      ) : !filtered.length && !recInstances.length ? (
         <div className="text-center py-7 text-gray-400 text-[13px]">Sin tareas</div>
       ) : (
         <div className="max-w-[860px]">
@@ -151,6 +166,17 @@ export function ContextView({ context }: { context: string }) {
                 <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{atrasadas.length}</span>
               </div>
               <TaskList tasks={atrasadas} />
+            </div>
+          )}
+          {recInstances.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[11px] font-mono tracking-wider uppercase text-claude">🔄 Recurrentes próximas</span>
+                <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{recInstances.length}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {recInstances.map(i => <RecurrentInstanceCard key={i.rec.id} recurrente={i.rec} date={i.date} />)}
+              </div>
             </div>
           )}
           {groupByClient && clientEntries ? (

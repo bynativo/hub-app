@@ -254,5 +254,6 @@ export interface Recurrente {
   active: boolean
   created_at: string
   description: string | null
+  last_executed_at: string | null
   clients?: { name: string } | null
 }

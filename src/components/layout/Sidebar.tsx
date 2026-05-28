@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { WAITING_STATES, CLOSING_STATES } from '../../lib/constants'
-import { todayISO, daysUntil, nextWeekRange } from '../../lib/helpers'
+import { todayISO, daysUntil, nextWeekRange, nextRecurringDueDate } from '../../lib/helpers'
 
 const STORAGE_KEY = 'sidebar_collapsed'
 function loadCollapsed(): Record<string, boolean> {
@@ -54,6 +54,7 @@ function CollapsibleHeader({ label, color, open, onToggle }: { label: string; co
 
 export function Sidebar() {
   const tasks = useStore(s => s.tasks)
+  const recurrentes = useStore(s => s.recurrentes)
   const openCapture = useStore(s => s.openCapture)
   const active = tasks.filter(t => !t.done && !t.parent_task_id && !t.archived_at)
 
@@ -69,13 +70,20 @@ export function Sidebar() {
   // Contadores por fecha: incluyen subtareas (tienen due_date propio), igual que las vistas.
   const dated = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio)
   const today = todayISO()
-  const hoyCount = dated.filter(t => t.due_date === today).length
+  // Instancias próximas de recurrentes — se suman a los contadores de fecha
+  // para que los counts del sidebar coincidan con lo que se ve en cada vista.
+  const recInstances = recurrentes.map(r => nextRecurringDueDate(r))
+  const hoyCount = dated.filter(t => t.due_date === today).length + recInstances.filter(d => d === today).length
   const semanaCount = dated.filter(t => {
     const d = daysUntil(t.due_date)
     return d !== null && d >= 0 && d <= 7
+  }).length + recInstances.filter(d => {
+    const n = daysUntil(d)
+    return n !== null && n >= 0 && n <= 7
   }).length
   const pw = nextWeekRange()
   const proximaCount = dated.filter(t => t.due_date && t.due_date >= pw.from && t.due_date <= pw.to).length
+    + recInstances.filter(d => d >= pw.from && d <= pw.to).length
   // Seguimiento = recordatorios/esperando (top-level) + contenido que vence hoy
   const contentDueCount = dated.filter(t => t.task_type === 'contenido' && t.due_date === today && !CLOSING_STATES.includes(t.status) && !WAITING_STATES.includes(t.status)).length
   const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length + contentDueCount
