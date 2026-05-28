@@ -132,6 +132,10 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   const [aiBusy, setAiBusy] = useState(false)
   const [ideaVer, setIdeaVer] = useState(0)
   const [insightVer, setInsightVer] = useState(0)
+  // Drag & drop, menú "⋯" y eliminación de slide
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [menuFor, setMenuFor] = useState<number | null>(null)
+  const [deletingSlide, setDeletingSlide] = useState<Slide | null>(null)
   const [approverName, setApproverName] = useState('')
   const [feedbackMode, setFeedbackMode] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
@@ -202,6 +206,45 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     await updateTask(t.id, { presentation_id: null })
   }
 
+  // Drag & drop en el filmstrip: renumera posicion_manual de TODAS las slides en
+  // el orden visual nuevo. Las tareas-entrada se acomodan por publish_date entre las slides.
+  async function handleSlideDrop(targetIdx: number) {
+    if (dragId == null) return
+    const dragIdx = entries.findIndex(e => e.kind === 'slide' && e.slide.id === dragId)
+    if (dragIdx < 0) { setDragId(null); return }
+    const newOrder = [...entries]
+    const [moved] = newOrder.splice(dragIdx, 1)
+    const insertIdx = dragIdx < targetIdx ? targetIdx - 1 : targetIdx
+    newOrder.splice(insertIdx, 0, moved)
+    // Renumerar pm para todos los slides en el nuevo orden
+    let i = 0
+    const next = [...slides]
+    for (const en of newOrder) {
+      if (en.kind !== 'slide') continue
+      i++
+      if (en.slide.posicion_manual !== i) {
+        await supabase.from('slides').update({ posicion_manual: i }).eq('id', en.slide.id)
+        const idx = next.findIndex(x => x.id === en.slide.id)
+        if (idx >= 0) next[idx] = { ...next[idx], posicion_manual: i }
+      }
+    }
+    setSlides(next)
+    setDragId(null)
+  }
+
+  async function restoreByDate() {
+    await supabase.from('slides').update({ posicion_manual: null }).eq('presentation_id', presId)
+    setSlides(prev => prev.map(s => ({ ...s, posicion_manual: null })))
+  }
+
+  async function deleteSlide() {
+    if (!deletingSlide) return
+    await supabase.from('slides').delete().eq('id', deletingSlide.id)
+    setSlides(prev => prev.filter(s => s.id !== deletingSlide.id))
+    setDeletingSlide(null)
+    setActiveIdx(0)
+  }
+
   // Mejorar la idea con Claude (reformula más claro y ejecutable)
   async function improveIdea(s: Slide) {
     const text = (s.idea_descripcion || s.title || '').trim()
@@ -255,7 +298,20 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   const entries: Entry[] = [
     ...slides.map(s => ({ key: `s${s.id}`, kind: 'slide' as const, slide: s, pub: pubOfSlide(s) })),
     ...linkedTasks.filter(t => !slideTaskIds.has(t.id)).map(t => ({ key: `t${t.id}`, kind: 'task' as const, task: t, pub: t.publish_date })),
-  ].sort((a, b) => (a.pub && b.pub) ? a.pub.localeCompare(b.pub) : a.pub ? -1 : b.pub ? 1 : 0)
+  ].sort((a, b) => {
+    // Primero, slides con posición manual (en su orden); después por fecha de publicación; fallback a position.
+    const apm = a.kind === 'slide' ? a.slide.posicion_manual : null
+    const bpm = b.kind === 'slide' ? b.slide.posicion_manual : null
+    if (apm != null && bpm != null) return apm - bpm
+    if (apm != null) return -1
+    if (bpm != null) return 1
+    if (a.pub && b.pub) return a.pub.localeCompare(b.pub)
+    if (a.pub) return -1
+    if (b.pub) return 1
+    const ap = a.kind === 'slide' ? (a.slide.position || 0) : 0
+    const bp = b.kind === 'slide' ? (b.slide.position || 0) : 0
+    return ap - bp
+  })
   const entry = entries.length ? entries[Math.min(activeIdx, entries.length - 1)] : undefined
   const slide = entry?.kind === 'slide' ? entry.slide : undefined
 
@@ -357,12 +413,31 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
             <div
               key={e.key}
               onClick={() => setActiveIdx(i)}
-              className={`flex gap-2 p-2 rounded-lg border-[1.5px] cursor-pointer transition-all mb-1 ${
+              draggable={e.kind === 'slide'}
+              onDragStart={e.kind === 'slide' ? (evt) => { setDragId(e.slide.id); evt.dataTransfer.setData('text/plain', String(e.slide.id)); evt.dataTransfer.effectAllowed = 'move' } : undefined}
+              onDragOver={(evt) => { if (dragId != null) { evt.preventDefault(); evt.dataTransfer.dropEffect = 'move' } }}
+              onDrop={(evt) => { evt.preventDefault(); handleSlideDrop(i) }}
+              className={`relative flex gap-2 p-2 rounded-lg border-[1.5px] cursor-pointer transition-all mb-1 ${
                 i === activeIdx
                   ? 'bg-bg2 border-claude/20 shadow-sm'
                   : 'border-transparent hover:bg-bg3'
-              }`}
+              } ${dragId != null && e.kind === 'slide' && e.slide.id === dragId ? 'opacity-40' : ''}`}
             >
+              {e.kind === 'slide' && (
+                <>
+                  <button onClick={(evt) => { evt.stopPropagation(); setMenuFor(menuFor === e.slide.id ? null : e.slide.id) }}
+                    className="absolute top-1 right-1 text-gray-300 hover:text-gray-900 cursor-pointer px-1 leading-none text-xs z-[5]" title="Opciones">⋯</button>
+                  {menuFor === e.slide.id && (
+                    <>
+                      <div className="fixed inset-0 z-[5]" onClick={(evt) => { evt.stopPropagation(); setMenuFor(null) }} />
+                      <div className="absolute right-1 top-6 bg-bg2 border border-black/7 rounded-md shadow-lg py-1 z-10 w-40" onClick={(evt) => evt.stopPropagation()}>
+                        <button onClick={() => { setDeletingSlide(e.slide); setMenuFor(null) }}
+                          className="w-full text-left px-2.5 py-1 text-[11px] text-danger hover:bg-danger/10 cursor-pointer">🗑 Eliminar slide</button>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
               <div className="text-[10px] font-mono text-gray-400 w-4 shrink-0 pt-0.5 text-right">{i + 1}</div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium leading-snug mb-1 line-clamp-2">{e.kind === 'slide' ? e.slide.title : splitTitle(e.task.title).name}</div>
@@ -392,6 +467,9 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
         <div className="p-2.5 border-t border-black/7 flex flex-col gap-1.5 shrink-0">
           <button onClick={() => addSlide('content')} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-1.5 rounded-md cursor-pointer hover:bg-claude/15">+ Idea de contenido</button>
           <button onClick={() => addSlide('canva')} className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2 py-1.5 rounded-md cursor-pointer hover:bg-bg4">🎨 + Slide en Canva</button>
+          {slides.some(s => s.posicion_manual != null) && (
+            <button onClick={restoreByDate} className="text-[10px] text-gray-400 hover:text-claude cursor-pointer mt-1 text-left">↻ Restaurar orden por fecha</button>
+          )}
         </div>
       </div>
 
@@ -1013,6 +1091,22 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
           </div>
         )
       })()}
+
+      {/* Confirmar eliminación de slide */}
+      {deletingSlide && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setDeletingSlide(null) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[440px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">Eliminar slide</div>
+            <p className="text-[13px] text-gray-500 mb-4">
+              ¿Eliminar esta slide?{deletingSlide.task_id ? ' Si está vinculada a una tarea de contenido, la tarea quedará sin slide asignada.' : ''}
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeletingSlide(null)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
+              <button onClick={deleteSlide} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer">Eliminar slide</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Popup de aprobación (sobre la slide) */}
       {approvalKey && slide && (
