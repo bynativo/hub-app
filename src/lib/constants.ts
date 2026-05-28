@@ -116,12 +116,11 @@ export const REDES: { v: string; label: string; color: string }[] = [
 
 export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab', 'IG Story']
 
-// Tipo de publicación de una pieza de contenido (define grilla/calendario e influencer)
+// Tipo de publicación de una pieza con influencer (sin influencer = 'propia' implícito)
 export const PUB_TYPES: { v: string; label: string }[] = [
-  { v: 'propia', label: 'Producción propia' },
-  { v: 'colab_ig', label: 'Colab IG' },
-  { v: 'tiktok_propia', label: 'TikTok para nuestra cuenta' },
-  { v: 'cuenta_influencer', label: 'Desde cuenta del influencer' },
+  { v: 'colab_ig', label: 'Colab en nuestra cuenta' },
+  { v: 'tiktok_propia', label: 'Influencer nos entrega el video' },
+  { v: 'cuenta_influencer', label: 'Solo en su cuenta' },
 ]
 
 // Tipos de proyecto de agencia

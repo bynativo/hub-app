@@ -195,13 +195,17 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   // Convierte una tarea de contenido vinculada en un slide de producción (rico).
   async function createSlideFromTask(t: Task) {
     const { count } = await supabase.from('slides').select('id', { count: 'exact', head: true }).eq('presentation_id', presId)
+    const pt = t.tipo_publicacion || t.content_pub_type || 'propia'
+    const isColab = pt === 'colab_ig'
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, title: t.title, task_id: t.id, position: (count || 0) + 1,
       fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, grilla_date: t.publish_date,
-      content_pub_type: t.tipo_publicacion || t.content_pub_type || 'propia',
+      content_pub_type: pt,
       influencer_name: t.influencer_nombre || t.influencer_name,
       influencer_handle: t.influencer_handle,
-      formato: t.content_format || null,
+      // "Colab en nuestra cuenta" → formato = 'Colab' y colab_nombre = handle del influencer.
+      formato: isColab ? 'Colab' : (t.content_format || null),
+      colab_nombre: isColab ? (t.influencer_handle || null) : null,
     }).select().single()
     if (error || !data) { alert('Error creando slide: ' + error?.message); return }
     setSlides(prev => [...prev, data as Slide])

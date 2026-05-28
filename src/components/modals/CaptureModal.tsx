@@ -29,6 +29,11 @@ interface Suggested {
   projectId: number | null
   clientId: number | null
   isContent: boolean
+  isInfluencer: boolean
+  pubType: string
+  infName: string
+  infHandle: string
+  infAgency: string
   isReminder: boolean
   reminderAt: string
   desc: string
@@ -78,7 +83,8 @@ function parseSuggested(reply: string): Suggested[] {
     estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
     origen: t.origen || t.origin || 'propia',
     parentId: null, projectId: null, clientId: null,
-    isContent: false, isReminder: false, reminderAt: '', desc: '',
+    isContent: false, isInfluencer: false, pubType: 'colab_ig', infName: '', infHandle: '', infAgency: '',
+    isReminder: false, reminderAt: '', desc: '',
     selected: true, expanded: false,
     updateTargetId: null, mode: 'create' as const,
   }))
@@ -247,10 +253,31 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-xs cursor-pointer">
-            <button type="button" onClick={() => onChange({ isContent: !s.isContent })} className={togg(s.isContent)}><div className={knob(s.isContent)} /></button>
-            Es tarea de contenido
-          </label>
+          <div className="flex items-center gap-4 flex-wrap text-xs">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <button type="button" onClick={() => onChange({ isContent: !s.isContent, isInfluencer: s.isContent ? false : s.isInfluencer })} className={togg(s.isContent)}><div className={knob(s.isContent)} /></button>
+              Es contenido
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <button type="button" onClick={() => onChange({ isInfluencer: !s.isInfluencer, isContent: !s.isInfluencer ? true : s.isContent })} className={togg(s.isInfluencer)}><div className={knob(s.isInfluencer)} /></button>
+              Es influencer
+            </label>
+          </div>
+          {s.isInfluencer && (
+            <div className="border border-claude/15 bg-claude/5 rounded-md p-2 flex flex-col gap-2">
+              <div>
+                <label className={lbl}>Tipo de publicación</label>
+                <select value={s.pubType} onChange={e => onChange({ pubType: e.target.value })} className={fld}>
+                  {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className={lbl}>Influencer</label><input value={s.infName} onChange={e => onChange({ infName: e.target.value })} className={fld} placeholder="Nombre" /></div>
+                <div><label className={lbl}>Handle</label><input value={s.infHandle} onChange={e => onChange({ infHandle: e.target.value })} className={fld} placeholder="@usuario" /></div>
+              </div>
+              <div><label className={lbl}>Agencia (opcional)</label><input value={s.infAgency} onChange={e => onChange({ infAgency: e.target.value })} className={fld} placeholder="Agencia / representante" /></div>
+            </div>
+          )}
 
           <div><label className={lbl}>Descripción / contexto</label><textarea value={s.desc} onChange={e => onChange({ desc: e.target.value })} rows={2} className={fld + ' resize-y'} placeholder="Detalles adicionales…" /></div>
         </div>
@@ -451,7 +478,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       due_date: r.due_date, publish_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
       parentId: null, projectId: null,
       clientId: r.context === 'agencia' ? (client?.id ?? null) : null,
-      isContent: false, isReminder: false, reminderAt: '',
+      isContent: false, isInfluencer: false, pubType: 'colab_ig', infName: '', infHandle: '', infAgency: '',
+      isReminder: false, reminderAt: '',
       desc: r.phase ? `[${r.phase}] ${r.desc}`.trim() : r.desc,
       selected: true, expanded: false,
       updateTargetId: upd?.id ?? null, mode: upd ? 'update' : 'create',
@@ -588,6 +616,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         task_type: s.isContent ? 'contenido' : 'independiente',
         due_date: reminder ? null : (s.due_date || null),
         publish_date: (!reminder && s.isContent) ? (s.publish_date || null) : null,
+        es_influencer: s.isContent ? s.isInfluencer : null,
+        tipo_publicacion: s.isContent ? (s.isInfluencer ? s.pubType : 'propia') : null,
+        influencer_nombre: (s.isContent && s.isInfluencer) ? (s.infName.trim() || null) : null,
+        influencer_handle: (s.isContent && s.isInfluencer) ? (s.infHandle.trim() || null) : null,
+        influencer_agencia: (s.isContent && s.isInfluencer) ? (s.infAgency.trim() || null) : null,
         requested_at: s.requested_at || todayISO(),
         estimated_hours: s.estimated_hours,
         notes: s.desc.trim() || null,
@@ -982,52 +1015,56 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               </div>
 
-              <div className="mb-3 flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
-                <button onClick={() => setIsContent(!isContent)} className={`w-10 h-5 rounded-full relative transition-colors ${isContent ? 'bg-claude' : 'bg-bg4'}`}>
-                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isContent ? 'left-5.5' : 'left-0.5'}`} />
-                </button>
-                <div>
-                  <div className="text-[13px]">Es tarea de contenido</div>
-                  <div className="text-[11px] text-gray-400">Se crea con task_type='contenido' y activa la vista de slide</div>
-                </div>
-              </div>
-
-              {/* Influencer — solo para tareas de contenido */}
-              {isContent && (
-                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+              {/* Dos toggles independientes: "Es contenido" y "Es influencer".
+                  Activar influencer auto-activa contenido (toda tarea de influencer es contenido). */}
+              <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+                <div className="grid grid-cols-2 gap-3">
                   <label className="flex items-center gap-3 cursor-pointer">
-                    <button type="button" onClick={() => setIsInfluencer(v => !v)} className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isInfluencer ? 'bg-claude' : 'bg-bg4'}`}>
+                    <button type="button" onClick={() => { const next = !isContent; setIsContent(next); if (!next) setIsInfluencer(false) }}
+                      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isContent ? 'bg-claude' : 'bg-bg4'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isContent ? 'left-5.5' : 'left-0.5'}`} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">Es contenido</div>
+                      <div className="text-[11px] text-gray-400">Fechas, slide y presentación</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={() => { const next = !isInfluencer; setIsInfluencer(next); if (next) setIsContent(true) }}
+                      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isInfluencer ? 'bg-claude' : 'bg-bg4'}`}>
                       <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isInfluencer ? 'left-5.5' : 'left-0.5'}`} />
                     </button>
-                    <span className="text-[13px]">¿Involucra influencer externo?</span>
+                    <div>
+                      <div className="text-[13px]">Es influencer</div>
+                      <div className="text-[11px] text-gray-400">Nombre, handle, tipo</div>
+                    </div>
                   </label>
-                  {isInfluencer && (
-                    <>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div><label className={labelCls}>Nombre del influencer</label>
-                          <input value={infName} onChange={e => setInfName(e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
-                        <div><label className={labelCls}>Handle / cuenta</label>
-                          <input value={infHandle} onChange={e => setInfHandle(e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
-                      </div>
-                      <div><label className={labelCls}>Agencia que lo gestiona (opcional)</label>
-                        <input value={infAgency} onChange={e => setInfAgency(e.target.value)} className={fieldCls} placeholder="Agencia / representante" /></div>
-                      <div>
-                        <label className={labelCls}>Tipo de publicación</label>
-                        <select value={pubType} onChange={e => setPubType(e.target.value)} className={fieldCls}>
-                          {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
-                        </select>
-                        <div className="text-[10px] text-gray-400 mt-1">
-                          {pubType === 'cuenta_influencer'
-                            ? 'No va a la grilla; aparece en el calendario con filtro "Influencers externos".'
-                            : pubType === 'colab_ig' ? 'Va a la grilla con badge "Colab".'
-                            : pubType === 'tiktok_propia' ? 'Va a la grilla con badge "Influencer".'
-                            : 'Va a la grilla normalmente.'}
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
-              )}
+                {isInfluencer && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><label className={labelCls}>Nombre del influencer</label>
+                        <input value={infName} onChange={e => setInfName(e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
+                      <div><label className={labelCls}>Handle / cuenta</label>
+                        <input value={infHandle} onChange={e => setInfHandle(e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
+                    </div>
+                    <div><label className={labelCls}>Agencia que lo gestiona (opcional)</label>
+                      <input value={infAgency} onChange={e => setInfAgency(e.target.value)} className={fieldCls} placeholder="Agencia / representante" /></div>
+                    <div>
+                      <label className={labelCls}>Tipo de publicación</label>
+                      <select value={pubType} onChange={e => setPubType(e.target.value)} className={fieldCls}>
+                        {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                      </select>
+                      <div className="text-[10px] text-gray-400 mt-1">
+                        {pubType === 'cuenta_influencer'
+                          ? 'No va a la grilla; aparece en el calendario con filtro "Influencers externos".'
+                          : pubType === 'tiktok_propia' ? 'Va a la grilla con badge "Influencer".'
+                          : 'Va a la grilla con badge "Colab".'}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <div className="mb-4">
                 <label className={labelCls}>Descripción (opcional)</label>
