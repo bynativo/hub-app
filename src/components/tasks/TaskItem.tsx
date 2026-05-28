@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
@@ -18,6 +18,7 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
   const allTasks = useStore(s => s.tasks)
   const [expanded, setExpanded] = useState(false)
   const due = fmtDue(task.due_date)
+  const overdue = overdueLabel(task.due_date)
   const { prefix, name } = splitTitle(task.title)
   const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
   // Subtareas reales (un nivel) y recordatorios vinculados — colapsados por defecto.
@@ -92,9 +93,9 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
                 agrupan bajo su tarjeta de proyecto (ver TaskList/KanbanBoard). */}
 
             {due && (
-              <Tag bg={due.urgent ? 'rgba(220,38,38,0.07)' : 'var(--color-bg4)'}
-                   color={due.urgent ? '#dc2626' : '#6b6860'}>
-                {task.task_type === 'contenido' ? `Entrega ${due.text}` : due.text}
+              <Tag bg={overdue ? 'rgba(220,38,38,0.12)' : due.urgent ? 'rgba(220,38,38,0.07)' : 'var(--color-bg4)'}
+                   color={overdue || due.urgent ? '#dc2626' : '#6b6860'}>
+                {task.task_type === 'contenido' ? `Entrega ${overdue || due.text}` : (overdue || due.text)}
               </Tag>
             )}
 

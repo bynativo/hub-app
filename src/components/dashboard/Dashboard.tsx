@@ -34,6 +34,9 @@ export function Dashboard() {
   const busyMin = todayEvents.filter(e => !e.all_day && e.ends_at).reduce((s, e) => s + (new Date(e.ends_at as string).getTime() - new Date(e.starts_at).getTime()) / 60000, 0)
   const freeH = Math.max(0, Math.round((720 - busyMin) / 60 * 10) / 10)
 
+  // Atrasadas: activas con due_date anterior a hoy, más antiguas primero
+  const atrasadas = dated.filter(t => t.due_date && t.due_date < today)
+    .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
   const hoy = dated.filter(t => t.due_date === today)
   const manana = dated.filter(t => t.due_date === tomorrow)
   const seguimiento = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status))
@@ -43,7 +46,7 @@ export function Dashboard() {
   // ninguna quede invisible en la vista Lista — misma fuente que el Kanban.
   const segIds = new Set(seguimiento.map(t => t.id))
   const proximamente = active
-    .filter(t => !t.es_recordatorio && !segIds.has(t.id) && t.due_date !== today && t.due_date !== tomorrow)
+    .filter(t => !t.es_recordatorio && !segIds.has(t.id) && t.due_date !== today && t.due_date !== tomorrow && !(t.due_date && t.due_date < today))
     .sort((a, b) => {
       if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
       if (a.due_date) return -1   // con fecha futura primero
@@ -100,6 +103,12 @@ export function Dashboard() {
         <KanbanBoard />
       ) : (
         <div className="max-w-[900px]">
+          {atrasadas.length > 0 && (
+            <>
+              <SectionHeader icon="🚨" label="Atrasadas" count={atrasadas.length} />
+              <TaskList tasks={atrasadas} />
+            </>
+          )}
           <SectionHeader icon="📌" label="Hoy" count={hoy.length} />
           <TaskList tasks={hoy} emptyText="Nada vence hoy" />
           {hoy.length > 0 && (

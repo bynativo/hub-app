@@ -121,6 +121,22 @@ export function stripPrefix(title: string): string {
   return splitTitle(title).name
 }
 
+// Texto del badge de atraso para una tarea vencida ("3 días", "1 semana", "2 meses…").
+// Devuelve null si no está atrasada o no tiene fecha.
+export function overdueLabel(dueIso: string | null): string | null {
+  if (!dueIso) return null
+  const d = new Date(dueIso + 'T00:00:00')
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const days = Math.round((today.getTime() - d.getTime()) / 86400000)
+  if (days <= 0) return null
+  if (days === 1) return '1 día de atraso'
+  if (days < 7) return `${days} días de atraso`
+  if (days < 14) return '1 semana de atraso'
+  if (days < 30) return `${Math.floor(days / 7)} semanas de atraso`
+  if (days < 60) return '1 mes de atraso'
+  return `${Math.floor(days / 30)} meses de atraso`
+}
+
 // Badge según el tipo de publicación de contenido (influencer/colab). null = producción propia.
 export function pubTypeBadge(pt: string | null): { label: string; color: string } | null {
   if (pt === 'colab_ig') return { label: 'Colab', color: '#7c3aed' }
