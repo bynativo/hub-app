@@ -442,7 +442,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [reminderAt, setReminderAt] = useState('')
   const [reminderType, setReminderType] = useState('general')
   const [correoCtx, setCorreoCtx] = useState('')
-  const [isEmailReply, setIsEmailReply] = useState(false)
   const [desc, setDesc] = useState(template?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
@@ -480,10 +479,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     if (isSolicitud && !briefDate) { setShowErrors(true); return }
     setSaving(true)
     const reminder = isReminder && !!reminderAt
-    const emailReply = isEmailReply && origin === 'gmail-agencia'
 
     let resolvedProjectId: number | null = null
-    if (!reminder && !emailReply && tipo === 'proyecto' && projectId) {
+    if (!reminder && tipo === 'proyecto' && projectId) {
       resolvedProjectId = Number(projectId)
     }
 
@@ -496,10 +494,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       client_id: context === 'agencia' ? clientId : null,
       // Para recordatorios: si vienen preseleccionados a un proyecto (creados desde
       // la vista del proyecto), respetar ese vínculo.
-      project_id: emailReply ? null : (reminder ? (preselectProjectId ?? null) : resolvedProjectId),
-      parent_task_id: emailReply ? null : (reminder ? (parentId ?? null) : (tipo === 'subtarea' ? parentId : null)),
-      task_type: emailReply ? 'responder_email'
-        : isSolicitud ? 'solicitud_influencers'
+      project_id: reminder ? (preselectProjectId ?? null) : resolvedProjectId,
+      parent_task_id: reminder ? (parentId ?? null) : (tipo === 'subtarea' ? parentId : null),
+      task_type: isSolicitud ? 'solicitud_influencers'
         : isContent ? 'contenido'
         : 'independiente',
       due_date: reminder ? null : (dueDate || null),
@@ -515,7 +512,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       influencer_agencia: (isContent && isInfluencer) ? (infAgency.trim() || null) : null,
       content_format: isContent ? (contentFormat || null) : null,
       requested_at: requestedAt || todayISO(),
-      estimated_hours: emailReply ? 0.25 : estHours,
+      estimated_hours: estHours,
       notes: desc.trim() || null,
       context_readme: desc.trim() || null,
       status: reminder ? 'Recordatorio' : 'Inbox',
@@ -1018,7 +1015,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {!isReminder && !isEmailReply && (<>
+              {!isReminder && (<>
               {/* Tipo / jerarquía. "Solicitar influencers" es un flujo aparte (genera
                   un brief + N subtareas de perfil pendientes) y solo aplica a banco/agencia. */}
               <div className="mb-3">
@@ -1096,18 +1093,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   ))}
                 </div>
               </div>
-
-              {origin === 'gmail-agencia' && (
-                <div className="mb-3 flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
-                  <button type="button" onClick={() => setIsEmailReply(!isEmailReply)} className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isEmailReply ? 'bg-claude' : 'bg-bg4'}`}>
-                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isEmailReply ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                  <div>
-                    <div className="text-[13px]">✉️ Es solo una respuesta</div>
-                    <div className="text-[11px] text-gray-400">Tarea simple de responder email · 15 min, sin subtareas ni proyecto</div>
-                  </div>
-                </div>
-              )}
 
               {!isReminder && !isContent && !isSolicitud && (
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1295,7 +1280,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">Cancelar</button>
                 <button onClick={handleSaveTask} disabled={!title.trim() || saving || (isReminder && !reminderAt)}
                   className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                  {saving ? 'Guardando…' : isReminder ? 'Crear recordatorio' : (isEmailReply && origin === 'gmail-agencia') ? 'Crear respuesta de email' : 'Guardar tarea'}
+                  {saving ? 'Guardando…' : isReminder ? 'Crear recordatorio' : 'Guardar tarea'}
                 </button>
               </div>
             </>
