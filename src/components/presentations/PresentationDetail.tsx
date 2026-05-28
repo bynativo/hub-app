@@ -202,7 +202,8 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   async function createSlideFromTask(t: Task) {
     const { count } = await supabase.from('slides').select('id', { count: 'exact', head: true }).eq('presentation_id', presId)
     const pt = t.tipo_publicacion || t.content_pub_type || 'propia'
-    const isColab = pt === 'colab_ig'
+    // 'colab' es el nuevo equivalente del legado 'colab_ig'.
+    const isColab = pt === 'colab' || pt === 'colab_ig'
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, title: t.title, task_id: t.id, position: (count || 0) + 1,
       fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, fecha_filmacion: t.recording_date,

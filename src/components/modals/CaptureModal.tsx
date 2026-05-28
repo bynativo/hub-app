@@ -4,7 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { QuickProjectModal } from './QuickProjectModal'
-import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning, recordingWarning } from '../../lib/helpers'
+import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
 import { PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
@@ -51,12 +51,14 @@ function normTipo(t: string): TipoTarea {
 }
 
 // Crea las N subtareas "Perfil 1..N — {título}" para una solicitud de influencers.
-// Cada perfil queda en task_type='influencer' con todos los campos del influencer
-// vacíos; se completan a medida que la agencia confirma cada uno.
+// Cada perfil queda en task_type='influencer' con tipo_publicacion ya elegido por
+// el usuario en el form, pero nombre/handle/agencia vacíos — se completan a
+// medida que la agencia confirma cada perfil.
 async function createPerfilSubtasks(opts: {
   parentTaskId: number
   parentTitle: string
   num: number
+  tipos: string[]
   context: string
   clientId: number | null
   projectId: number | null
@@ -76,6 +78,7 @@ async function createPerfilSubtasks(opts: {
     due_date: opts.dueDate,
     requested_at: todayISO(),
     es_influencer: true,
+    tipo_publicacion: opts.tipos[i] || 'colab',
     done: false,
     cats: [], plan: [], meeting_agenda: [],
   }))
@@ -152,7 +155,7 @@ function parseSuggested(reply: string): Suggested[] {
     estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
     origen: t.origen || t.origin || 'propia',
     parentId: null, projectId: null, clientId: null,
-    isContent: false, isInfluencer: false, pubType: 'colab_ig', infName: '', infHandle: '', infAgency: '',
+    isContent: false, isInfluencer: false, pubType: 'colab', infName: '', infHandle: '', infAgency: '',
     isReminder: false, reminderAt: '', desc: '',
     selected: true, expanded: false,
     updateTargetId: null, mode: 'create' as const,
@@ -430,9 +433,11 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [recordingDate, setRecordingDate] = useState('')
   const [briefDate, setBriefDate] = useState('')
   const [numPerfiles, setNumPerfiles] = useState<number>(1)
+  // Tipo de contenido por perfil — array sincronizado con numPerfiles. Default 'colab'.
+  const [perfilesTipos, setPerfilesTipos] = useState<string[]>(['colab'])
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
   const [isInfluencer, setIsInfluencer] = useState(false)
-  const [pubType, setPubType] = useState('colab_ig')
+  const [pubType, setPubType] = useState('colab')
   const [infName, setInfName] = useState('')
   const [infHandle, setInfHandle] = useState('')
   const [infAgency, setInfAgency] = useState('')
@@ -547,6 +552,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         parentTaskId: inserted.id,
         parentTitle: builtTitle,
         num: Math.max(1, numPerfiles),
+        tipos: perfilesTipos,
         context,
         clientId,
         projectId: resolvedProjectId,
@@ -604,7 +610,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       due_date: r.due_date, publish_date: null, recording_date: null, profile_request_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
       parentId: null, projectId: null,
       clientId: r.context === 'agencia' ? (client?.id ?? null) : null,
-      isContent: false, isInfluencer: false, pubType: 'colab_ig', infName: '', infHandle: '', infAgency: '',
+      isContent: false, isInfluencer: false, pubType: 'colab', infName: '', infHandle: '', infAgency: '',
       isReminder: false, reminderAt: '',
       desc: r.phase ? `[${r.phase}] ${r.desc}`.trim() : r.desc,
       selected: true, expanded: false,
@@ -1140,11 +1146,38 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   <div>
                     <label className={labelCls}>¿Cuántos perfiles necesitás?</label>
                     <input type="number" min={1} value={numPerfiles}
-                      onChange={e => setNumPerfiles(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      onChange={e => {
+                        const n = Math.max(1, parseInt(e.target.value, 10) || 1)
+                        setNumPerfiles(n)
+                        setPerfilesTipos(prev => {
+                          if (n <= prev.length) return prev.slice(0, n)
+                          return [...prev, ...Array(n - prev.length).fill('colab')]
+                        })
+                      }}
                       className={fieldCls} />
                   </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={labelCls}>Tipo de contenido por perfil</label>
+                    {Array.from({ length: numPerfiles }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-gray-400 w-14 shrink-0">Perfil {i + 1}</span>
+                        <select
+                          value={perfilesTipos[i] || 'colab'}
+                          onChange={e => setPerfilesTipos(prev => {
+                            const next = [...prev]
+                            while (next.length < numPerfiles) next.push('colab')
+                            next[i] = e.target.value
+                            return next
+                          })}
+                          className={fieldCls + ' flex-1'}
+                        >
+                          {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
                   <div className="text-[10px] text-gray-400 leading-snug">
-                    Al guardar: se crea un recordatorio 🔔 a las 9:00 del día del envío del brief y {numPerfiles} subtarea{numPerfiles === 1 ? '' : 's'} "Perfil X" pendientes de confirmar.
+                    Al guardar: se crea un recordatorio 🔔 a las 9:00 del día del envío del brief y {numPerfiles} subtarea{numPerfiles === 1 ? '' : 's'} "Perfil X" pendientes de confirmar (cada una con su tipo). Después, al confirmar cada perfil podés crear la subtarea de contenido correspondiente.
                   </div>
                 </div>
               )}
@@ -1260,10 +1293,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                         {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
                       </select>
                       <div className="text-[10px] text-gray-400 mt-1">
-                        {pubType === 'cuenta_influencer'
-                          ? 'No va a la grilla; aparece en el calendario con filtro "Influencers externos".'
-                          : pubType === 'tiktok_propia' ? 'Va a la grilla con badge "Influencer".'
-                          : 'Va a la grilla con badge "Colab".'}
+                        {vaAGrilla(pubType)
+                          ? 'Va a grilla RRSS + calendario de Influencers.'
+                          : 'Solo va al calendario de Influencers (no aparece en la grilla).'}
                       </div>
                     </div>
                   </>

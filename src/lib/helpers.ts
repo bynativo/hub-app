@@ -193,17 +193,33 @@ export function overdueLabel(dueIso: string | null): string | null {
   return `${Math.floor(days / 30)} meses de atraso`
 }
 
-// Badge según el tipo de publicación de contenido (influencer/colab). null = producción propia.
+// Badge según el tipo de publicación de contenido. null = producción propia.
+// Soporta los 7 valores nuevos y los 3 legados (colab_ig / tiktok_propia / cuenta_influencer).
 export function pubTypeBadge(pt: string | null): { label: string; color: string } | null {
+  if (!pt || pt === 'propia') return null
+  // Nuevos: van a grilla
+  if (pt === 'colab') return { label: 'Colab', color: '#7c3aed' }
+  if (pt === 'tiktok_colab') return { label: 'TikTok colab', color: '#7c3aed' }
+  if (pt === 'reel_colab') return { label: 'Reel colab', color: '#7c3aed' }
+  if (pt === 'solo_contenido') return { label: 'Solo contenido', color: '#7c3aed' }
+  // Nuevos: solo calendario de influencers
+  if (pt === 'tiktok_influencer') return { label: 'TikTok externo', color: '#e1306c' }
+  if (pt === 'reel_influencer') return { label: 'Reel externo', color: '#e1306c' }
+  if (pt === 'stories_influencer') return { label: 'Stories externo', color: '#e1306c' }
+  // Legados
   if (pt === 'colab_ig') return { label: 'Colab', color: '#7c3aed' }
   if (pt === 'tiktok_propia') return { label: 'Influencer', color: '#e1306c' }
   if (pt === 'cuenta_influencer') return { label: 'Influencer externo', color: '#e1306c' }
   return null
 }
 
-// Una pieza "va a grilla" (producible) salvo la que se publica desde la cuenta del influencer.
+// Una pieza "va a grilla" (calendario RRSS): los 4 colab/entregan + legados que sí
+// publicaban en nuestras cuentas. Las que solo viven en cuenta del influencer (3
+// nuevos + 'cuenta_influencer' legado) van solo al calendario de Influencers.
 export function vaAGrilla(pt: string | null): boolean {
-  return pt !== 'cuenta_influencer'
+  if (!pt || pt === 'propia') return true
+  const enGrilla = new Set(['colab', 'tiktok_colab', 'reel_colab', 'solo_contenido', 'colab_ig', 'tiktok_propia'])
+  return enGrilla.has(pt)
 }
 
 // Contenido: la grabación debe ser al menos 24h antes de la entrega.

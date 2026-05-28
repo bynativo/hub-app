@@ -116,12 +116,30 @@ export const REDES: { v: string; label: string; color: string }[] = [
 
 export const FORMATOS = ['Video vertical', 'Video horizontal', 'Gráfica estática', 'Carrusel', 'Animación', 'Colab', 'IG Story']
 
-// Tipo de publicación de una pieza con influencer (sin influencer = 'propia' implícito)
+// Tipos de publicación de una pieza con influencer. Los 4 primeros van a la
+// grilla (calendario RRSS + calendario Influencers); los 3 últimos solo aparecen
+// en el calendario de Influencers. Sin tipo = 'propia' implícito.
+// Compat: valores legados ('colab_ig', 'tiktok_propia', 'cuenta_influencer') se
+// siguen reconociendo en pubTypeBadge / vaAGrilla pero no aparecen en el selector.
 export const PUB_TYPES: { v: string; label: string }[] = [
-  { v: 'colab_ig', label: 'Colab en nuestra cuenta' },
-  { v: 'tiktok_propia', label: 'Influencer nos entrega el video' },
-  { v: 'cuenta_influencer', label: 'Solo en su cuenta' },
+  // Van a grilla + calendario RRSS + calendario Influencers
+  { v: 'colab', label: 'Colab — publicación colaborativa en nuestra cuenta' },
+  { v: 'tiktok_colab', label: 'TikTok desde su cuenta + nos entregan el video' },
+  { v: 'reel_colab', label: 'Reel desde su cuenta + nos entregan el video' },
+  { v: 'solo_contenido', label: 'Solo nos hacen el contenido (graban y entregan; ellos no publican)' },
+  // Solo van al calendario de Influencers
+  { v: 'tiktok_influencer', label: 'TikTok desde su cuenta' },
+  { v: 'reel_influencer', label: 'Reel desde su cuenta' },
+  { v: 'stories_influencer', label: 'Stories de Instagram' },
 ]
+
+// Conjunto de tipos que SÍ aparecen en la grilla (calendario RRSS). Usado por vaAGrilla.
+// Incluye valores legados para que las piezas viejas sigan visibles.
+export const PUB_TYPES_EN_GRILLA = new Set([
+  'colab', 'tiktok_colab', 'reel_colab', 'solo_contenido',
+  // legados
+  'colab_ig', 'tiktok_propia',
+])
 
 // Tipos de proyecto de agencia
 export const TIPO_AGENCIA = ['Marca', 'Proyecto puntual', 'Presupuesto nuevo cliente']

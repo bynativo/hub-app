@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import { TaskAttachments } from './TaskAttachments'
@@ -173,6 +173,7 @@ export function TaskDetail() {
   const [showMenu, setShowMenu] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmingPerfil, setConfirmingPerfil] = useState(false)
 
   // Chat
   const [messages, setMessages] = useState<Msg[]>([])
@@ -222,6 +223,12 @@ export function TaskDetail() {
   const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
   const recWarn = isContent ? recordingWarning(recordingDate || null, dueDate || null) : null
   const isEmailReply = task.task_type === 'responder_email'
+  // Perfil pendiente / confirmado: subtarea de una solicitud de influencers.
+  // Cuando tiene nombre + handle se considera "confirmable" y se habilita el botón.
+  const isPerfil = task.task_type === 'influencer'
+  const perfilHasName = !!(infName || '').trim()
+  const perfilHasHandle = !!(infHandle || '').trim()
+  const perfilConfirmable = isPerfil && perfilHasName && perfilHasHandle
   const tabs: { id: Tab; label: string }[] = [
     { id: 'info', label: '📋 Info' },
     ...(isEmailReply ? [] : [{ id: 'subtareas' as Tab, label: `✓ Subtareas${subtasks.length ? ` (${subtasks.length})` : ''}` }]),
@@ -236,22 +243,66 @@ export function TaskDetail() {
   async function saveInfo() {
     if (!task) return
     setSavingInfo(true)
+    // En perfiles (task_type='influencer') también guardamos los campos influencer
+    // aunque isContent=false: son perfiles a confirmar y el selector vive en su
+    // propio panel, no en el bloque "Es contenido".
+    const saveInflFields = (isContent && isInfluencer) || isPerfil
     await updateTask(task.id, {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
       publish_date: isContent ? (publishDate || null) : null,
       recording_date: isContent ? (recordingDate || null) : null,
       profile_request_date: (isContent && isInfluencer) ? (profileRequestDate || null) : null,
-      es_influencer: isContent ? isInfluencer : null,
-      tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
-      influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
-      influencer_handle: (isContent && isInfluencer) ? (infHandle.trim() || null) : null,
-      influencer_agencia: (isContent && isInfluencer) ? (infAgency.trim() || null) : null,
+      es_influencer: isContent ? isInfluencer : (isPerfil ? true : null),
+      tipo_publicacion: saveInflFields ? pubType : (isContent ? 'propia' : null),
+      influencer_nombre: saveInflFields ? (infName.trim() || null) : null,
+      influencer_handle: saveInflFields ? (infHandle.trim() || null) : null,
+      influencer_agencia: saveInflFields ? (infAgency.trim() || null) : null,
       content_format: isContent ? (contentFormat || null) : null,
       ...(task.es_recordatorio ? { recordatorio_at: recordatorioAt ? new Date(recordatorioAt).toISOString() : null } : {}),
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
     })
     setSavingInfo(false); setDirty(false)
+  }
+
+  // Confirma un perfil: guarda los cambios actuales (nombre/handle/etc) y
+  // crea la subtarea de contenido vinculada a este perfil. Se llama desde el
+  // modal de confirmación cuando el usuario elige "Sí, crear contenido".
+  async function createContentForPerfil() {
+    if (!task) return
+    // Tarea solicitud (padre del perfil) — de ahí tomamos el nombre de la campaña.
+    const solicitud = tasks.find(t => t.id === task.parent_task_id)
+    const campaign = solicitud ? stripPrefix(solicitud.title) : stripPrefix(task.title)
+    const prefix = taskPrefix(task.context, clients.find(c => c.id === task.client_id) || null)
+    const handle = (infHandle || '').trim()
+    const cleanTitle = handle ? `Contenido ${handle} — ${campaign}` : `Contenido — ${campaign}`
+    await supabase.from('tasks').insert({
+      title: buildTitle(prefix, cleanTitle),
+      context: task.context,
+      client_id: task.client_id,
+      project_id: task.project_id ?? solicitud?.project_id ?? null,
+      parent_task_id: task.id,
+      task_type: 'contenido',
+      priority: 'media',
+      origin: 'propia',
+      status: 'Inbox',
+      due_date: task.due_date,
+      recording_date: solicitud?.recording_date || null,
+      es_influencer: true,
+      tipo_publicacion: pubType,
+      influencer_nombre: (infName || '').trim() || null,
+      influencer_handle: handle || null,
+      influencer_agencia: (infAgency || '').trim() || null,
+      done: false,
+      cats: [], plan: [], meeting_agenda: [],
+    })
+  }
+
+  async function confirmPerfilFlow(createContent: boolean) {
+    if (dirty) await saveInfo()
+    if (createContent) await createContentForPerfil()
+    setConfirmingPerfil(false)
+    await loadAll()
   }
 
   async function suggestEstimate() {
@@ -579,6 +630,46 @@ Reglas del bloque:
                     ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
                   </div>
                 )}
+              </div>
+            )}
+
+            {isPerfil && (
+              <div className="border border-claude/20 bg-claude/5 rounded-lg p-3 flex flex-col gap-2.5">
+                <div className="text-[11px] font-mono text-claude tracking-wider uppercase">👤 Perfil de influencer</div>
+                <div>
+                  <label className={labelCls}>Tipo de contenido</label>
+                  <select value={pubType} onChange={e => setInfo(setPubType, e.target.value)} className={fieldCls}>
+                    {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+                  </select>
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    {vaAGrilla(pubType)
+                      ? 'Va a grilla RRSS + calendario de Influencers.'
+                      : 'Solo va al calendario de Influencers (no aparece en la grilla).'}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={labelCls}>Nombre del influencer</label>
+                    <input value={infName} onChange={e => setInfo(setInfName, e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
+                  <div><label className={labelCls}>Handle / cuenta</label>
+                    <input value={infHandle} onChange={e => setInfo(setInfHandle, e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
+                </div>
+                <div><label className={labelCls}>Agencia que lo gestiona</label>
+                  <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <span className="text-[11px] text-gray-500">
+                    {perfilConfirmable
+                      ? <>✓ Perfil completo — listo para confirmar</>
+                      : <>Completá nombre y handle para confirmar</>}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={!perfilConfirmable}
+                    onClick={() => setConfirmingPerfil(true)}
+                    className="text-[11px] text-success bg-success/10 border border-success/25 px-3 py-1 rounded-md cursor-pointer hover:bg-success hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                  >
+                    ✓ Confirmar perfil
+                  </button>
+                </div>
               </div>
             )}
 
@@ -955,6 +1046,22 @@ Reglas del bloque:
       {subModalOpen && (
         <CaptureModal onClose={() => setSubModalOpen(false)}
           preselectContext={task.context} preselectClientId={task.client_id} preselectParentId={task.id} />
+      )}
+
+      {confirmingPerfil && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmingPerfil(false) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[460px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">Confirmar perfil</div>
+            <p className="text-[13px] text-gray-500 mb-4">
+              Vas a confirmar al influencer <span className="font-medium text-gray-700">{(infName || '').trim() || (infHandle || '').trim()}</span>.
+              ¿Crear también la subtarea de contenido para este perfil ahora? Se crea con el tipo <span className="font-mono text-claude">{PUB_TYPES.find(o => o.v === pubType)?.label || pubType}</span> y el handle pre-rellenado.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => confirmPerfilFlow(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Solo confirmar, sin contenido</button>
+              <button onClick={() => confirmPerfilFlow(true)} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer">Sí, crear contenido</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmDel && (
