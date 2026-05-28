@@ -126,11 +126,12 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   const [activeIdx, setActiveIdx] = useState(0)
   const [loading, setLoading] = useState(true)
   const [approvalKey, setApprovalKey] = useState<string | null>(null)
-  // Sugerencias de Claude (mejorar idea)
+  // Sugerencias de Claude (mejorar idea / extraer insight)
   const [aiKind, setAiKind] = useState<'idea' | 'insight' | null>(null)
   const [aiText, setAiText] = useState('')
   const [aiBusy, setAiBusy] = useState(false)
   const [ideaVer, setIdeaVer] = useState(0)
+  const [insightVer, setInsightVer] = useState(0)
   const [approverName, setApproverName] = useState('')
   const [feedbackMode, setFeedbackMode] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
@@ -217,9 +218,26 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
       setAiKind(null)
     } finally { setAiBusy(false) }
   }
+  // Extraer el insight subyacente (verdad humana / tensión / motivación)
+  async function extractInsight(s: Slide) {
+    const text = (s.idea_descripcion || s.title || '').trim()
+    if (!text) return
+    setAiBusy(true); setAiKind('insight'); setAiText('')
+    try {
+      const reply = await callClaudeProxy(
+        [{ role: 'user', content: `Leé esta idea de contenido y extraé EL INSIGHT subyacente: la verdad humana, tensión o motivación que la hace relevante. En 1 o 2 oraciones, en español, directo, sin preámbulos.\n\nIdea:\n${text}` }],
+        'Sos un estratega de contenido. Identificás insights humanos (verdad, tensión, motivación) en una idea.'
+      )
+      setAiText(reply.trim())
+    } catch {
+      alert('No se pudo extraer el insight (proxy de Claude no disponible).')
+      setAiKind(null)
+    } finally { setAiBusy(false) }
+  }
   async function applyAiSuggestion(s: Slide) {
     if (!aiKind || !aiText.trim()) return
     if (aiKind === 'idea') { await updateRaw(s.id, { idea_descripcion: aiText.trim() }); setIdeaVer(v => v + 1) }
+    else if (aiKind === 'insight') { await updateRaw(s.id, { insight: aiText.trim() }); setInsightVer(v => v + 1) }
     setAiKind(null); setAiText('')
   }
   function dismissAi() { setAiKind(null); setAiText('') }
@@ -821,13 +839,32 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                   )}
                 </div>
                 <div>
-                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">Insight (opcional)</span>
-                  <input
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono text-gray-400 uppercase">Insight</span>
+                    <button onClick={() => extractInsight(slide)} disabled={aiBusy || !(slide.idea_descripcion || slide.title)}
+                      className="text-[10px] text-claude hover:underline disabled:opacity-40 cursor-pointer">
+                      {aiBusy && aiKind === 'insight' ? 'Extrayendo…' : '✦ Extraer de la idea'}
+                    </button>
+                  </div>
+                  <textarea
+                    key={`ins-${slide.id}-${insightVer}`}
                     defaultValue={slide.insight || ''}
                     onBlur={e => updateField(slide.id, 'insight', e.target.value)}
-                    className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-claude/20"
-                    placeholder="Solo si aporta al concepto"
+                    rows={2}
+                    className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none resize-y focus:border-claude/20"
+                    placeholder="La verdad humana o tensión que hace relevante este contenido"
                   />
+                  {aiKind === 'insight' && (
+                    <div className="mt-2 bg-claude/5 border border-claude/20 rounded-md p-2">
+                      <div className="text-[10px] font-mono text-claude uppercase mb-1.5">✦ Insight — editá si querés</div>
+                      <textarea value={aiText} onChange={e => setAiText(e.target.value)} rows={3}
+                        className="w-full bg-bg2 border border-black/7 rounded-md px-2 py-1.5 text-xs outline-none mb-2" />
+                      <div className="flex gap-1.5">
+                        <button onClick={() => applyAiSuggestion(slide)} className="text-[11px] bg-claude text-white px-2.5 py-1 rounded-md cursor-pointer hover:bg-purple-700">Aplicar</button>
+                        <button onClick={dismissAi} className="text-[11px] bg-bg3 border border-black/7 text-gray-500 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4">Descartar</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
