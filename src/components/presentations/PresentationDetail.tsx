@@ -163,15 +163,21 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     setSlides(prev => prev.map(s => s.id === slideId ? { ...s, ...patch } : s))
   }
 
-  async function addSlide(esTexto: boolean) {
+  async function addSlide(kind: 'content' | 'canva') {
     const nextPos = (slides[slides.length - 1]?.position || slides.length) + 1
+    const isCanva = kind === 'canva'
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, position: nextPos,
-      title: esTexto ? 'Sección de texto' : 'Nueva idea', es_texto: esTexto,
+      title: isCanva ? 'Slide de Canva' : 'Nueva idea',
+      es_texto: isCanva, es_slide_libre: isCanva,
     }).select().single()
     if (error || !data) { alert('Error creando slide: ' + error?.message); return }
     setSlides(prev => [...prev, data as Slide])
     setActiveIdx(slides.length)
+    if (isCanva) {
+      // Abre Canva en una pestaña nueva para crear un diseño 9:16 (Instagram Story)
+      window.open('https://www.canva.com/design?create&type=Instagram-Story', '_blank', 'noopener,noreferrer')
+    }
   }
 
   // Convierte una tarea de contenido vinculada en un slide de producción (rico).
@@ -337,8 +343,8 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
         </div>
 
         <div className="p-2.5 border-t border-black/7 flex flex-col gap-1.5 shrink-0">
-          <button onClick={() => addSlide(false)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-1.5 rounded-md cursor-pointer hover:bg-claude/15">+ Idea de contenido</button>
-          <button onClick={() => addSlide(true)} className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2 py-1.5 rounded-md cursor-pointer hover:bg-bg4">+ Slide de texto</button>
+          <button onClick={() => addSlide('content')} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-1.5 rounded-md cursor-pointer hover:bg-claude/15">+ Idea de contenido</button>
+          <button onClick={() => addSlide('canva')} className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2 py-1.5 rounded-md cursor-pointer hover:bg-bg4">🎨 + Slide en Canva</button>
         </div>
       </div>
 
@@ -361,6 +367,50 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
             <div className="text-center py-12 text-gray-400">Cargando...</div>
           ) : !slide ? (
             <div className="text-center py-12 text-gray-400">Sin ideas aun. Agrega la primera.</div>
+          ) : slide.es_slide_libre ? (
+            <div className="bg-bg2 border border-black/7 rounded-[14px] overflow-hidden shadow-md max-w-[700px] mx-auto">
+              <div className="flex items-stretch">
+                <div className="w-[5px] shrink-0" style={{ background: kv }} />
+                <div className="flex-1 p-3.5 flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] font-mono text-gray-400 mb-0.5">#{slide.position || activeIdx + 1} · 🎨 Slide de Canva</div>
+                    <input defaultValue={slide.title} onBlur={e => updateRaw(slide.id, { title: e.target.value })}
+                      className="text-xl font-medium w-full bg-transparent outline-none border-b border-transparent focus:border-black/13" />
+                  </div>
+                  <a href={slide.canva_design_id ? `https://www.canva.com/design/${slide.canva_design_id}/edit` : 'https://www.canva.com/design?create&type=Instagram-Story'}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md hover:bg-claude/15 shrink-0">
+                    {slide.canva_design_id ? '✎ Abrir en Canva' : '+ Crear en Canva'}
+                  </a>
+                </div>
+              </div>
+              <div className="bg-bg4 mx-auto" style={{ maxWidth: 380 }}>
+                <div className="aspect-[9/16]">
+                  {slide.canva_preview_url ? (
+                    <iframe src={slide.canva_design_id ? `https://www.canva.com/design/${slide.canva_design_id}/view?embed` : slide.canva_preview_url}
+                      className="w-full h-full border-0" allowFullScreen title="Canva" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-4 text-center gap-2">
+                      <div className="text-4xl">🎨</div>
+                      <div className="text-[13px] text-gray-500">Editá la slide en Canva y pegá el link de previsualización abajo.</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="p-3 border-t border-black/7 flex flex-col gap-1.5">
+                <label className="text-[10px] font-mono text-gray-400 uppercase tracking-wider">Link de previsualización de Canva</label>
+                <input defaultValue={slide.canva_preview_url || ''} onBlur={e => {
+                  const url = e.target.value.trim()
+                  const id = url.match(/canva\.com\/design\/([^/?]+)/i)?.[1] || null
+                  updateRaw(slide.id, { canva_preview_url: url || null, canva_design_id: id })
+                }} placeholder="https://www.canva.com/design/…/view" className="bg-bg3 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20 font-mono" />
+              </div>
+              <div className="flex items-center justify-between p-2.5 border-t border-black/7 bg-bg3">
+                <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} className="text-xs text-gray-400 px-2 py-1 rounded-md border border-black/7 bg-bg2 hover:bg-bg4 hover:text-gray-900 cursor-pointer transition-colors">← Anterior</button>
+                <span className="font-mono text-[11px] text-gray-400">{activeIdx + 1} / {entries.length}</span>
+                <button onClick={() => setActiveIdx(i => Math.min(entries.length - 1, i + 1))} className="text-xs text-gray-400 px-2 py-1 rounded-md border border-black/7 bg-bg2 hover:bg-bg4 hover:text-gray-900 cursor-pointer transition-colors">Siguiente →</button>
+              </div>
+            </div>
           ) : slide.es_texto ? (
             <div className="bg-bg2 border border-black/7 rounded-[14px] overflow-hidden shadow-md max-w-[700px] mx-auto">
               <div className="flex items-stretch">
