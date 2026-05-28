@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import { TaskAttachments } from './TaskAttachments'
@@ -148,6 +148,7 @@ export function TaskDetail() {
   const [priority, setPriority] = useState('media')
   const [dueDate, setDueDate] = useState('')
   const [publishDate, setPublishDate] = useState('')
+  const [recordingDate, setRecordingDate] = useState('')
   const [recordatorioAt, setRecordatorioAt] = useState('')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('propia')
@@ -190,7 +191,7 @@ export function TaskDetail() {
   useEffect(() => {
     if (!task) return
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
-    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || '')
+    setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || ''); setRecordingDate(task.recording_date || '')
     setIsInfluencer(!!task.es_influencer)
     setPubType(task.tipo_publicacion || task.content_pub_type || 'propia')
     setInfName(task.influencer_nombre || task.influencer_name || '')
@@ -218,6 +219,7 @@ export function TaskDetail() {
   const headerTitle = splitTitle(task.title)
   const isContent = task.task_type === 'contenido'
   const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
+  const recWarn = isContent ? recordingWarning(recordingDate || null, dueDate || null) : null
   const isEmailReply = task.task_type === 'responder_email'
   const tabs: { id: Tab; label: string }[] = [
     { id: 'info', label: '📋 Info' },
@@ -236,6 +238,7 @@ export function TaskDetail() {
     await updateTask(task.id, {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
       publish_date: isContent ? (publishDate || null) : null,
+      recording_date: isContent ? (recordingDate || null) : null,
       es_influencer: isContent ? isInfluencer : null,
       tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
       influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
@@ -553,12 +556,24 @@ Reglas del bloque:
             )}
 
             {isContent && (
-              <div>
-                <label className={labelCls}>Fecha de publicación</label>
-                <input type="date" value={publishDate} onChange={e => setInfo(setPublishDate, e.target.value)} className={fieldCls} />
-                <div className="text-[10px] text-gray-400 mt-1">La define el CM. No cierra tu parte — vos cerrás al entregar. Ordena la grilla/calendario RRSS.</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={labelCls}>Fecha de grabación 🎬</label>
+                  <input type="date" value={recordingDate} onChange={e => setInfo(setRecordingDate, e.target.value)} className={fieldCls} />
+                  <div className="text-[10px] text-gray-400 mt-1">Opcional. Cuándo se filma — debe ser ≥24h antes de la entrega.</div>
+                </div>
+                <div>
+                  <label className={labelCls}>Fecha de publicación</label>
+                  <input type="date" value={publishDate} onChange={e => setInfo(setPublishDate, e.target.value)} className={fieldCls} />
+                  <div className="text-[10px] text-gray-400 mt-1">La define el CM. No cierra tu parte — vos cerrás al entregar.</div>
+                </div>
+                {recWarn && (
+                  <div className="col-span-2 text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
+                    ⚠ La grabación debe ser al menos 24h antes de la entrega. Grabación máxima sugerida: <span className="font-medium">{recWarn}</span>.
+                  </div>
+                )}
                 {pubWarn && (
-                  <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5 mt-1.5">
+                  <div className="col-span-2 text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
                     ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
                   </div>
                 )}

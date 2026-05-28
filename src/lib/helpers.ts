@@ -206,6 +206,14 @@ export function vaAGrilla(pt: string | null): boolean {
   return pt !== 'cuenta_influencer'
 }
 
+// Contenido: la grabación debe ser al menos 24h antes de la entrega.
+// Devuelve la fecha máxima sugerida de grabación si NO se cumple; null si OK o faltan datos.
+export function recordingWarning(recording: string | null, due: string | null): string | null {
+  if (!recording || !due) return null
+  const maxRecording = addDaysISO(due, -1)
+  return recording > maxRecording ? maxRecording : null
+}
+
 // Contenido: la entrega (due) debe ser al menos 24h antes de la publicación.
 // Devuelve la fecha mínima sugerida de entrega si NO se cumple; null si está OK o faltan datos.
 export function deliveryWarning(due: string | null, publish: string | null): string | null {

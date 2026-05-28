@@ -4,7 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { QuickProjectModal } from './QuickProjectModal'
-import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning } from '../../lib/helpers'
+import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning, recordingWarning } from '../../lib/helpers'
 import { PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
@@ -21,6 +21,7 @@ interface Suggested {
   prioridad: string
   due_date: string | null
   publish_date: string | null
+  recording_date: string | null
   requested_at: string | null
   estimated_hours: number | null
   origen: string
@@ -79,6 +80,7 @@ function parseSuggested(reply: string): Suggested[] {
     prioridad: t.prioridad || t.priority || 'media',
     due_date: t.due_date || null,
     publish_date: t.publish_date || null,
+    recording_date: t.recording_date || null,
     requested_at: t.requested_at || null,
     estimated_hours: t.estimated_hours != null ? Number(t.estimated_hours) : null,
     origen: t.origen || t.origin || 'propia',
@@ -108,6 +110,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
   const errFld = fld + ' border-danger/60 bg-danger/5'
   const sPrefix = taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null)
   const sPubWarn = s.isContent ? deliveryWarning(s.due_date, s.publish_date) : null
+  const sRecWarn = s.isContent ? recordingWarning(s.recording_date, s.due_date) : null
   const updTarget = s.updateTargetId ? tasks.find(t => t.id === s.updateTargetId) : null
   const agClients = clients.filter(c => c.context === 'agencia')
   // Separación de contexto: proyectos y tareas padre solo del mismo contexto que la tarea
@@ -224,7 +227,7 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
               </select></div>
           </div>
 
-          {!s.isReminder && (
+          {!s.isReminder && !s.isContent && (
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className={lbl}>Fecha entrega <span className="text-danger">*</span></label>
@@ -236,10 +239,21 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
           )}
 
           {!s.isReminder && s.isContent && (
-            <div>
-              <label className={lbl}>¿Cuándo se publica? (opcional)</label>
-              <input type="date" value={s.publish_date || ''} onChange={e => onChange({ publish_date: e.target.value || null })} className={fld} />
-              {sPubWarn && <span className="text-[10px] text-warn">⚠ Entrega ≥24h antes de publicar. Mínimo sugerido: {sPubWarn}</span>}
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className={lbl}>¿Cuándo fue solicitado?</label><input type="date" value={s.requested_at || ''} onChange={e => onChange({ requested_at: e.target.value || null })} className={fld} /></div>
+                <div><label className={lbl}>Fecha de grabación 🎬</label><input type="date" value={s.recording_date || ''} onChange={e => onChange({ recording_date: e.target.value || null })} className={fld} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={lbl}>¿Cuándo entregas el contenido? <span className="text-danger">*</span></label>
+                  <input type="date" value={s.due_date || ''} onChange={e => onChange({ due_date: e.target.value || null })} className={dueMissing ? errFld : fld} />
+                  {dueMissing && <span className="text-[10px] text-danger">Obligatoria</span>}
+                </div>
+                <div><label className={lbl}>¿Cuándo se publica?</label><input type="date" value={s.publish_date || ''} onChange={e => onChange({ publish_date: e.target.value || null })} className={fld} /></div>
+              </div>
+              {sRecWarn && <span className="text-[10px] text-warn">⚠ Grabación ≥24h antes de entrega. Máxima sugerida: {sRecWarn}</span>}
+              {sPubWarn && <span className="text-[10px] text-warn">⚠ Entrega ≥24h antes de publicar. Mínima sugerida: {sPubWarn}</span>}
             </div>
           )}
 
@@ -345,6 +359,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [dueDate, setDueDate] = useState('')
   const [requestedAt, setRequestedAt] = useState(todayISO())
   const [publishDate, setPublishDate] = useState('')
+  const [recordingDate, setRecordingDate] = useState('')
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('colab_ig')
@@ -368,6 +383,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const ctxError = showErrors && !context
   // Contenido: la entrega debe ser ≥24h antes de la publicación
   const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
+  const recWarn = isContent ? recordingWarning(recordingDate || null, dueDate || null) : null
 
   // Separación de contexto: como tarea padre solo tareas del MISMO contexto (top-level, activas)
   const activeTasks = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
@@ -408,6 +424,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
       publish_date: (!reminder && isContent) ? (publishDate || null) : null,
+      recording_date: (!reminder && isContent) ? (recordingDate || null) : null,
       es_influencer: isContent ? isInfluencer : null,
       tipo_publicacion: isContent ? (isInfluencer ? pubType : 'propia') : null,
       influencer_nombre: (isContent && isInfluencer) ? (infName.trim() || null) : null,
@@ -475,7 +492,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     const tipo: TipoTarea = hasProject ? 'proyecto' : (/subtarea/i.test(r.tipoRaw) ? 'subtarea' : /proyecto/i.test(r.tipoRaw) ? 'proyecto' : 'independiente')
     return {
       titulo: r.title, contexto: r.context, tipo, prioridad: r.prioridad,
-      due_date: r.due_date, publish_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
+      due_date: r.due_date, publish_date: null, recording_date: null, requested_at: null, estimated_hours: r.estimated_hours, origen: 'reunion',
       parentId: null, projectId: null,
       clientId: r.context === 'agencia' ? (client?.id ?? null) : null,
       isContent: false, isInfluencer: false, pubType: 'colab_ig', infName: '', infHandle: '', infAgency: '',
@@ -597,7 +614,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         estimated_hours: s.estimated_hours,
       }
       if (s.desc.trim()) patch.context_readme = s.desc.trim()
-      if (s.isContent) patch.publish_date = s.publish_date || null
+      if (s.isContent) {
+        patch.publish_date = s.publish_date || null
+        patch.recording_date = s.recording_date || null
+      }
       const linked = projectFor(s)
       if (linked) patch.project_id = linked
       await supabase.from('tasks').update(patch).eq('id', s.updateTargetId)
@@ -616,6 +636,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         task_type: s.isContent ? 'contenido' : 'independiente',
         due_date: reminder ? null : (s.due_date || null),
         publish_date: (!reminder && s.isContent) ? (s.publish_date || null) : null,
+        recording_date: (!reminder && s.isContent) ? (s.recording_date || null) : null,
         es_influencer: s.isContent ? s.isInfluencer : null,
         tipo_publicacion: s.isContent ? (s.isInfluencer ? s.pubType : 'propia') : null,
         influencer_nombre: (s.isContent && s.isInfluencer) ? (s.infName.trim() || null) : null,
@@ -957,14 +978,18 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {/* Tareas de contenido: 3 fechas con roles distintos */}
+              {/* Tareas de contenido: 4 fechas en orden cronológico del flujo */}
               {!isReminder && isContent && (
                 <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
                   <div className="text-[11px] font-mono text-claude tracking-wider uppercase">📅 Fechas del contenido</div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className={labelCls}>¿Cuándo fue solicitado?</label>
                       <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Fecha de grabación 🎬</label>
+                      <input type="date" value={recordingDate} onChange={e => setRecordingDate(e.target.value)} className={fieldCls} />
                     </div>
                     <div>
                       <label className={labelCls}>¿Cuándo entregas el contenido? <span className="text-danger">*</span></label>
@@ -978,8 +1003,13 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                     </div>
                   </div>
                   <div className="text-[10px] text-gray-400 leading-snug">
-                    <b>Entrega</b> = tu responsabilidad (listo para revisión). <b>Publicación</b> = la define el CM; si no está definida aún, la puede completar después.
+                    <b>Grabación</b> = cuándo se filma (opcional). <b>Entrega</b> = tu responsabilidad (listo para revisión). <b>Publicación</b> = la define el CM; si no está definida aún, la puede completar después.
                   </div>
+                  {recWarn && (
+                    <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
+                      ⚠ La grabación debe ser al menos 24h antes de la entrega. Grabación máxima sugerida: <span className="font-medium">{recWarn}</span>.
+                    </div>
+                  )}
                   {pubWarn && (
                     <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
                       ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.

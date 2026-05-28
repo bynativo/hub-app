@@ -205,7 +205,8 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
     const isColab = pt === 'colab_ig'
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, title: t.title, task_id: t.id, position: (count || 0) + 1,
-      fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, grilla_date: t.publish_date,
+      fecha_publicacion: t.publish_date, fecha_validacion: t.due_date, fecha_filmacion: t.recording_date,
+      grilla_date: t.publish_date,
       content_pub_type: pt,
       influencer_name: t.influencer_nombre || t.influencer_name,
       influencer_handle: t.influencer_handle,
