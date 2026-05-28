@@ -213,6 +213,11 @@ export interface Slide {
   content_pub_type: string | null
   influencer_name: string | null
   influencer_handle: string | null
+  approval_token: string | null
+  es_slide_libre: boolean | null
+  canva_design_id: string | null
+  canva_preview_url: string | null
+  posicion_manual: number | null
   presentations?: Presentation | null
 }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
-import { PLAT_META, TIPO_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS, PUB_TYPES } from '../../lib/constants'
+import { PLAT_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS, PUB_TYPES } from '../../lib/constants'
 import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning, pubTypeBadge } from '../../lib/helpers'
 import type { Slide, Task } from '../../lib/types'
 
@@ -604,48 +604,6 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
               </div>
 
               <div className="p-3.5 border-b border-black/7">
-                <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Plataformas y tipo</div>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {Object.entries(PLAT_META).map(([k, v]) => {
-                    const sel = (slide.plataformas || []).includes(k)
-                    return (
-                      <span
-                        key={k}
-                        onClick={async () => {
-                          const plats = sel
-                            ? (slide.plataformas || []).filter(p => p !== k)
-                            : [...(slide.plataformas || []), k]
-                          await updateField(slide.id, 'plataformas', plats as unknown as string)
-                          setSlides(prev => prev.map(s => s.id === slide.id ? { ...s, plataformas: plats } : s))
-                        }}
-                        className={`text-[11px] font-mono px-2.5 py-1 rounded-[5px] border cursor-pointer transition-all ${
-                          sel ? 'font-semibold' : 'border-black/7 text-gray-400 bg-bg3 hover:border-black/13'
-                        }`}
-                        style={sel ? { background: v.color + '20', borderColor: v.color, color: v.color } : {}}
-                      >
-                        {v.label}
-                      </span>
-                    )
-                  })}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(TIPO_META).map(([k, v]) => (
-                    <span
-                      key={k}
-                      onClick={() => updateField(slide.id, 'tipo_pieza', k)}
-                      className={`text-[11px] font-mono px-2 py-1 rounded-[5px] border cursor-pointer transition-all ${
-                        (slide.tipo_pieza || slide.tipo_contenido) === k
-                          ? 'bg-bg4 border-black/13 text-gray-900 font-semibold'
-                          : 'border-black/7 text-gray-400 bg-bg3 hover:border-black/13'
-                      }`}
-                    >
-                      {v.label}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-3.5 border-b border-black/7">
                 <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Estados</div>
                 <div className="mb-2">
                   <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">🎬 Produccion</span>
@@ -749,9 +707,9 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
               <div className="p-3.5 border-b border-black/7">
                 <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Links</div>
                 {[
-                  { l: 'Presentación completa', u: `${shareBase}/?pres=${pres.slug}` },
-                  { l: 'Slide específica', u: `${shareBase}/?slide=${slide.id}` },
-                  { l: 'Aprobación (sin login)', u: `${shareBase}/?aprobar=${slide.id}` },
+                  { l: 'Presentación completa', u: `${shareBase}/presentation/${pres.id}` },
+                  { l: 'Slide específica', u: `${shareBase}/presentation/${pres.id}/slide/${slide.id}` },
+                  { l: 'Aprobación (sin login)', u: `${shareBase}/approve/${slide.approval_token}` },
                 ].map(link => (
                   <div key={link.l} className="flex items-center gap-2 mb-1.5">
                     <div className="flex-1 min-w-0">
