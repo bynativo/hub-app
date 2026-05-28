@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { supabase } from './supabase'
 import { WAITING_STATES, CLOSING_STATES } from './constants'
-import type { Task, Project, Client, Recurrente, Presentation, Contact, CalendarEvent } from './types'
+import type { Task, Project, Client, Recurrente, Presentation, Contact, CalendarEvent, Template, TemplateTask } from './types'
 
 // Undo stack: cada entrada describe una acción reciente y una función para
 // revertirla. Stack en memoria (no se persiste), tope de 10. Cmd/Ctrl+Z dispara
@@ -35,6 +35,8 @@ interface AppState {
   presentations: Presentation[]
   contacts: Contact[]
   calendarEvents: CalendarEvent[]
+  templates: Template[]
+  templateTasks: TemplateTask[]
   loading: boolean
   initialized: boolean
   activeView: string
@@ -91,6 +93,8 @@ export const useStore = create<AppState>((set, get) => ({
   presentations: [],
   contacts: [],
   calendarEvents: [],
+  templates: [],
+  templateTasks: [],
   loading: true,
   initialized: false,
   activeView: 'hoy',
@@ -116,7 +120,7 @@ export const useStore = create<AppState>((set, get) => ({
     // Solo el loader de pantalla completa en la carga inicial; los refrescos
     // tras una mutación son silenciosos (no desmontan el árbol ni resetean estado).
     if (!get().initialized) set({ loading: true })
-    const [tc, pc, cc, rc, prc, ct, ce] = await Promise.all([
+    const [tc, pc, cc, rc, prc, ct, ce, tmp, tmpt] = await Promise.all([
       // OJO: existen dos FKs entre tasks y projects (tasks.project_id→projects y
       // projects.task_id→tasks), así que el embed `projects(...)` es ambiguo y
       // PostgREST devuelve error (las tareas desaparecían). Desambiguar con el FK.
@@ -127,9 +131,11 @@ export const useStore = create<AppState>((set, get) => ({
       supabase.from('presentations').select('*').order('created_at', { ascending: false }),
       supabase.from('contacts').select('*').order('name'),
       supabase.from('calendar_events').select('*').order('starts_at'),
+      supabase.from('templates').select('*').order('created_at'),
+      supabase.from('template_tasks').select('*').order('position'),
     ])
     // Surface de errores: antes un fallo de query dejaba las listas en [] en silencio.
-    const errored = [tc, pc, cc, rc, prc, ct, ce].find(r => r.error)
+    const errored = [tc, pc, cc, rc, prc, ct, ce, tmp, tmpt].find(r => r.error)
     if (errored?.error) console.error('[loadAll] Supabase error:', errored.error)
     set({
       tasks: tc.data || [],
@@ -139,6 +145,8 @@ export const useStore = create<AppState>((set, get) => ({
       presentations: prc.data || [],
       contacts: ct.data || [],
       calendarEvents: ce.data || [],
+      templates: tmp.data || [],
+      templateTasks: tmpt.data || [],
       loading: false,
       initialized: true,
     })

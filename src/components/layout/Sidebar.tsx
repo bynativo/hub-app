@@ -110,6 +110,7 @@ export function Sidebar() {
       <NavItem label="Seguimiento" view="seguimiento" count={seguimientoCount} />
       <NavItem label="Calendario" view="calendario" />
       <NavItem label="Recurrentes" view="recurrentes" />
+      <NavItem label="Plantillas" view="plantillas" />
       <NavItem label="Contactos" view="contactos" />
 
       <CollapsibleHeader label="Banco Falabella" color="#2563eb" open={!collapsed.banco} onToggle={() => toggle('banco')} />

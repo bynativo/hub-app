@@ -9,6 +9,7 @@ import { WeekView } from './components/dashboard/WeekView'
 import { CalendarView } from './components/dashboard/CalendarView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
+import { TemplatesView } from './components/dashboard/TemplatesView'
 import { SeguimientoView } from './components/dashboard/SeguimientoView'
 import { ClientesView } from './components/dashboard/ClientesView'
 import { ContactsView } from './components/dashboard/ContactsView'
@@ -88,6 +89,7 @@ export default function App() {
       case 'seguimiento': return <SeguimientoView />
       case 'calendario': return <CalendarView />
       case 'recurrentes': return <RecurrentesView />
+      case 'plantillas': return <TemplatesView />
       case 'contactos': return <ContactsView />
       // Banco Falabella
       case 'banco-tareas': return <ContextView context="banco" />

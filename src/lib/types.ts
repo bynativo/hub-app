@@ -247,6 +247,32 @@ export interface CalendarEvent {
   created_at: string
 }
 
+export interface Template {
+  id: number
+  name: string
+  context: string
+  description: string | null
+  created_at: string
+  updated_at: string | null
+}
+
+export interface TemplateTask {
+  id: number
+  template_id: number | null
+  parent_id: number | null
+  title: string
+  task_type: string | null
+  priority: string | null
+  estimated_hours: number | null
+  day_offset: number | null
+  is_reminder: boolean | null
+  reminder_type: string | null
+  is_recurring: boolean | null
+  notes: string | null
+  position: number | null
+  created_at: string
+}
+
 export interface Recurrente {
   id: number
   title: string
