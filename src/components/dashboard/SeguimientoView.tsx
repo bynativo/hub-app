@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
 import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
-import { ctxLabel, todayISO, addDaysISO } from '../../lib/helpers'
+import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange } from '../../lib/helpers'
 import type { Task } from '../../lib/types'
 
 // Contenido cuyo día de entrega es hoy (y aún no entregado/cerrado)
@@ -236,6 +236,43 @@ function FollowupCard({ task }: { task: Task }) {
   )
 }
 
+// Fecha de la alarma de una tarea como YYYY-MM-DD LOCAL (no UTC), o null si
+// no hay alarma propia. Las tareas de contenido que vencen hoy se cuentan como
+// "hoy" aunque no tengan followup_at/recordatorio_at.
+function alarmDateISO(t: Task): string | null {
+  const ts = t.es_recordatorio ? t.recordatorio_at : t.followup_at
+  if (ts) {
+    const d = new Date(ts)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  if (isContentDueToday(t)) return todayISO()
+  return null
+}
+
+function alarmTimeMs(t: Task): number {
+  const ts = t.es_recordatorio ? t.recordatorio_at : t.followup_at
+  if (ts) return new Date(ts).getTime()
+  if (isContentDueToday(t)) return new Date(`${todayISO()}T23:59:59`).getTime()
+  return Infinity
+}
+
+function daysAgo(iso: string): number {
+  const a = new Date(iso + 'T00:00:00')
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  return Math.round((t.getTime() - a.getTime()) / 86400000)
+}
+
+function SectionHeader({ icon, label, count, color }: { icon: string; label: string; count: number; color?: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-2.5 mt-5 first:mt-0">
+      <span className="text-[11px] font-mono tracking-wider uppercase" style={color ? { color } : { color: '#6b7280' }}>
+        {icon} {label}
+      </span>
+      <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{count}</span>
+    </div>
+  )
+}
+
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
   // Recordatorios (incluso los vinculados a una tarea) + esperando respuesta (top-level)
@@ -243,21 +280,86 @@ export function SeguimientoView() {
   const waiting = tasks.filter(t => !t.done && !t.archived_at && (
     t.es_recordatorio || (!t.parent_task_id && WAITING_STATES.includes(t.status)) || isContentDueToday(t)
   ))
-  // Tiempo de alarma unificado: recordatorio_at para recordatorios, followup_at para seguimientos.
-  const alarmTime = (t: Task) => {
-    const at = t.es_recordatorio ? t.recordatorio_at : t.followup_at
-    return at ? new Date(at).getTime() : Infinity
+
+  const today = todayISO()
+  const tomorrow = tomorrowISO()
+  const dayAfterTomorrow = addDaysISO(today, 2)
+  // "Domingo de la próxima semana" según helper: from=lunes próximo, to=domingo próximo.
+  const { to: nextSunday } = nextWeekRange()
+
+  // Clasificación por categoría según la fecha de alarma. Items sin alarma
+  // van al final en "Más adelante" (cualquier waiting state sin followup configurado).
+  const vencidas: Task[] = []
+  const hoy: Task[] = []
+  const manana: Task[] = []
+  const proxSem: Task[] = []
+  const masAdelante: Task[] = []
+  for (const t of waiting) {
+    const d = alarmDateISO(t)
+    if (!d) { masAdelante.push(t); continue }
+    if (d < today) vencidas.push(t)
+    else if (d === today) hoy.push(t)
+    else if (d === tomorrow) manana.push(t)
+    else if (d >= dayAfterTomorrow && d <= nextSunday) proxSem.push(t)
+    else masAdelante.push(t)
   }
-  const sorted = [...waiting].sort((a, b) => alarmTime(a) - alarmTime(b))
+  const sortByAlarm = (a: Task, b: Task) => alarmTimeMs(a) - alarmTimeMs(b)
+  vencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); masAdelante.sort(sortByAlarm)
+
+  function renderCard(t: Task) {
+    const d = alarmDateISO(t)
+    const overdueDays = d && d < today ? daysAgo(d) : 0
+    return (
+      <div key={t.id}>
+        <FollowupCard task={t} />
+        {overdueDays > 0 && (
+          <div className="-mt-1 pl-3">
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-danger/10 text-danger inline-block">
+              {overdueDays} día{overdueDays === 1 ? '' : 's'} sin atender
+            </span>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="animate-fade-in p-5">
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
       <p className="text-gray-500 text-[13px] mb-5">Esperando respuesta y recordatorios · {waiting.length}</p>
 
-      {sorted.length ? (
-        <div className="flex flex-col gap-2 max-w-[760px]">
-          {sorted.map(t => <FollowupCard key={t.id} task={t} />)}
+      {waiting.length ? (
+        <div className="max-w-[760px]">
+          {vencidas.length > 0 && (
+            <>
+              <SectionHeader icon="🔴" label="Vencidas" count={vencidas.length} color="#dc2626" />
+              <div className="flex flex-col gap-2">{vencidas.map(renderCard)}</div>
+            </>
+          )}
+          {hoy.length > 0 && (
+            <>
+              <SectionHeader icon="📌" label="Hoy" count={hoy.length} color="#d97706" />
+              <div className="flex flex-col gap-2">{hoy.map(renderCard)}</div>
+            </>
+          )}
+          {manana.length > 0 && (
+            <>
+              <SectionHeader icon="📅" label="Mañana" count={manana.length} />
+              <div className="flex flex-col gap-2">{manana.map(renderCard)}</div>
+            </>
+          )}
+          {proxSem.length > 0 && (
+            <>
+              <SectionHeader icon="📆" label="Próxima semana" count={proxSem.length} />
+              <div className="flex flex-col gap-2">{proxSem.map(renderCard)}</div>
+            </>
+          )}
+          {masAdelante.length > 0 && (
+            <>
+              <SectionHeader icon="⏳" label="Más adelante" count={masAdelante.length} />
+              <div className="flex flex-col gap-2">{masAdelante.map(renderCard)}</div>
+            </>
+          )}
         </div>
       ) : (
         <div className="text-center py-7 text-gray-400 text-[13px]">Nada esperando respuesta</div>
