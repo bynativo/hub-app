@@ -105,11 +105,11 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
     <div
       key={p.id}
       onClick={() => onOpen(p.id)}
-      className="relative bg-bg2 border border-black/7 rounded-xl overflow-hidden cursor-pointer hover:border-black/13 hover:shadow-md hover:-translate-y-px transition-all shadow-sm"
+      className="relative bg-bg2 border border-black/7 rounded-xl cursor-pointer hover:border-black/13 hover:shadow-md hover:-translate-y-px transition-all shadow-sm"
     >
-      <div className="h-2" style={{ background: p.kv_color }} />
+      <div className="h-2 rounded-t-xl" style={{ background: p.kv_color }} />
       <button onClick={e => { e.stopPropagation(); setMenuFor(menuFor === p.id ? null : p.id) }}
-        className="absolute top-3 right-1.5 text-gray-400 hover:text-gray-900 cursor-pointer px-1.5 leading-none text-lg z-[6]" title="Opciones">⋯</button>
+        className="absolute top-3 right-2 w-6 h-6 flex items-center justify-center rounded-md bg-bg2/80 backdrop-blur-sm border border-black/7 text-gray-500 hover:text-gray-900 hover:bg-bg3 cursor-pointer leading-none text-lg z-[6] shadow-sm" title="Opciones">⋯</button>
       {menuFor === p.id && (
         <>
           <div className="fixed inset-0 z-[5]" onClick={e => { e.stopPropagation(); setMenuFor(null) }} />

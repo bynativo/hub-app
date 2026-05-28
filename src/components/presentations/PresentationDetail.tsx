@@ -176,20 +176,26 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   }
 
   async function addSlide(kind: 'content' | 'canva') {
-    const nextPos = (slides[slides.length - 1]?.position || slides.length) + 1
     const isCanva = kind === 'canva'
+    // IMPORTANTE: abrir Canva ANTES de cualquier await — si lo hacemos después
+    // el navegador lo trata como popup no iniciado por el usuario y lo bloquea.
+    let canvaTab: Window | null = null
+    if (isCanva) {
+      canvaTab = window.open('https://www.canva.com/design?create&type=Instagram-Story', '_blank', 'noopener,noreferrer')
+    }
+    const nextPos = (slides[slides.length - 1]?.position || slides.length) + 1
     const { data, error } = await supabase.from('slides').insert({
       presentation_id: presId, position: nextPos,
       title: isCanva ? 'Slide de Canva' : 'Nueva idea',
       es_texto: isCanva, es_slide_libre: isCanva,
     }).select().single()
-    if (error || !data) { alert('Error creando slide: ' + error?.message); return }
+    if (error || !data) {
+      alert('Error creando slide: ' + error?.message)
+      canvaTab?.close()
+      return
+    }
     setSlides(prev => [...prev, data as Slide])
     setActiveIdx(slides.length)
-    if (isCanva) {
-      // Abre Canva en una pestaña nueva para crear un diseño 9:16 (Instagram Story)
-      window.open('https://www.canva.com/design?create&type=Instagram-Story', '_blank', 'noopener,noreferrer')
-    }
   }
 
   // Convierte una tarea de contenido vinculada en un slide de producción (rico).
