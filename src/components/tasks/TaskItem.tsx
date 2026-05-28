@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
@@ -16,7 +16,9 @@ function Tag({ children, bg, color }: { children: React.ReactNode; bg: string; c
 export function TaskItem({ task, nested = false }: { task: Task; nested?: boolean }) {
   const { toggleTask, openDetail } = useStore()
   const allTasks = useStore(s => s.tasks)
+  const clients = useStore(s => s.clients)
   const [expanded, setExpanded] = useState(false)
+  const clientB = clientBadge(task.client_id, clients)
   const due = fmtDue(task.due_date)
   const overdue = overdueLabel(task.due_date)
   const { prefix, name } = splitTitle(task.title)
@@ -85,8 +87,10 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
               <Tag bg="var(--color-bg4)" color="#6b6860">{ORIGIN_LABELS[task.origin] || task.origin}</Tag>
             )}
 
-            {task.clients && (
-              <Tag bg="rgba(13,148,136,0.07)" color="#0d9488">{task.clients.name}</Tag>
+            {clientB && (
+              <Tag bg={clientB.color + '14'} color={clientB.color}>
+                <span title={clientB.name}>{clientB.sigla}</span>
+              </Tag>
             )}
 
             {/* El proyecto ya no se muestra como tag: las tareas con proyecto se

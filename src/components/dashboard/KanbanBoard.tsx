@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR, STATUS_ICON } from '../../lib/constants'
-import { ctxColor, splitTitle, stripPrefix } from '../../lib/helpers'
+import { ctxColor, splitTitle, stripPrefix, clientBadge } from '../../lib/helpers'
 import type { Task, Project } from '../../lib/types'
 
 // Estado destino al soltar una tarea en una columna universal:
@@ -36,9 +36,11 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
   onFocus: (id: number) => void
 }) {
   const openDetail = useStore(s => s.openDetail)
+  const clients = useStore(s => s.clients)
   const prioColor = task.priority === 'alta' ? '#dc2626' : task.priority === 'media' ? '#d97706' : '#16a34a'
   const doneSubs = subs.filter(s => s.done).length
   const parts = splitTitle(task.title)
+  const clientB = clientBadge(task.client_id, clients)
   return (
     <div
       draggable
@@ -65,7 +67,10 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: prioColor + '14', color: prioColor }}>
           {task.priority === 'alta' ? 'Alta' : task.priority === 'media' ? 'Media' : 'Baja'}
         </span>
-        {task.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{task.clients.name}</span>}
+        {clientB && (
+          <span title={clientB.name} className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium"
+            style={{ background: clientB.color + '14', color: clientB.color }}>{clientB.sigla}</span>
+        )}
         {task.due_date && (
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{task.due_date.slice(5).replace('-', '/')}</span>
         )}

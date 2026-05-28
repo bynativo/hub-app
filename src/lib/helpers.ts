@@ -121,6 +121,19 @@ export function stripPrefix(title: string): string {
   return splitTitle(title).name
 }
 
+// Badge corto del cliente: sigla (o 3 primeras letras del nombre) + color del cliente.
+// Para mostrar en cada tarjeta de tarea. Devuelve null si la tarea no tiene cliente.
+export function clientBadge(
+  clientId: number | null | undefined,
+  clients: { id: number; name: string; sigla?: string | null; color?: string | null }[],
+): { sigla: string; color: string; name: string } | null {
+  if (!clientId) return null
+  const c = clients.find(x => x.id === clientId)
+  if (!c) return null
+  const sigla = (c.sigla?.trim() || c.name.slice(0, 3)).toUpperCase()
+  return { sigla, color: c.color || '#0d9488', name: c.name }
+}
+
 // Texto del badge de atraso para una tarea vencida ("3 días", "1 semana", "2 meses…").
 // Devuelve null si no está atrasada o no tiene fecha.
 export function overdueLabel(dueIso: string | null): string | null {

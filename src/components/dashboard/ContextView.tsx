@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
@@ -6,15 +6,34 @@ import { ctxLabel, ctxColor, todayISO } from '../../lib/helpers'
 import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import type { Task } from '../../lib/types'
 
+// Filtro local por cliente en la vista de tareas de agencia.
+// 'all'  → todas las tareas (agrupadas por cliente cuando hay varios)
+// number → solo las del cliente con ese id
+// 'none' → solo las tareas sin cliente asignado
+type ClientFilter = 'all' | 'none' | number
+
 export function ContextView({ context }: { context: string }) {
-  const { tasks, activeClientId } = useStore()
+  const tasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
+  const [clientFilter, setClientFilter] = useState<ClientFilter>('all')
+
+  // Reset del filtro al cambiar de contexto (banco↔agencia↔personal sin desmontar).
+  // Cuando se sale a otra vista y se vuelve, ContextView se desmonta y el estado
+  // se reinicia naturalmente.
+  useEffect(() => { setClientFilter('all') }, [context])
 
   const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
-  const filtered = context === 'agencia' && activeClientId
-    ? active.filter(t => t.client_id === activeClientId)
-    : active
+
+  const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
+  const selectedClient = typeof clientFilter === 'number' ? agClients.find(c => c.id === clientFilter) : null
+
+  // En agencia aplicamos el filtro local. Otros contextos: sin filtro.
+  const filtered = context !== 'agencia' || clientFilter === 'all'
+    ? active
+    : clientFilter === 'none'
+      ? active.filter(t => !t.client_id)
+      : active.filter(t => t.client_id === clientFilter)
 
   // Atrasadas: due_date < hoy. Se muestran arriba en su propia sección y se
   // excluyen del agrupado por status/cliente para no duplicar.
@@ -29,9 +48,8 @@ export function ContextView({ context }: { context: string }) {
   const extra = [...new Set(restFiltered.map(t => t.status || 'Inbox').filter(s => !columns.includes(s)))]
   const groupOrder = [...columns, ...extra]
 
-  // En Agencia sin filtro de cliente, agrupamos primero por cliente/marca.
-  const groupByClient = context === 'agencia' && !activeClientId
-  const agClients = clients.filter(c => c.context === 'agencia')
+  // Agrupamos por cliente solo en agencia con filtro = 'all' (mostrar todas).
+  const groupByClient = context === 'agencia' && clientFilter === 'all'
   const clientEntries = (() => {
     if (!groupByClient) return null
     const byClient = new Map<number | null, Task[]>()
@@ -67,14 +85,20 @@ export function ContextView({ context }: { context: string }) {
     })
   }
 
+  const headerTitle = context === 'agencia' && selectedClient
+    ? `Tareas · ${selectedClient.name}`
+    : context === 'agencia' && clientFilter === 'none'
+      ? 'Tareas · Sin cliente asignado'
+      : ctxLabel(context)
+
   return (
     <div className="animate-fade-in p-5">
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: ctxColor(context) }}>
-        {ctxLabel(context)}
+        {headerTitle}
       </h1>
       <p className="text-gray-500 text-[13px] mb-4">{filtered.length} pendientes</p>
 
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
           {(['list', 'kanban'] as const).map(m => (
             <button key={m} onClick={() => setMode(m)}
@@ -85,6 +109,33 @@ export function ContextView({ context }: { context: string }) {
             </button>
           ))}
         </div>
+
+        {context === 'agencia' && (
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Ver cliente</span>
+            <select
+              value={clientFilter === 'all' ? '__all__' : clientFilter === 'none' ? '__none__' : String(clientFilter)}
+              onChange={e => {
+                const v = e.target.value
+                if (v === '__all__') setClientFilter('all')
+                else if (v === '__none__') setClientFilter('none')
+                else setClientFilter(Number(v))
+              }}
+              className="text-xs bg-bg2 border border-black/7 rounded-md px-2 py-1 cursor-pointer outline-none focus:border-claude/20"
+            >
+              <option value="__all__">Todos los clientes</option>
+              <option value="__none__">Sin cliente asignado</option>
+              {agClients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {clientFilter !== 'all' && (
+              <button onClick={() => setClientFilter('all')}
+                className="text-[11px] text-gray-400 hover:text-claude cursor-pointer px-1.5"
+                title="Limpiar filtro">×</button>
+            )}
+          </div>
+        )}
       </div>
 
       {mode === 'kanban' ? (
