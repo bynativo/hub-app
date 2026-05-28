@@ -700,6 +700,17 @@ Reglas del bloque:
                 </select>
               </div>
 
+              {task.context === 'agencia' && (
+                <div>
+                  <label className={labelCls}>Cliente / marca</label>
+                  <select value={task.client_id ?? ''} className={fieldCls}
+                    onChange={async e => { await updateTask(task.id, { client_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
+                    <option value="">Agencia interna (sin cliente)</option>
+                    {clients.filter(c => c.context === 'agencia').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+
               {!isEmailReply && (<>
               <div>
                 <label className={labelCls}>Parte de proyecto</label>

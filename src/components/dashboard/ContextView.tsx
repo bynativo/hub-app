@@ -4,9 +4,11 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ctxLabel, ctxColor } from '../../lib/helpers'
 import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
+import type { Task } from '../../lib/types'
 
 export function ContextView({ context }: { context: string }) {
   const { tasks, activeClientId } = useStore()
+  const clients = useStore(s => s.clients)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
 
   const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
@@ -19,6 +21,44 @@ export function ContextView({ context }: { context: string }) {
   // Estados a mostrar en Lista: las columnas del contexto + cualquier otro estado presente.
   const extra = [...new Set(filtered.map(t => t.status || 'Inbox').filter(s => !columns.includes(s)))]
   const groupOrder = [...columns, ...extra]
+
+  // En Agencia sin filtro de cliente, agrupamos primero por cliente/marca.
+  const groupByClient = context === 'agencia' && !activeClientId
+  const agClients = clients.filter(c => c.context === 'agencia')
+  const clientEntries = (() => {
+    if (!groupByClient) return null
+    const byClient = new Map<number | null, Task[]>()
+    for (const t of filtered) {
+      const key = t.client_id ?? null
+      const arr = byClient.get(key)
+      if (arr) arr.push(t)
+      else byClient.set(key, [t])
+    }
+    return [...byClient.entries()]
+      .map(([cid, ts]) => ({
+        cid,
+        name: cid ? (agClients.find(c => c.id === cid)?.name || `Cliente ${cid}`) : 'Sin cliente asignado',
+        tasks: ts,
+      }))
+      .sort((a, b) => a.cid == null ? 1 : b.cid == null ? -1 : a.name.localeCompare(b.name))
+  })()
+
+  function renderStatusGroups(group: Task[]) {
+    return groupOrder.map(st => {
+      const sub = group.filter(t => (t.status || 'Inbox') === st)
+      if (!sub.length) return null
+      const color = STATUS_COLOR[st] || '#6b7280'
+      return (
+        <div key={st}>
+          <div className="flex items-center gap-2 mb-2.5 mt-4 first:mt-0">
+            <span className="text-[11px] font-mono tracking-wider uppercase" style={{ color }}>{STATUS_ICON[st] || '•'} {st}</span>
+            <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{sub.length}</span>
+          </div>
+          <TaskList tasks={sub} />
+        </div>
+      )
+    })
+  }
 
   return (
     <div className="animate-fade-in p-5">
@@ -46,20 +86,21 @@ export function ContextView({ context }: { context: string }) {
         <div className="text-center py-7 text-gray-400 text-[13px]">Sin tareas</div>
       ) : (
         <div className="max-w-[860px]">
-          {groupOrder.map(st => {
-            const group = filtered.filter(t => (t.status || 'Inbox') === st)
-            if (!group.length) return null
-            const color = STATUS_COLOR[st] || '#6b7280'
-            return (
-              <div key={st}>
-                <div className="flex items-center gap-2 mb-2.5 mt-5 first:mt-0">
-                  <span className="text-[11px] font-mono tracking-wider uppercase" style={{ color }}>{STATUS_ICON[st] || '•'} {st}</span>
-                  <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{group.length}</span>
+          {groupByClient && clientEntries ? (
+            clientEntries.map(({ cid, name, tasks: clientTasks }) => (
+              <div key={cid ?? 'sin'} className="mb-6">
+                <div className="flex items-center gap-2 mb-3 pb-1.5 border-b border-black/13">
+                  <span className="text-[13px] font-medium" style={{ color: cid ? '#0d9488' : '#6b7280' }}>
+                    {cid ? `📁 ${name}` : '○ Sin cliente asignado'}
+                  </span>
+                  <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{clientTasks.length}</span>
                 </div>
-                <TaskList tasks={group} />
+                {renderStatusGroups(clientTasks)}
               </div>
-            )
-          })}
+            ))
+          ) : (
+            renderStatusGroups(filtered)
+          )}
         </div>
       )}
     </div>
