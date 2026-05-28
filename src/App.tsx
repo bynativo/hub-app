@@ -4,6 +4,7 @@ import { Topbar } from './components/layout/Topbar'
 import { Sidebar } from './components/layout/Sidebar'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
+import { AgenciaView } from './components/dashboard/AgenciaView'
 import { WeekView } from './components/dashboard/WeekView'
 import { CalendarView } from './components/dashboard/CalendarView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
@@ -79,7 +80,7 @@ export default function App() {
       case 'banco-presentaciones': return <PresentationsView context="banco" onOpen={setOpenPresId} />
       case 'banco-grilla': return <GrillaView context="banco" />
       // Agencia
-      case 'agencia-tareas': return <ContextView context="agencia" />
+      case 'agencia-tareas': return <AgenciaView />
       case 'agencia-clientes': return <ClientesView />
       case 'agencia-proyectos': return <ProjectsView context="agencia" onOpenPres={setOpenPresId} />
       case 'agencia-equipo': return <ContactsView context="agencia" title="Equipo" />
