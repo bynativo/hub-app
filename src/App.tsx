@@ -20,6 +20,7 @@ import { CaptureModal } from './components/modals/CaptureModal'
 import { FollowupModal } from './components/modals/FollowupModal'
 import { SearchModal } from './components/modals/SearchModal'
 import { RecurrenteModal } from './components/modals/RecurrenteModal'
+import { Toast } from './components/layout/Toast'
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -40,17 +41,32 @@ export default function App() {
   const recurrentCreate = useStore(s => s.recurrentCreate)
   const closeRecurrentCreate = useStore(s => s.closeRecurrentCreate)
   const recurrentes = useStore(s => s.recurrentes)
+  const undoLast = useStore(s => s.undoLast)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
 
   useEffect(() => {
+    function isTypingTarget(t: EventTarget | null): boolean {
+      if (!(t instanceof HTMLElement)) return false
+      const tag = t.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+      if (t.isContentEditable) return true
+      return false
+    }
     function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch() }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); return }
+      // Cmd+Z / Ctrl+Z (sin shift) → undoLast. Ignoramos cuando el foco está en
+      // un input/textarea para no romper el undo nativo del campo.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (isTypingTarget(e.target)) return
+        e.preventDefault()
+        undoLast()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openSearch])
+  }, [openSearch, undoLast])
 
   if (loading) {
     return (
@@ -142,6 +158,8 @@ export default function App() {
           preselectClientId={recurrentCreate.clientId ?? null}
           preselectProjectId={recurrentCreate.projectId ?? null} />
       )}
+
+      <Toast />
     </>
   )
 }

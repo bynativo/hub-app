@@ -137,6 +137,7 @@ export function TaskDetail() {
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
+  const deleteTaskSoft = useStore(s => s.deleteTaskSoft)
 
   const task = tasks.find(t => t.id === currentTaskId)
   const [tab, setTab] = useState<Tab>('info')
@@ -279,7 +280,7 @@ export function TaskDetail() {
       ...(task.es_recordatorio ? { recordatorio_at: recordatorioAt ? new Date(recordatorioAt).toISOString() : null } : {}),
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
-    })
+    }, 'Edición de tarea')
     setSavingInfo(false); setDirty(false)
   }
 
@@ -507,10 +508,11 @@ Reglas del bloque:
   async function deleteTask() {
     if (!task) return
     setDeleting(true)
-    await supabase.from('tasks').delete().eq('id', task.id) // CASCADE: subtareas, checklists, threads, attachments
+    // Soft delete: la fila desaparece del estado local + toast con "Deshacer"
+    // durante 10s. Si nadie deshace, la store ejecuta el DELETE real (CASCADE
+    // borra subtareas, checklists, threads, attachments).
+    await deleteTaskSoft(task.id)
     setDeleting(false); setConfirmDel(false)
-    closeDetail()
-    await loadAll()
   }
 
   // Cambiar el contexto de la tarea: separación estricta. Limpia tarea padre y
