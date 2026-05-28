@@ -128,10 +128,13 @@ const PROXY_URL = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/claude-
 
 const EXTRACT_SYSTEM = 'Sos un asistente que extrae tareas accionables de notas, mensajes o imágenes (correos, WhatsApp, documentos). No inventes; solo lo explícito o claramente implícito. Devolvés SOLO JSON.'
 
-function extractPrompt(text: string) {
+function extractPrompt(text: string, fixedContext?: string, clientName?: string | null) {
+  const ctxLine = fixedContext
+    ? `\n\nIMPORTANTE — CONTEXTO FIJO: Todas las tareas extraídas pertenecen al contexto "${fixedContext}". Asigná SIEMPRE ese contexto a todas las tareas sin excepción. No infieras el contexto del texto, usá siempre "${fixedContext}".${clientName ? ` El cliente de todas las tareas es "${clientName}" — no lo cambies.` : ''}`
+    : ''
   return `Hoy es ${todayISO()}. Extrae las tareas concretas. Para CADA tarea devolvé estos campos:
 - titulo: corto y práctico
-- contexto: banco | agencia | personal — OBLIGATORIO, siempre elegí el más probable según el contenido
+- contexto: banco | agencia | personal${fixedContext ? ` — DEBE ser "${fixedContext}" siempre` : ' — OBLIGATORIO, siempre elegí el más probable según el contenido'}
 - tipo: independiente | con_subtareas | proyecto | recurrente
 - prioridad: alta | media | baja
 - due_date: fecha de entrega "YYYY-MM-DD" — OBLIGATORIA. Inferila siempre que puedas: convertí expresiones relativas ("hoy", "mañana", "el viernes", "fin de mes", "en una semana") a fecha concreta tomando hoy=${todayISO()}. Solo dejá null si es realmente imposible inferir una fecha.
@@ -139,18 +142,20 @@ function extractPrompt(text: string) {
 - estimated_hours: estimación de esfuerzo, uno de 0.5,1,1.5,2,3,4,6,8
 - origen: gmail-agencia | whatsapp | reunion | propia
 
-Responde SOLO JSON: {"tareas":[{"titulo":"...","contexto":"...","tipo":"...","prioridad":"...","due_date":null,"requested_at":null,"estimated_hours":1,"origen":"..."}]}
+Responde SOLO JSON: {"tareas":[{"titulo":"...","contexto":"...","tipo":"...","prioridad":"...","due_date":null,"requested_at":null,"estimated_hours":1,"origen":"..."}]}${ctxLine}
 
 ${text.trim() ? `Contenido:\n${text.trim()}` : ''}`
 }
 
-function parseSuggested(reply: string): Suggested[] {
+function parseSuggested(reply: string, fixedContext?: string): Suggested[] {
   const cleaned = reply.replace(/```json|```/g, '').trim()
   const parsed = JSON.parse(cleaned)
   const items = parsed.tareas || parsed.tasks || []
   return items.map((t: any) => ({
     titulo: t.titulo || t.title || '',
-    contexto: t.contexto || t.context || 'agencia',
+    // Defensa: si vino un fixedContext del UI, sobreescribimos lo que devolvió
+    // Claude (a veces ignora la instrucción y vuelve a inferir).
+    contexto: fixedContext || t.contexto || t.context || 'agencia',
     tipo: normTipo(t.tipo || t.type || ''),
     prioridad: t.prioridad || t.priority || 'media',
     due_date: t.due_date || null,
@@ -388,23 +393,24 @@ async function callProxy(content: any): Promise<string> {
   return data.text || data.reply || data.content?.[0]?.text || ''
 }
 
-async function extractTasks(text: string): Promise<Suggested[]> {
+async function extractTasks(text: string, fixedContext?: string, clientName?: string | null): Promise<Suggested[]> {
   let reply: string
+  const prompt = extractPrompt(text, fixedContext, clientName)
   try {
-    reply = await callProxy(extractPrompt(text))
+    reply = await callProxy(prompt)
   } catch {
-    reply = await callClaude([{ role: 'user', content: extractPrompt(text) }], EXTRACT_SYSTEM)
+    reply = await callClaude([{ role: 'user', content: prompt }], EXTRACT_SYSTEM)
   }
-  return parseSuggested(reply)
+  return parseSuggested(reply, fixedContext)
 }
 
 // Extracción por visión: manda el prompt + imágenes (base64) al proxy.
-async function extractFromImages(images: { media_type: string; data: string }[], extraText: string): Promise<Suggested[]> {
+async function extractFromImages(images: { media_type: string; data: string }[], extraText: string, fixedContext?: string, clientName?: string | null): Promise<Suggested[]> {
   const content = [
-    { type: 'text', text: extractPrompt(extraText || '(Las tareas están en las imágenes adjuntas: correos, WhatsApp o documentos.)') },
+    { type: 'text', text: extractPrompt(extraText || '(Las tareas están en las imágenes adjuntas: correos, WhatsApp o documentos.)', fixedContext, clientName) },
     ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } })),
   ]
-  return parseSuggested(await callProxy(content))
+  return parseSuggested(await callProxy(content), fixedContext)
 }
 
 export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId, preselectReminder, template }: {
@@ -684,10 +690,22 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
     setExtracting(true); setSuggestions([])
     try {
+      // Pasamos contexto/cliente actuales al extractor para que TODAS las tareas
+      // hereden el contexto seleccionado en el dropdown (y el cliente si agencia).
+      const clientName = context === 'agencia' && clientId
+        ? (clients.find(c => c.id === clientId)?.name || null)
+        : null
       const items = hasImages
-        ? await extractFromImages(images.map(im => ({ media_type: im.media_type, data: im.data })), meetingText)
-        : await extractTasks(meetingText)
-      setSuggestions(items); setExtracted(true)
+        ? await extractFromImages(images.map(im => ({ media_type: im.media_type, data: im.data })), meetingText, context, clientName)
+        : await extractTasks(meetingText, context, clientName)
+      // Defensa adicional: forzamos el contexto y el clientId (cuando agencia)
+      // por si Claude ignoró la instrucción o devolvió un cliente distinto.
+      const normalized = items.map(s => ({
+        ...s,
+        contexto: context,
+        clientId: context === 'agencia' ? (clientId ?? s.clientId ?? null) : null,
+      }))
+      setSuggestions(normalized); setExtracted(true)
     } catch {
       alert('Error extrayendo tareas. Intenta de nuevo.')
     } finally {
