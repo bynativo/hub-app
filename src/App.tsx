@@ -30,6 +30,7 @@ export default function App() {
   const captureContext = useStore(s => s.captureContext)
   const captureClientId = useStore(s => s.captureClientId)
   const captureProjectId = useStore(s => s.captureProjectId)
+  const captureReminder = useStore(s => s.captureReminder)
   const closeCapture = useStore(s => s.closeCapture)
   const searchOpen = useStore(s => s.searchOpen)
   const openSearch = useStore(s => s.openSearch)
@@ -120,6 +121,7 @@ export default function App() {
           preselectContext={captureContext ?? undefined}
           preselectClientId={captureClientId}
           preselectProjectId={captureProjectId}
+          preselectReminder={captureReminder}
         />
       )}
 
@@ -137,7 +139,8 @@ export default function App() {
       {recurrentCreate && (
         <RecurrenteModal onClose={closeRecurrentCreate}
           preselectContext={recurrentCreate.context}
-          preselectClientId={recurrentCreate.clientId ?? null} />
+          preselectClientId={recurrentCreate.clientId ?? null}
+          preselectProjectId={recurrentCreate.projectId ?? null} />
       )}
     </>
   )

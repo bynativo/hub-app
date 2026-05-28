@@ -116,7 +116,7 @@ export function Sidebar() {
       {!collapsed.banco && (
         <>
           <NavItem label="Tareas" view="banco-tareas" count={ctxCount('banco')} indent />
-          <NavItem label="Proyectos" view="banco-proyectos" indent />
+          <NavItem label="Campañas y proyectos" view="banco-proyectos" indent />
           <NavItem label="Equipo" view="banco-equipo" indent />
           <NavItem label="Recurrentes" view="banco-recurrentes" indent />
           <NavItem label="Presentaciones" view="banco-presentaciones" indent />

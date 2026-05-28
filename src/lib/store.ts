@@ -21,10 +21,11 @@ interface AppState {
   captureClientId: number | null
   captureContext: string | null
   captureProjectId: number | null
+  captureReminder: boolean
   pendingFollowupTaskId: number | null
   searchOpen: boolean
   recurrentEditId: number | null
-  recurrentCreate: { context?: string; clientId?: number | null } | null
+  recurrentCreate: { context?: string; clientId?: number | null; projectId?: number | null } | null
 
   loadAll: () => Promise<void>
   openSearch: () => void
@@ -33,7 +34,7 @@ interface AppState {
   setActiveClient: (id: number | null) => void
   openDetail: (id: number) => void
   closeDetail: () => void
-  openCapture: (opts?: { context?: string; clientId?: number | null; projectId?: number | null }) => void
+  openCapture: (opts?: { context?: string; clientId?: number | null; projectId?: number | null; reminder?: boolean }) => void
   closeCapture: () => void
   toggleTask: (id: number) => Promise<void>
   updateTaskStatus: (id: number, status: string) => Promise<void>
@@ -44,7 +45,7 @@ interface AppState {
   markRecurrentExecuted: (id: number) => Promise<void>
   openRecurrentEdit: (id: number) => void
   closeRecurrentEdit: () => void
-  openRecurrentCreate: (opts?: { context?: string; clientId?: number | null }) => void
+  openRecurrentCreate: (opts?: { context?: string; clientId?: number | null; projectId?: number | null }) => void
   closeRecurrentCreate: () => void
 }
 
@@ -66,6 +67,7 @@ export const useStore = create<AppState>((set, get) => ({
   captureClientId: null,
   captureContext: null,
   captureProjectId: null,
+  captureReminder: false,
   pendingFollowupTaskId: null,
   searchOpen: false,
   recurrentEditId: null,
@@ -117,8 +119,9 @@ export const useStore = create<AppState>((set, get) => ({
     captureContext: opts?.context ?? null,
     captureClientId: opts?.clientId ?? null,
     captureProjectId: opts?.projectId ?? null,
+    captureReminder: !!opts?.reminder,
   }),
-  closeCapture: () => set({ captureOpen: false, captureContext: null, captureClientId: null, captureProjectId: null }),
+  closeCapture: () => set({ captureOpen: false, captureContext: null, captureClientId: null, captureProjectId: null, captureReminder: false }),
 
   toggleTask: async (id) => {
     await supabase.from('tasks').update({ done: true }).eq('id', id)

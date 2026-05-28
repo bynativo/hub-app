@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { ctxColor, ctxLabel, splitTitle } from '../../lib/helpers'
+import { ctxColor, ctxLabel, splitTitle, nextRecurringDueDate, fmtDue } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, TIPO_AGENCIA } from '../../lib/constants'
 import { NewProjectModal } from '../modals/NewProjectModal'
 import { ReminderRow } from '../tasks/ReminderRow'
+import type { Task, Recurrente } from '../../lib/types'
 
 const PROJECT_STATUSES = ['activo', 'en pausa', 'cerrado']
 
@@ -12,12 +13,17 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const allProjects = useStore(s => s.projects)
   const tasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
+  const recurrentes = useStore(s => s.recurrentes)
   const presentations = useStore(s => s.presentations)
   const openDetail = useStore(s => s.openDetail)
   const openCapture = useStore(s => s.openCapture)
+  const openRecurrentCreate = useStore(s => s.openRecurrentCreate)
+  const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
+  const markRecurrentExecuted = useStore(s => s.markRecurrentExecuted)
   const loadAll = useStore(s => s.loadAll)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newOpen, setNewOpen] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   // Formulario de edición del proyecto seleccionado
   const [name, setName] = useState('')
@@ -34,11 +40,39 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
 
   const projects = context ? allProjects.filter(p => p.context === context) : allProjects
   const selected = projects.find(p => p.id === selectedId)
-  const selectedTasks = selected ? tasks.filter(t => t.project_id === selected.id && !t.parent_task_id) : []
   const selectedPres = selected ? presentations.find(pr => pr.project_id === selected.id) : null
   const agClients = clients.filter(c => c.context === 'agencia')
 
+  // En Banco renombramos "Proyectos" → "Campañas y proyectos" (incluye campañas
+  // mensuales, lanzamientos, etc.) — el resto de contextos sigue diciendo "Proyectos".
+  const pageTitle = context === 'banco' ? 'Campañas y proyectos' : 'Proyectos'
+  const itemNoun = context === 'banco' ? 'campañas y proyectos' : 'proyectos'
   const accent = context ? ctxColor(context) : '#7c3aed'
+
+  // Tareas top-level (no recordatorios) vinculadas al proyecto seleccionado.
+  const selectedTasksOnly = selected ? tasks.filter(t => t.project_id === selected.id && !t.parent_task_id && !t.es_recordatorio) : []
+  // Recordatorios vinculados directamente al proyecto (parent_task_id null, project_id = X).
+  const selectedReminders = selected ? tasks.filter(t => t.project_id === selected.id && !t.parent_task_id && t.es_recordatorio && !t.done && !t.archived_at) : []
+  // Recurrentes vinculadas al proyecto.
+  const selectedRecurrentes = selected ? recurrentes.filter(r => r.project_id === selected.id) : []
+
+  // Lista unificada para la vista del proyecto, ordenada por la "fecha activa" de
+  // cada item (due/recordatorio/próxima ejecución). Sin fecha → al final.
+  type UnifiedItem =
+    | { kind: 'task'; task: Task; sortKey: string }
+    | { kind: 'reminder'; task: Task; sortKey: string }
+    | { kind: 'recurrent'; rec: Recurrente; date: string; sortKey: string }
+  const unified: UnifiedItem[] = (() => {
+    if (!selected) return []
+    const arr: UnifiedItem[] = []
+    for (const t of selectedTasksOnly) arr.push({ kind: 'task', task: t, sortKey: t.due_date || 'zzzz' })
+    for (const r of selectedReminders) arr.push({ kind: 'reminder', task: r, sortKey: (r.recordatorio_at || 'zzzz').slice(0, 10) })
+    for (const r of selectedRecurrentes) {
+      const d = nextRecurringDueDate(r)
+      arr.push({ kind: 'recurrent', rec: r, date: d, sortKey: d })
+    }
+    return arr.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+  })()
 
   useEffect(() => {
     if (!selected) return
@@ -87,7 +121,8 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
   function getPct(projId: number) {
-    const all = tasks.filter(t => t.project_id === projId && !t.parent_task_id)
+    // Progreso solo cuenta tareas reales (no recordatorios) del proyecto.
+    const all = tasks.filter(t => t.project_id === projId && !t.parent_task_id && !t.es_recordatorio)
     if (!all.length) return 0
     return Math.round(all.filter(t => t.done).length / all.length * 100)
   }
@@ -96,12 +131,12 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
     <div className="animate-fade-in p-5">
       <div className="flex items-start justify-between mb-5">
         <div>
-          <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: accent }}>Proyectos</h1>
-          <p className="text-gray-500 text-[13px]">{context ? ctxLabel(context) : 'Todos los contextos'} · {projects.length} proyectos</p>
+          <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: accent }}>{pageTitle}</h1>
+          <p className="text-gray-500 text-[13px]">{context ? ctxLabel(context) : 'Todos los contextos'} · {projects.length} {itemNoun}</p>
         </div>
         <button onClick={() => setNewOpen(true)}
           className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
-          + Nuevo proyecto
+          {context === 'banco' ? '+ Nueva campaña / proyecto' : '+ Nuevo proyecto'}
         </button>
       </div>
 
@@ -141,7 +176,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
             </div>
           )
         })}
-        {!projects.length && <div className="text-center py-7 text-gray-400 text-[13px]">Sin proyectos en este contexto</div>}
+        {!projects.length && <div className="text-center py-7 text-gray-400 text-[13px]">Sin {itemNoun} en este contexto</div>}
       </div>
 
       {selected && (
@@ -152,8 +187,29 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
               {selectedPres && onOpenPres && (
                 <button onClick={() => onOpenPres(selectedPres.id)} className="text-xs bg-claude/7 border border-claude/20 text-claude px-3 py-1.5 rounded-lg hover:bg-claude/15 cursor-pointer">Ver presentación</button>
               )}
-              <button onClick={() => openCapture({ context: selected.context, projectId: selected.id, clientId: selected.client_id })}
-                className="text-xs bg-claude border-claude text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 cursor-pointer">+ Nueva tarea</button>
+              <div className="relative">
+                <button onClick={() => setAddMenuOpen(o => !o)}
+                  className="text-xs bg-claude border-claude text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 cursor-pointer">+ Agregar ▾</button>
+                {addMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[10]" onClick={() => setAddMenuOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 bg-bg2 border border-black/13 rounded-lg shadow-lg py-1 z-[11] w-48">
+                      <button onClick={() => { setAddMenuOpen(false); openCapture({ context: selected.context, projectId: selected.id, clientId: selected.client_id }) }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer flex items-center gap-2">
+                        <span className="w-3.5 h-3.5 rounded border-[1.5px] border-black/30 inline-block" /> Tarea
+                      </button>
+                      <button onClick={() => { setAddMenuOpen(false); openCapture({ context: selected.context, projectId: selected.id, clientId: selected.client_id, reminder: true }) }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer flex items-center gap-2">
+                        <span>🔔</span> Recordatorio
+                      </button>
+                      <button onClick={() => { setAddMenuOpen(false); openRecurrentCreate({ context: selected.context, clientId: selected.client_id, projectId: selected.id }) }}
+                        className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer flex items-center gap-2">
+                        <span>🔄</span> Recurrente
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-900 cursor-pointer text-lg">✕</button>
             </div>
           </div>
@@ -163,7 +219,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
             <div className="flex-1 h-2 bg-bg4 rounded-full overflow-hidden">
               <div className="h-full rounded-full" style={{ width: `${getPct(selected.id)}%`, background: ctxColor(selected.context) }} />
             </div>
-            <div className="text-[13px] font-medium" style={{ color: ctxColor(selected.context) }}>{selectedTasks.filter(t => t.done).length}/{selectedTasks.length}</div>
+            <div className="text-[13px] font-medium" style={{ color: ctxColor(selected.context) }}>{selectedTasksOnly.filter(t => t.done).length}/{selectedTasksOnly.length}</div>
           </div>
 
           {/* Formulario editable del proyecto */}
@@ -229,36 +285,59 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
           </div>
 
           <div className="p-4">
-            <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">Tareas del proyecto</div>
-            {selectedTasks.length ? (
+            <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">Tareas, recordatorios y recurrentes</div>
+            {unified.length ? (
               <div className="flex flex-col gap-1">
-                {selectedTasks.map(t => {
-                  const stColor = STATUS_COLOR[t.status] || '#6b7280'
-                  const taskReminders = tasks.filter(r => r.parent_task_id === t.id && r.es_recordatorio && !r.done && !r.archived_at)
-                  return (
-                    <div key={t.id}>
-                      <div onClick={() => openDetail(t.id)}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border border-black/7 cursor-pointer hover:border-black/13 hover:shadow-sm transition-all ${t.done ? 'opacity-40' : ''}`}>
-                        <div className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 flex items-center justify-center text-[9px] ${t.done ? 'bg-success border-success text-white' : 'border-black/13'}`}>{t.done && '✓'}</div>
-                        <span className={`text-[13px] flex-1 ${t.done ? 'line-through text-gray-400' : ''}`}>
-                          {(() => { const p = splitTitle(t.title); return <>{p.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{p.prefix} |</span>}{p.name}</> })()}
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: stColor + '16', color: stColor }}>{STATUS_ICON[t.status]} {t.status}</span>
-                      </div>
-                      {taskReminders.length > 0 && (
-                        <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/15 pl-2.5">
-                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 uppercase tracking-wider">
-                            <span className="h-px flex-1 bg-black/7" />Recordatorios<span className="h-px flex-1 bg-black/7" />
-                          </div>
-                          {taskReminders.map(r => <ReminderRow key={r.id} reminder={r} />)}
+                {unified.map(it => {
+                  if (it.kind === 'task') {
+                    const t = it.task
+                    const stColor = STATUS_COLOR[t.status] || '#6b7280'
+                    const childReminders = tasks.filter(r => r.parent_task_id === t.id && r.es_recordatorio && !r.done && !r.archived_at)
+                    return (
+                      <div key={`t${t.id}`}>
+                        <div onClick={() => openDetail(t.id)}
+                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border border-black/7 cursor-pointer hover:border-black/13 hover:shadow-sm transition-all ${t.done ? 'opacity-40' : ''}`}>
+                          <div className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 flex items-center justify-center text-[9px] ${t.done ? 'bg-success border-success text-white' : 'border-black/13'}`}>{t.done && '✓'}</div>
+                          <span className={`text-[13px] flex-1 ${t.done ? 'line-through text-gray-400' : ''}`}>
+                            {(() => { const p = splitTitle(t.title); return <>{p.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{p.prefix} |</span>}{p.name}</> })()}
+                          </span>
+                          {t.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{t.due_date.slice(5).replace('-', '/')}</span>}
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: stColor + '16', color: stColor }}>{STATUS_ICON[t.status]} {t.status}</span>
                         </div>
+                        {childReminders.length > 0 && (
+                          <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/15 pl-2.5">
+                            {childReminders.map(r => <ReminderRow key={r.id} reminder={r} />)}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+                  if (it.kind === 'reminder') {
+                    return <ReminderRow key={`r${it.task.id}`} reminder={it.task} />
+                  }
+                  // recurrent
+                  const r = it.rec
+                  const due = fmtDue(it.date)
+                  return (
+                    <div key={`rec${r.id}`} onClick={() => openRecurrentEdit(r.id)}
+                      className="flex items-center gap-2.5 p-2.5 rounded-lg border border-claude/20 bg-claude/[0.04] cursor-pointer hover:border-claude/35 hover:shadow-sm transition-all">
+                      <span className="text-[15px] leading-none shrink-0">🔄</span>
+                      <span className="text-[13px] flex-1">{r.title}</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/10 text-claude">Recurrente</span>
+                      {due && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium"
+                        style={{ background: due.urgent ? 'rgba(220,38,38,0.07)' : 'var(--color-bg4)', color: due.urgent ? '#dc2626' : '#6b6860' }}>{due.text}</span>}
+                      {it.date === new Date().toISOString().slice(0, 10) && (
+                        <button onClick={e => { e.stopPropagation(); markRecurrentExecuted(r.id) }}
+                          className="text-[10px] text-success bg-success/10 border border-success/25 px-2 py-0.5 rounded cursor-pointer hover:bg-success hover:text-white transition-colors">
+                          ✓ Hecha
+                        </button>
                       )}
                     </div>
                   )
                 })}
               </div>
             ) : (
-              <div className="text-xs text-gray-400">Sin tareas vinculadas. Usá "+ Nueva tarea".</div>
+              <div className="text-xs text-gray-400">Sin tareas, recordatorios ni recurrentes. Usá "+ Agregar".</div>
             )}
           </div>
         </div>

@@ -51,9 +51,9 @@ function normTipo(t: string): TipoTarea {
 }
 
 // Cuando se guarda una tarea de influencer con profile_request_date, se crea
-// automáticamente un recordatorio hijo (tipo 'seguimiento_correo') para a las
-// 9:00 de ese día acordarse de pedir el perfil a la agencia. SeguimientoView
-// detecta el prefijo del correo_contexto para ofrecer "Redactar solicitud con Claude".
+// automáticamente un recordatorio hijo (tipo 'enviar_correo') para a las 9:00
+// de ese día acordarse de pedir el perfil a la agencia. SeguimientoView detecta
+// el prefijo del correo_contexto para ofrecer el system prompt específico.
 async function createProfileRequestReminder(opts: {
   parentTaskId: number
   taskTitle: string
@@ -76,7 +76,7 @@ async function createProfileRequestReminder(opts: {
     status: 'Recordatorio',
     es_recordatorio: true,
     recordatorio_at: new Date(`${opts.profileRequestDate}T09:00:00`).toISOString(),
-    tipo_recordatorio: 'seguimiento_correo',
+    tipo_recordatorio: 'enviar_correo',
     correo_contexto: `Solicitar perfil de influencer para ${opts.taskTitle} a ${agencia}`,
     done: false,
     cats: [], plan: [], meeting_agenda: [],
@@ -371,12 +371,13 @@ async function extractFromImages(images: { media_type: string; data: string }[],
   return parseSuggested(await callProxy(content))
 }
 
-export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId, template }: {
+export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId, preselectReminder, template }: {
   onClose: () => void
   preselectContext?: string
   preselectClientId?: number | null
   preselectProjectId?: number | null
   preselectParentId?: number | null
+  preselectReminder?: boolean
   template?: { title?: string; context?: string; priority?: string; origin?: string; notes?: string | null; estimated_hours?: number | null; task_type?: string }
 }) {
   const loadAll = useStore(s => s.loadAll)
@@ -409,7 +410,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [infAgency, setInfAgency] = useState('')
   const [contentFormat, setContentFormat] = useState('')
   const [estHours, setEstHours] = useState<number | null>(template?.estimated_hours ?? null)
-  const [isReminder, setIsReminder] = useState(false)
+  const [isReminder, setIsReminder] = useState(!!preselectReminder)
   const [reminderAt, setReminderAt] = useState('')
   const [reminderType, setReminderType] = useState('general')
   const [correoCtx, setCorreoCtx] = useState('')
@@ -461,7 +462,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       priority,
       origin,
       client_id: context === 'agencia' ? clientId : null,
-      project_id: emailReply ? null : resolvedProjectId,
+      // Para recordatorios: si vienen preseleccionados a un proyecto (creados desde
+      // la vista del proyecto), respetar ese vínculo.
+      project_id: emailReply ? null : (reminder ? (preselectProjectId ?? null) : resolvedProjectId),
       parent_task_id: emailReply ? null : (reminder ? (parentId ?? null) : (tipo === 'subtarea' ? parentId : null)),
       task_type: emailReply ? 'responder_email' : (isContent ? 'contenido' : 'independiente'),
       due_date: reminder ? null : (dueDate || null),
@@ -482,7 +485,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       es_recordatorio: reminder,
       recordatorio_at: reminder ? new Date(reminderAt).toISOString() : null,
       tipo_recordatorio: reminder ? reminderType : null,
-      correo_contexto: (reminder && reminderType === 'seguimiento_correo') ? (correoCtx.trim() || null) : null,
+      // correo_contexto se usa como "Asunto del correo" para responder_correo y
+      // como "A quién / contexto" para enviar_correo.
+      correo_contexto: (reminder && (reminderType === 'responder_correo' || reminderType === 'enviar_correo')) ? (correoCtx.trim() || null) : null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     }).select('id').single()
@@ -929,8 +934,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                     <label className={labelCls}>Tipo de recordatorio</label>
                     <div className="grid grid-cols-2 gap-2">
                       {([
-                        { v: 'general', l: 'Recordatorio general' },
-                        { v: 'seguimiento_correo', l: '📧 Seguimiento de correo' },
+                        { v: 'general', l: '🔔 General' },
+                        { v: 'seguimiento', l: '👀 Seguimiento' },
+                        { v: 'responder_correo', l: '📧 Responder correo' },
+                        { v: 'enviar_correo', l: '📨 Enviar correo' },
                       ] as { v: string; l: string }[]).map(o => (
                         <button key={o.v} type="button" onClick={() => setReminderType(o.v)}
                           className={`py-2 px-1 border rounded-lg text-[11px] text-center cursor-pointer transition-all ${
@@ -941,10 +948,16 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                       ))}
                     </div>
                   </div>
-                  {reminderType === 'seguimiento_correo' && (
+                  {reminderType === 'responder_correo' && (
                     <div>
                       <label className={labelCls}>Asunto o contexto del correo</label>
                       <textarea value={correoCtx} onChange={e => setCorreoCtx(e.target.value)} rows={2} className={fieldCls + ' resize-y'} placeholder="Pegá el asunto o un fragmento del correo…" />
+                    </div>
+                  )}
+                  {reminderType === 'enviar_correo' && (
+                    <div>
+                      <label className={labelCls}>A quién / contexto</label>
+                      <textarea value={correoCtx} onChange={e => setCorreoCtx(e.target.value)} rows={2} className={fieldCls + ' resize-y'} placeholder="A quién va dirigido y qué hay que pedirle…" />
                     </div>
                   )}
                   <div>

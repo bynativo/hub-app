@@ -247,6 +247,7 @@ export interface Recurrente {
   title: string
   context: string
   client_id: number | null
+  project_id: number | null
   cats: string[]
   assign: string | null
   freq: string

@@ -5,10 +5,11 @@ import type { Recurrente } from '../../lib/types'
 
 const DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
 
-export function RecurrenteModal({ onClose, preselectContext, preselectClientId, recurrente }: {
+export function RecurrenteModal({ onClose, preselectContext, preselectClientId, preselectProjectId, recurrente }: {
   onClose: () => void
   preselectContext?: string
   preselectClientId?: number | null
+  preselectProjectId?: number | null
   recurrente?: Recurrente
 }) {
   const isEdit = !!recurrente
@@ -17,6 +18,9 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
   const [title, setTitle] = useState(recurrente?.title ?? '')
   const [context, setContext] = useState(recurrente?.context ?? preselectContext ?? 'banco')
   const [clientId, setClientId] = useState<number | null>(recurrente?.client_id ?? preselectClientId ?? null)
+  // project_id no es editable en este modal; viene preseleccionado (al crear desde la
+  // vista del proyecto) o se conserva al editar.
+  const projectId = recurrente?.project_id ?? preselectProjectId ?? null
   const agClients = clients.filter(c => c.context === 'agencia')
   const [freq, setFreq] = useState(recurrente?.freq ?? 'mensual')
   // El día de la semana (semanal) se guarda en day_of_month, igual que en la vista.
@@ -34,6 +38,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
       title: title.trim(),
       context,
       client_id: context === 'agencia' ? clientId : null,
+      project_id: projectId,
       freq,
       day_of_month: freq === 'semanal' ? weekday : dayOfMonth,
       description: notes.trim() || null,

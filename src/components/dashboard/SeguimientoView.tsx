@@ -41,10 +41,14 @@ function FollowupCard({ task }: { task: Task }) {
   const [drafting, setDrafting] = useState(false)
 
   const isRem = task.es_recordatorio
-  const isMailReminder = isRem && task.tipo_recordatorio === 'seguimiento_correo'
+  const remType = task.tipo_recordatorio || 'general'
+  const isResponder = isRem && remType === 'responder_correo'
+  const isEnviar = isRem && remType === 'enviar_correo'
+  const isMailReminder = isResponder || isEnviar
+  const isSeguimientoRem = isRem && remType === 'seguimiento'
   // Recordatorio "Solicitar perfil del influencer" creado al guardar la tarea de influencer.
   // Se detecta por el prefijo del correo_contexto que pone createProfileRequestReminder.
-  const isProfileRequest = isMailReminder && (task.correo_contexto || '').startsWith('Solicitar perfil de influencer')
+  const isProfileRequest = isEnviar && (task.correo_contexto || '').startsWith('Solicitar perfil de influencer')
   const parent = isProfileRequest && task.parent_task_id
     ? allTasks.find(t => t.id === task.parent_task_id)
     : null
@@ -73,9 +77,12 @@ function FollowupCard({ task }: { task: Task }) {
         const grab = parent.recording_date || 'fecha por confirmar'
         prompt = `Redacta el email de solicitud del perfil del influencer ${target} para la campaña "${parent.title}". La grabación está estimada para ${grab}. Cliente: ${parent.clients?.name || 'interno'}. Tono profesional pero cercano. Devolvé asunto + cuerpo.`
         system = 'Redacta un email profesional en español para solicitar la confirmación del perfil de influencer [nombre/handle] para la campaña [título de tarea]. La grabación está estimada para [recording_date]. Incluir solicitud de confirmación de disponibilidad, tarifas si aplica, y brief de la campaña. Tono profesional pero cercano.'
-      } else if (isMailReminder) {
+      } else if (isResponder) {
         prompt = `Redactá una respuesta breve y profesional a este correo, en español, tono humano (que no se note IA). Asunto/contexto del correo:\n${task.correo_contexto || task.title}\nDevolvé solo el cuerpo de la respuesta.`
         system = 'Redactás respuestas de correo humanas y profesionales, en español.'
+      } else if (isEnviar) {
+        prompt = `Redactá un email profesional y conciso en español, tono humano. Contexto / a quién va dirigido:\n${task.correo_contexto || task.title}\nTarea madre: ${task.title}\nDevolvé asunto + cuerpo.`
+        system = 'Redactás emails profesionales en español, humanos y al grano. Devolvés asunto y cuerpo.'
       } else {
         prompt = `Redacta un mensaje breve y profesional de seguimiento para esta tarea que está en "${task.status}" (esperando respuesta).\nTarea: ${task.title}\nCliente: ${task.clients?.name || 'interno'}\nContexto: ${ctxLabel(task.context)}\nTono humano y directo, en español. Solo el mensaje.`
         system = 'Eres el asistente de Felipe. Redactas mensajes de seguimiento humanos y concisos.'
@@ -103,7 +110,7 @@ function FollowupCard({ task }: { task: Task }) {
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-medium leading-snug cursor-pointer hover:text-claude" onClick={() => openDetail(task.id)}>
             {due && <span className="text-claude mr-1 animate-pulse">●</span>}
-            {isRem && <span className="mr-1">{isProfileRequest ? '🤝' : isMailReminder ? '📧' : '🔔'}</span>}
+            {isRem && <span className="mr-1">{isProfileRequest ? '🤝' : isResponder ? '📧' : isEnviar ? '📨' : isSeguimientoRem ? '👀' : '🔔'}</span>}
             {task.title}
           </div>
           {isMailReminder && task.correo_contexto && (
@@ -139,20 +146,44 @@ function FollowupCard({ task }: { task: Task }) {
       </div>
 
       <div className="flex gap-2 mt-3 flex-wrap">
-        {isMailReminder ? (
+        {isResponder ? (
           <>
             <button onClick={redactar} disabled={drafting}
               className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
-              {drafting ? 'Redactando…' : isProfileRequest ? '✦ Redactar solicitud con Claude' : '✦ Redactar respuesta con Claude'}
+              {drafting ? 'Redactando…' : '✦ Redactar respuesta con Claude'}
             </button>
             <button onClick={() => toggleTask(task.id)}
               className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
-              {isProfileRequest ? '✓ Solicitud enviada — cerrar' : '✓ Ya respondí — cerrar'}
+              ✓ Ya respondí — cerrar
             </button>
             <button onClick={() => openFollowup(task.id)}
-              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">
-              ↻ Posponer
+              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">↻ Posponer</button>
+          </>
+        ) : isEnviar ? (
+          <>
+            <button onClick={redactar} disabled={drafting}
+              className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
+              {drafting ? 'Redactando…' : isProfileRequest ? '✦ Redactar solicitud con Claude' : '✦ Redactar email con Claude'}
             </button>
+            <button onClick={() => toggleTask(task.id)}
+              className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
+              {isProfileRequest ? '✓ Solicitud enviada — cerrar' : '✓ Enviado — cerrar'}
+            </button>
+            <button onClick={() => openFollowup(task.id)}
+              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">↻ Posponer</button>
+          </>
+        ) : isSeguimientoRem ? (
+          <>
+            <button onClick={redactar} disabled={drafting}
+              className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 transition-colors disabled:opacity-40">
+              {drafting ? 'Redactando…' : '✦ Redactar seguimiento con Claude'}
+            </button>
+            <button onClick={() => toggleTask(task.id)}
+              className="text-[11px] text-success bg-success/7 border border-success/25 px-2.5 py-1 rounded-md cursor-pointer hover:bg-success/15 transition-colors">
+              ✓ Marcar respondido
+            </button>
+            <button onClick={() => openFollowup(task.id)}
+              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">↻ Posponer</button>
           </>
         ) : isRem ? (
           <>
@@ -161,9 +192,7 @@ function FollowupCard({ task }: { task: Task }) {
               ✓ Listo
             </button>
             <button onClick={() => openFollowup(task.id)}
-              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">
-              ↻ Posponer
-            </button>
+              className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-2.5 py-1 rounded-md cursor-pointer hover:bg-bg4 transition-colors">↻ Posponer</button>
           </>
         ) : isContentDue ? (
           <>
