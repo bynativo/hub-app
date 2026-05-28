@@ -291,6 +291,17 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
       <div className="overflow-y-auto grid grid-cols-[1fr_300px]">
         {/* Slide document */}
         <div className="p-6 border-r border-black/7">
+          {pres.external_url && (
+            <div className="mb-4 bg-bg2 border border-black/7 rounded-xl overflow-hidden max-w-[700px] mx-auto">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-black/7">
+                <span className="text-[10px] font-mono text-gray-400 uppercase tracking-wider">📄 Archivo importado</span>
+                <a href={pres.external_url} target="_blank" rel="noreferrer" className="text-[11px] text-claude hover:underline">Abrir ↗</a>
+              </div>
+              <iframe
+                src={/\.pdf(\?|$)/i.test(pres.external_url) ? pres.external_url : `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pres.external_url)}`}
+                className="w-full h-[460px] bg-bg3" title="Archivo importado" />
+            </div>
+          )}
           {loading ? (
             <div className="text-center py-12 text-gray-400">Cargando...</div>
           ) : !slide ? (

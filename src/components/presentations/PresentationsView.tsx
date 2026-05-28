@@ -5,6 +5,11 @@ import { ctxLabel } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import type { Presentation } from '../../lib/types'
 
+function slugify(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) + '-' + Math.random().toString(36).slice(2, 6)
+}
+
 export function PresentationsView({ context, onOpen }: { context?: string; onOpen: (id: number) => void }) {
   const presentations = useStore(s => s.presentations)
   const clients = useStore(s => s.clients)
@@ -21,6 +26,31 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
     await supabase.from('presentations').update({ title: renaming.title.trim() }).eq('id', renaming.id)
     await loadAll(); setBusy(false); setRenaming(null)
   }
+  async function importFile(files: FileList | null) {
+    const f = files?.[0]
+    if (!f) return
+    setBusy(true)
+    const path = `pres/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`
+    const up = await supabase.storage.from('capturas').upload(path, f, { contentType: f.type || undefined })
+    if (up.error) { alert('Error subiendo: ' + up.error.message); setBusy(false); return }
+    const { data: pub } = supabase.storage.from('capturas').getPublicUrl(path)
+    const baseName = f.name.replace(/\.(pdf|pptx?|key)$/i, '')
+    const ctx = context === 'agencia' ? 'agencia' : (context || 'banco')
+    const { data, error } = await supabase.from('presentations').insert({
+      slug: slugify(baseName), title: baseName, context: ctx,
+      tipo: 'General (link externo)', external_url: pub.publicUrl, share_enabled: false,
+    }).select().single()
+    if (error || !data) { alert('Error: ' + error?.message); setBusy(false); return }
+    await loadAll(); setBusy(false); onOpen(data.id)
+  }
+
+  const importBtn = (
+    <label className="text-xs bg-bg3 border border-black/7 text-gray-600 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
+      {busy ? 'Importando…' : '+ Importar PDF o PPT'}
+      <input type="file" accept=".pdf,.ppt,.pptx,.key" className="hidden" disabled={busy} onChange={e => { importFile(e.target.files); e.target.value = '' }} />
+    </label>
+  )
+
   async function deletePres() {
     if (!deleting) return
     setBusy(true)
@@ -123,10 +153,13 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
             <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: accent }}>Presentaciones · Agencia</h1>
             <p className="text-gray-500 text-[13px]">{list.length} presentaciones · carpetas por cliente</p>
           </div>
-          <button onClick={() => setNewOpen({ context: 'agencia', clientId: null })}
-            className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
-            + Nueva presentación
-          </button>
+          <div className="flex gap-2">
+            {importBtn}
+            <button onClick={() => setNewOpen({ context: 'agencia', clientId: null })}
+              className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
+              + Nueva presentación
+            </button>
+          </div>
         </div>
 
         {folders.map(f => (
@@ -160,10 +193,13 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
           </h1>
           <p className="text-gray-500 text-[13px]">{list.length} decks de contenido</p>
         </div>
-        <button onClick={() => setNewOpen({ context: newBtnCtx, clientId: null })}
-          className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
-          + Nueva presentación
-        </button>
+        <div className="flex gap-2">
+          {importBtn}
+          <button onClick={() => setNewOpen({ context: newBtnCtx, clientId: null })}
+            className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
+            + Nueva presentación
+          </button>
+        </div>
       </div>
 
       {list.length
