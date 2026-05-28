@@ -130,7 +130,7 @@ export const PUB_TYPES: { v: string; label: string }[] = [
   // Solo van al calendario de Influencers
   { v: 'tiktok_influencer', label: 'TikTok desde su cuenta' },
   { v: 'reel_influencer', label: 'Reel desde su cuenta' },
-  { v: 'stories_influencer', label: 'Stories de Instagram' },
+  { v: 'stories_influencer', label: 'Story de Instagram' },
 ]
 
 // Conjunto de tipos que SÍ aparecen en la grilla (calendario RRSS). Usado por vaAGrilla.

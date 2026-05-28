@@ -96,6 +96,9 @@ export interface Task {
   influencer_name: string | null
   influencer_handle: string | null
   influencer_agency: string | null
+  // Para perfiles de "Solicitar influencers": array de tipos con cantidad.
+  // Reemplaza al tipo_publicacion scalar (que queda como fallback/compat).
+  influencer_tipos: { tipo: string; cantidad: number }[] | null
   // Columnas canónicas para el módulo influencers (las anteriores quedan como legacy):
   es_influencer: boolean | null
   influencer_nombre: string | null

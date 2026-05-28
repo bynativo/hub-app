@@ -222,6 +222,25 @@ export function vaAGrilla(pt: string | null): boolean {
   return enGrilla.has(pt)
 }
 
+// Etiqueta corta para títulos de subtareas de contenido y badges resumen
+// ("Story IG", "Reel", "Colab"…). Para los 7 valores nuevos + 3 legados.
+export function tipoShortLabel(tipo: string): string {
+  switch (tipo) {
+    case 'colab': return 'Colab'
+    case 'tiktok_colab': return 'TikTok colab'
+    case 'reel_colab': return 'Reel colab'
+    case 'solo_contenido': return 'Contenido'
+    case 'tiktok_influencer': return 'TikTok'
+    case 'reel_influencer': return 'Reel'
+    case 'stories_influencer': return 'Story IG'
+    // legados
+    case 'colab_ig': return 'Colab'
+    case 'tiktok_propia': return 'Influencer'
+    case 'cuenta_influencer': return 'Influencer externo'
+    default: return tipo
+  }
+}
+
 // Contenido: la grabación debe ser al menos 24h antes de la entrega.
 // Devuelve la fecha máxima sugerida de grabación si NO se cumple; null si OK o faltan datos.
 export function recordingWarning(recording: string | null, due: string | null): string | null {

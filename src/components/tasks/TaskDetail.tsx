@@ -3,7 +3,8 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel } from '../../lib/helpers'
+import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import { TaskAttachments } from './TaskAttachments'
@@ -150,6 +151,7 @@ export function TaskDetail() {
   const [publishDate, setPublishDate] = useState('')
   const [recordingDate, setRecordingDate] = useState('')
   const [profileRequestDate, setProfileRequestDate] = useState('')
+  const [influencerTipos, setInfluencerTipos] = useState<TipoConCantidad[]>([])
   const [recordatorioAt, setRecordatorioAt] = useState('')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('propia')
@@ -194,6 +196,15 @@ export function TaskDetail() {
     if (!task) return
     setTab(task.task_type === 'responder_email' ? 'email' : 'info')
     setTitle(stripPrefix(task.title)); setPriority(task.priority); setDueDate(task.due_date || ''); setPublishDate(task.publish_date || ''); setRecordingDate(task.recording_date || ''); setProfileRequestDate(task.profile_request_date || '')
+    // Compat: si la fila vieja no tiene influencer_tipos pero sí tipo_publicacion,
+    // arrancamos con un único item de cantidad 1 (el usuario puede expandir desde ahí).
+    if (Array.isArray(task.influencer_tipos) && task.influencer_tipos.length) {
+      setInfluencerTipos(task.influencer_tipos as TipoConCantidad[])
+    } else if (task.tipo_publicacion && task.tipo_publicacion !== 'propia') {
+      setInfluencerTipos([{ tipo: task.tipo_publicacion, cantidad: 1 }])
+    } else {
+      setInfluencerTipos([])
+    }
     setIsInfluencer(!!task.es_influencer)
     setPubType(task.tipo_publicacion || task.content_pub_type || 'propia')
     setInfName(task.influencer_nombre || task.influencer_name || '')
@@ -247,13 +258,20 @@ export function TaskDetail() {
     // aunque isContent=false: son perfiles a confirmar y el selector vive en su
     // propio panel, no en el bloque "Es contenido".
     const saveInflFields = (isContent && isInfluencer) || isPerfil
+    // Para perfiles, tipo_publicacion deriva del primer tipo del array (fallback
+    // de compat para vistas que aún leen ese campo scalar). Si el array está
+    // vacío usamos pubType del state (default 'colab').
+    const derivedTipoPub = isPerfil
+      ? (influencerTipos[0]?.tipo || pubType || 'colab')
+      : pubType
     await updateTask(task.id, {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
       publish_date: isContent ? (publishDate || null) : null,
       recording_date: isContent ? (recordingDate || null) : null,
       profile_request_date: (isContent && isInfluencer) ? (profileRequestDate || null) : null,
       es_influencer: isContent ? isInfluencer : (isPerfil ? true : null),
-      tipo_publicacion: saveInflFields ? pubType : (isContent ? 'propia' : null),
+      tipo_publicacion: saveInflFields ? derivedTipoPub : (isContent ? 'propia' : null),
+      influencer_tipos: isPerfil ? (influencerTipos.length ? influencerTipos : null) : null,
       influencer_nombre: saveInflFields ? (infName.trim() || null) : null,
       influencer_handle: saveInflFields ? (infHandle.trim() || null) : null,
       influencer_agencia: saveInflFields ? (infAgency.trim() || null) : null,
@@ -265,42 +283,54 @@ export function TaskDetail() {
     setSavingInfo(false); setDirty(false)
   }
 
-  // Confirma un perfil: guarda los cambios actuales (nombre/handle/etc) y
-  // crea la subtarea de contenido vinculada a este perfil. Se llama desde el
-  // modal de confirmación cuando el usuario elige "Sí, crear contenido".
-  async function createContentForPerfil() {
+  // Confirma un perfil: crea UNA subtarea por cada unidad declarada en
+  // influencer_tipos (ej: [{story_ig, 2}, {reel_cuenta, 1}] → 3 subtareas).
+  // Cada subtarea queda task_type='contenido', es_influencer=true,
+  // tipo_publicacion específico, handle copiado del perfil, parent=este perfil.
+  // Etiqueta corta del perfil para los títulos: la primera parte del título del
+  // perfil ("Perfil 1 — Campaña" → "Perfil 1").
+  async function createContentTasksForPerfil() {
     if (!task) return
-    // Tarea solicitud (padre del perfil) — de ahí tomamos el nombre de la campaña.
+    if (!influencerTipos.length) return
     const solicitud = tasks.find(t => t.id === task.parent_task_id)
-    const campaign = solicitud ? stripPrefix(solicitud.title) : stripPrefix(task.title)
     const prefix = taskPrefix(task.context, clients.find(c => c.id === task.client_id) || null)
     const handle = (infHandle || '').trim()
-    const cleanTitle = handle ? `Contenido ${handle} — ${campaign}` : `Contenido — ${campaign}`
-    await supabase.from('tasks').insert({
-      title: buildTitle(prefix, cleanTitle),
-      context: task.context,
-      client_id: task.client_id,
-      project_id: task.project_id ?? solicitud?.project_id ?? null,
-      parent_task_id: task.id,
-      task_type: 'contenido',
-      priority: 'media',
-      origin: 'propia',
-      status: 'Inbox',
-      due_date: task.due_date,
-      recording_date: solicitud?.recording_date || null,
-      es_influencer: true,
-      tipo_publicacion: pubType,
-      influencer_nombre: (infName || '').trim() || null,
-      influencer_handle: handle || null,
-      influencer_agencia: (infAgency || '').trim() || null,
-      done: false,
-      cats: [], plan: [], meeting_agenda: [],
-    })
+    const nameOrHandle = (infName || '').trim()
+    const perfilLabel = stripPrefix(task.title).split(' — ')[0] || (handle ? handle : 'Perfil')
+    const rows: any[] = []
+    for (const item of influencerTipos) {
+      const short = tipoShortLabel(item.tipo)
+      for (let i = 1; i <= item.cantidad; i++) {
+        const idxLabel = item.cantidad > 1 ? ` ${i}` : ''
+        const cleanTitle = `${short}${idxLabel} — ${perfilLabel}`
+        rows.push({
+          title: buildTitle(prefix, cleanTitle),
+          context: task.context,
+          client_id: task.client_id,
+          project_id: task.project_id ?? solicitud?.project_id ?? null,
+          parent_task_id: task.id,
+          task_type: 'contenido',
+          priority: 'media',
+          origin: 'propia',
+          status: 'Inbox',
+          due_date: task.due_date,
+          recording_date: solicitud?.recording_date || null,
+          es_influencer: true,
+          tipo_publicacion: item.tipo,
+          influencer_nombre: nameOrHandle || null,
+          influencer_handle: handle || null,
+          influencer_agencia: (infAgency || '').trim() || null,
+          done: false,
+          cats: [], plan: [], meeting_agenda: [],
+        })
+      }
+    }
+    if (rows.length) await supabase.from('tasks').insert(rows)
   }
 
   async function confirmPerfilFlow(createContent: boolean) {
     if (dirty) await saveInfo()
-    if (createContent) await createContentForPerfil()
+    if (createContent) await createContentTasksForPerfil()
     setConfirmingPerfil(false)
     await loadAll()
   }
@@ -635,17 +665,9 @@ Reglas del bloque:
 
             {isPerfil && (
               <div className="border border-claude/20 bg-claude/5 rounded-lg p-3 flex flex-col gap-2.5">
-                <div className="text-[11px] font-mono text-claude tracking-wider uppercase">👤 Perfil de influencer</div>
-                <div>
-                  <label className={labelCls}>Tipo de contenido</label>
-                  <select value={pubType} onChange={e => setInfo(setPubType, e.target.value)} className={fieldCls}>
-                    {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
-                  </select>
-                  <div className="text-[10px] text-gray-400 mt-1">
-                    {vaAGrilla(pubType)
-                      ? 'Va a grilla RRSS + calendario de Influencers.'
-                      : 'Solo va al calendario de Influencers (no aparece en la grilla).'}
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-mono text-claude tracking-wider uppercase">👤 Perfil de influencer</div>
+                  <TiposSummary value={influencerTipos} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className={labelCls}>Nombre del influencer</label>
@@ -655,6 +677,18 @@ Reglas del bloque:
                 </div>
                 <div><label className={labelCls}>Agencia que lo gestiona</label>
                   <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
+                <div>
+                  <label className={labelCls}>Tipos de contenido</label>
+                  <div className="bg-bg2 border border-black/7 rounded-md p-2.5">
+                    <TiposChecklist
+                      value={influencerTipos}
+                      onChange={next => setInfo(setInfluencerTipos, next)}
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    Al confirmar el perfil se ofrece crear <b>una subtarea por unidad</b> de cada tipo (ej: 2 Stories + 1 Reel = 3 subtareas).
+                  </div>
+                </div>
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <span className="text-[11px] text-gray-500">
                     {perfilConfirmable
@@ -1048,21 +1082,33 @@ Reglas del bloque:
           preselectContext={task.context} preselectClientId={task.client_id} preselectParentId={task.id} />
       )}
 
-      {confirmingPerfil && (
-        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmingPerfil(false) }}>
-          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[460px] max-w-[94vw] shadow-lg">
-            <div className="font-serif text-lg font-light mb-1">Confirmar perfil</div>
-            <p className="text-[13px] text-gray-500 mb-4">
-              Vas a confirmar al influencer <span className="font-medium text-gray-700">{(infName || '').trim() || (infHandle || '').trim()}</span>.
-              ¿Crear también la subtarea de contenido para este perfil ahora? Se crea con el tipo <span className="font-mono text-claude">{PUB_TYPES.find(o => o.v === pubType)?.label || pubType}</span> y el handle pre-rellenado.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => confirmPerfilFlow(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Solo confirmar, sin contenido</button>
-              <button onClick={() => confirmPerfilFlow(true)} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer">Sí, crear contenido</button>
+      {confirmingPerfil && (() => {
+        const total = influencerTipos.reduce((s, it) => s + it.cantidad, 0)
+        return (
+          <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmingPerfil(false) }}>
+            <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[480px] max-w-[94vw] shadow-lg">
+              <div className="font-serif text-lg font-light mb-1">Confirmar perfil</div>
+              <p className="text-[13px] text-gray-500 mb-3">
+                Vas a confirmar al influencer <span className="font-medium text-gray-700">{(infName || '').trim() || (infHandle || '').trim()}</span>.
+                {total > 0
+                  ? <> ¿Crear también las <b>{total} subtarea{total === 1 ? '' : 's'}</b> de contenido para este perfil ahora?</>
+                  : <> No tenés tipos de contenido marcados — solo se confirma el perfil.</>}
+              </p>
+              {total > 0 && (
+                <div className="mb-4 bg-bg3 border border-black/7 rounded-md p-2.5">
+                  <TiposSummary value={influencerTipos} />
+                </div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => confirmPerfilFlow(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Solo confirmar, sin contenido</button>
+                <button onClick={() => confirmPerfilFlow(true)} disabled={total === 0} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                  Sí, crear {total > 0 ? `${total} subtarea${total === 1 ? '' : 's'}` : 'contenido'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {confirmDel && (
         <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmDel(false) }}>

@@ -5,6 +5,7 @@ import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { QuickProjectModal } from './QuickProjectModal'
 import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
+import { TiposChecklist, type TipoConCantidad } from '../tasks/TiposChecklist'
 import { PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
@@ -51,37 +52,42 @@ function normTipo(t: string): TipoTarea {
 }
 
 // Crea las N subtareas "Perfil 1..N — {título}" para una solicitud de influencers.
-// Cada perfil queda en task_type='influencer' con tipo_publicacion ya elegido por
-// el usuario en el form, pero nombre/handle/agencia vacíos — se completan a
-// medida que la agencia confirma cada perfil.
+// Cada perfil queda en task_type='influencer' con influencer_tipos preseleccionados
+// (array de {tipo, cantidad}) pero nombre/handle/agencia vacíos — se completan a
+// medida que la agencia confirma cada perfil. tipo_publicacion queda como el
+// primer tipo (fallback de compat) o 'colab' si el array está vacío.
 async function createPerfilSubtasks(opts: {
   parentTaskId: number
   parentTitle: string
   num: number
-  tipos: string[]
+  tipos: { tipo: string; cantidad: number }[][]
   context: string
   clientId: number | null
   projectId: number | null
   dueDate: string | null
 }) {
   if (opts.num < 1) return
-  const rows = Array.from({ length: opts.num }, (_, i) => ({
-    title: `Perfil ${i + 1} — ${opts.parentTitle}`,
-    context: opts.context,
-    client_id: opts.context === 'agencia' ? opts.clientId : null,
-    project_id: opts.projectId,
-    parent_task_id: opts.parentTaskId,
-    task_type: 'influencer',
-    priority: 'media',
-    origin: 'propia',
-    status: 'Inbox',
-    due_date: opts.dueDate,
-    requested_at: todayISO(),
-    es_influencer: true,
-    tipo_publicacion: opts.tipos[i] || 'colab',
-    done: false,
-    cats: [], plan: [], meeting_agenda: [],
-  }))
+  const rows = Array.from({ length: opts.num }, (_, i) => {
+    const tiposPerfil = opts.tipos[i] || []
+    return {
+      title: `Perfil ${i + 1} — ${opts.parentTitle}`,
+      context: opts.context,
+      client_id: opts.context === 'agencia' ? opts.clientId : null,
+      project_id: opts.projectId,
+      parent_task_id: opts.parentTaskId,
+      task_type: 'influencer',
+      priority: 'media',
+      origin: 'propia',
+      status: 'Inbox',
+      due_date: opts.dueDate,
+      requested_at: todayISO(),
+      es_influencer: true,
+      influencer_tipos: tiposPerfil.length ? tiposPerfil : null,
+      tipo_publicacion: tiposPerfil[0]?.tipo || 'colab',
+      done: false,
+      cats: [], plan: [], meeting_agenda: [],
+    }
+  })
   await supabase.from('tasks').insert(rows)
 }
 
@@ -433,8 +439,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [recordingDate, setRecordingDate] = useState('')
   const [briefDate, setBriefDate] = useState('')
   const [numPerfiles, setNumPerfiles] = useState<number>(1)
-  // Tipo de contenido por perfil — array sincronizado con numPerfiles. Default 'colab'.
-  const [perfilesTipos, setPerfilesTipos] = useState<string[]>(['colab'])
+  // Tipos de contenido por perfil — un array de {tipo, cantidad} por perfil.
+  // Default por perfil: 1 unidad de 'colab'. Se sincroniza con numPerfiles.
+  const [perfilesTipos, setPerfilesTipos] = useState<TipoConCantidad[][]>([[{ tipo: 'colab', cantidad: 1 }]])
   const [isContent, setIsContent] = useState(template?.task_type === 'contenido')
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('colab')
@@ -1151,33 +1158,31 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                         setNumPerfiles(n)
                         setPerfilesTipos(prev => {
                           if (n <= prev.length) return prev.slice(0, n)
-                          return [...prev, ...Array(n - prev.length).fill('colab')]
+                          const extra = Array.from({ length: n - prev.length }, () => [{ tipo: 'colab', cantidad: 1 }] as TipoConCantidad[])
+                          return [...prev, ...extra]
                         })
                       }}
                       className={fieldCls} />
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className={labelCls}>Tipo de contenido por perfil</label>
+                  <div className="flex flex-col gap-3">
+                    <label className={labelCls}>Tipos de contenido por perfil</label>
                     {Array.from({ length: numPerfiles }).map((_, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-gray-400 w-14 shrink-0">Perfil {i + 1}</span>
-                        <select
-                          value={perfilesTipos[i] || 'colab'}
-                          onChange={e => setPerfilesTipos(prev => {
-                            const next = [...prev]
-                            while (next.length < numPerfiles) next.push('colab')
-                            next[i] = e.target.value
-                            return next
+                      <div key={i} className="border border-black/7 bg-bg2 rounded-md p-2.5">
+                        <div className="text-[11px] font-mono text-claude tracking-wider uppercase mb-1.5">Perfil {i + 1}</div>
+                        <TiposChecklist
+                          value={perfilesTipos[i] || []}
+                          onChange={next => setPerfilesTipos(prev => {
+                            const arr = [...prev]
+                            while (arr.length < numPerfiles) arr.push([])
+                            arr[i] = next
+                            return arr
                           })}
-                          className={fieldCls + ' flex-1'}
-                        >
-                          {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
-                        </select>
+                        />
                       </div>
                     ))}
                   </div>
                   <div className="text-[10px] text-gray-400 leading-snug">
-                    Al guardar: se crea un recordatorio 🔔 a las 9:00 del día del envío del brief y {numPerfiles} subtarea{numPerfiles === 1 ? '' : 's'} "Perfil X" pendientes de confirmar (cada una con su tipo). Después, al confirmar cada perfil podés crear la subtarea de contenido correspondiente.
+                    Al guardar: se crea un recordatorio 🔔 a las 9:00 del día del envío del brief y {numPerfiles} subtarea{numPerfiles === 1 ? '' : 's'} "Perfil X" pendientes de confirmar. Después, al confirmar cada perfil podés crear automáticamente <b>una subtarea por unidad</b> de cada tipo elegido (ej: 2 Stories + 1 Reel = 3 subtareas).
                   </div>
                 </div>
               )}
