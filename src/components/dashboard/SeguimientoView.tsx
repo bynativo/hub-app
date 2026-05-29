@@ -4,7 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
 import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange, nextMonthRange } from '../../lib/helpers'
-import { TypeFilterPills, matchesTypeFilter, type TypeFilter } from '../tasks/TypeFilterPills'
+import { FilterPills, SEGUIMIENTO_PILLS, CONTEXT_PILLS, matchesSeguimientoType, matchesContext, loadFilters, saveFilters, type SeguimientoType, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 // Contenido cuyo día de entrega es hoy (y aún no entregado/cerrado)
@@ -324,18 +324,21 @@ export function SeguimientoView() {
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
   const [mode, setMode] = useState<ViewMode>(loadMode)
-  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
+  const [typeFilters, setTypeFilters] = useState<Set<SeguimientoType>>(() => loadFilters<SeguimientoType>('seguimiento_type_filters'))
+  const [ctxFilters, setCtxFilters] = useState<Set<ContextFilter>>(() => loadFilters<ContextFilter>('seguimiento_context_filters'))
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
+  useEffect(() => { saveFilters('seguimiento_type_filters', typeFilters) }, [typeFilters])
+  useEffect(() => { saveFilters('seguimiento_context_filters', ctxFilters) }, [ctxFilters])
 
   // Filtro: tareas top-level en Esperando + TODOS los recordatorios activos
   // (incluso los anidados — esta es la vista de seguimiento, no se duplican
   // porque acá viven con su propio rendering y en otras vistas viven nested).
   // El contenido due-today va a "Mis tareas", no acá.
-  // Aplica también el filtro de tipo (pills) por encima.
+  // Aplica también filtros de tipo (👀/🔔/📧/📨) y contexto.
   const waiting = tasks.filter(t => !t.done && !t.archived_at && (
     t.es_recordatorio || (!t.parent_task_id && !!t.followup_at) || (!t.parent_task_id && WAITING_STATES.includes(t.status))
-  ) && matchesTypeFilter(t, typeFilters))
+  ) && matchesSeguimientoType(t, typeFilters) && matchesContext(t, ctxFilters))
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
@@ -431,24 +434,28 @@ export function SeguimientoView() {
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
       <p className="text-gray-500 text-[13px] mb-5">Tareas en seguimiento + recordatorios activos · {waiting.length}</p>
 
-      {/* Toggle 3 modos + filtros de tipo (sin recurrentes — esta vista no
-          muestra recurrentes). Filtros locales, se resetean al salir. */}
-      <div className="flex items-start gap-3 mb-4 flex-wrap">
-        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
-          {([
-            { v: 'fecha', l: 'Por fecha' },
-            { v: 'estado', l: 'Por estado' },
-            { v: 'kanban', l: 'Kanban' },
-          ] as { v: ViewMode; l: string }[]).map(o => (
-            <button key={o.v} onClick={() => setMode(o.v)}
-              className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
-                mode === o.v ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
-              }`}>
-              {o.l}
-            </button>
-          ))}
+      {/* Toggle 3 modos + filtros de tipo (Seguimiento/General/Responder/Enviar)
+          + filtros de contexto. Cada filtro persiste con su propia clave en
+          localStorage. */}
+      <div className="flex flex-col gap-2 mb-4">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
+            {([
+              { v: 'fecha', l: 'Por fecha' },
+              { v: 'estado', l: 'Por estado' },
+              { v: 'kanban', l: 'Kanban' },
+            ] as { v: ViewMode; l: string }[]).map(o => (
+              <button key={o.v} onClick={() => setMode(o.v)}
+                className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
+                  mode === o.v ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
+                }`}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+          <FilterPills value={typeFilters} onChange={setTypeFilters} pills={SEGUIMIENTO_PILLS} allLabel="Todos" />
         </div>
-        <TypeFilterPills value={typeFilters} onChange={setTypeFilters} hideRecurrentes />
+        <FilterPills value={ctxFilters} onChange={setCtxFilters} pills={CONTEXT_PILLS} allLabel="Todos" />
       </div>
 
       {!waiting.length ? (

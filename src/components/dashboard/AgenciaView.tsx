@@ -4,7 +4,7 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import { ctxColor, todayISO, clientBadge, nextRecurringDueDate } from '../../lib/helpers'
-import { TypeFilterPills, matchesTypeFilter, includesRecurrentes, type TypeFilter } from '../tasks/TypeFilterPills'
+import { FilterPills, GENERAL_PILLS, matchesGeneralType, generalIncludesRecurrentes, loadFilters, saveFilters, type GeneralType } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 type AgenciaMode = 'list' | 'porcliente' | 'kanban'
@@ -43,14 +43,16 @@ export function AgenciaView() {
   const [kanbanClient, setKanbanClient] = useState<KanbanClientFilter>('all')
   // Estado de colapso por cliente en modo "Por cliente" (transient).
   const [collapsedClients, setCollapsedClients] = useState<Record<string, boolean>>({})
-  // Filtros de tipo (pills) — combinable con el filtro de cliente del Kanban.
-  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
+  // Filtros de tipo (pills) — persiste en localStorage (clave propia).
+  // Combinable con el filtro de cliente del Kanban.
+  const [typeFilters, setTypeFilters] = useState<Set<GeneralType>>(() => loadFilters<GeneralType>('agencia_type_filters'))
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
+  useEffect(() => { saveFilters('agencia_type_filters', typeFilters) }, [typeFilters])
 
-  const active = tasks.filter(t => !t.done && t.context === 'agencia' && !t.parent_task_id && !t.es_recordatorio && !t.archived_at && matchesTypeFilter(t, typeFilters))
+  const active = tasks.filter(t => !t.done && t.context === 'agencia' && !t.parent_task_id && !t.es_recordatorio && !t.archived_at && matchesGeneralType(t, typeFilters))
   const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
-  const showRecurrentes = includesRecurrentes(typeFilters)
+  const showRecurrentes = generalIncludesRecurrentes(typeFilters)
 
   // Atrasadas (común a Lista / Por cliente)
   const today = todayISO()
@@ -157,7 +159,7 @@ export function AgenciaView() {
 
         {/* Filtros de tipo (pills). Combinable con el filtro de cliente. */}
         <div className="basis-full">
-          <TypeFilterPills value={typeFilters} onChange={setTypeFilters} />
+          <FilterPills value={typeFilters} onChange={setTypeFilters} pills={GENERAL_PILLS} />
         </div>
       </div>
 

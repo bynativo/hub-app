@@ -5,7 +5,7 @@ import { KanbanBoard } from './KanbanBoard'
 import { ctxLabel, ctxColor, todayISO, nextRecurringDueDate } from '../../lib/helpers'
 import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
-import { TypeFilterPills, matchesTypeFilter, includesRecurrentes, type TypeFilter } from '../tasks/TypeFilterPills'
+import { FilterPills, GENERAL_PILLS, PERSONAL_PILLS, matchesGeneralType, matchesPersonalType, generalIncludesRecurrentes, personalIncludesRecurrentes, loadFilters, saveFilters, type GeneralType, type PersonalType } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 // Filtro local por cliente en la vista de tareas de agencia.
@@ -20,15 +20,30 @@ export function ContextView({ context }: { context: string }) {
   const recurrentes = useStore(s => s.recurrentes)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
   const [clientFilter, setClientFilter] = useState<ClientFilter>('all')
-  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
+  // Pills distintos según contexto. Personal no tiene Contenido ni Influencer.
+  const isPersonal = context === 'personal'
+  const filterStorageKey = `${context}_type_filters`
+  // Cada contexto tiene su propia clave en localStorage. El estado se carga
+  // bajo demanda y se reinicia al cambiar de contexto (useEffect abajo).
+  const [typeFiltersGeneral, setTypeFiltersGeneral] = useState<Set<GeneralType>>(() => loadFilters<GeneralType>(filterStorageKey))
+  const [typeFiltersPersonal, setTypeFiltersPersonal] = useState<Set<PersonalType>>(() => loadFilters<PersonalType>(filterStorageKey))
 
-  // Reset de filtros al cambiar de contexto (banco↔agencia↔personal sin desmontar).
-  // Cuando se sale a otra vista y se vuelve, ContextView se desmonta y el estado
-  // se reinicia naturalmente.
-  useEffect(() => { setClientFilter('all'); setTypeFilters(new Set()) }, [context])
+  // Reset al cambiar de contexto (banco↔personal sin desmontar). Releemos
+  // del localStorage del nuevo contexto.
+  useEffect(() => {
+    setClientFilter('all')
+    if (isPersonal) setTypeFiltersPersonal(loadFilters<PersonalType>(`${context}_type_filters`))
+    else setTypeFiltersGeneral(loadFilters<GeneralType>(`${context}_type_filters`))
+  }, [context, isPersonal])
 
-  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at && matchesTypeFilter(t, typeFilters))
-  const showRecurrentes = includesRecurrentes(typeFilters)
+  useEffect(() => {
+    if (isPersonal) saveFilters(filterStorageKey, typeFiltersPersonal)
+    else saveFilters(filterStorageKey, typeFiltersGeneral)
+  }, [typeFiltersGeneral, typeFiltersPersonal, filterStorageKey, isPersonal])
+
+  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at
+    && (isPersonal ? matchesPersonalType(t, typeFiltersPersonal) : matchesGeneralType(t, typeFiltersGeneral)))
+  const showRecurrentes = isPersonal ? personalIncludesRecurrentes(typeFiltersPersonal) : generalIncludesRecurrentes(typeFiltersGeneral)
 
   const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
   const selectedClient = typeof clientFilter === 'number' ? agClients.find(c => c.id === clientFilter) : null
@@ -156,9 +171,11 @@ export function ContextView({ context }: { context: string }) {
           </div>
         )}
 
-        {/* Filtros de tipo (pills). Combinable con el filtro de cliente. */}
+        {/* Filtros de tipo (pills). Personal usa un set reducido. */}
         <div className="basis-full">
-          <TypeFilterPills value={typeFilters} onChange={setTypeFilters} />
+          {isPersonal
+            ? <FilterPills value={typeFiltersPersonal} onChange={setTypeFiltersPersonal} pills={PERSONAL_PILLS} />
+            : <FilterPills value={typeFiltersGeneral} onChange={setTypeFiltersGeneral} pills={GENERAL_PILLS} />}
         </div>
       </div>
 

@@ -6,7 +6,7 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
-import { TypeFilterPills, matchesTypeFilter, includesRecurrentes, type TypeFilter } from '../tasks/TypeFilterPills'
+import { FilterPills, GENERAL_PILLS, CONTEXT_PILLS, matchesGeneralType, generalIncludesRecurrentes, matchesContext, loadFilters, saveFilters, type GeneralType, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task, Recurrente } from '../../lib/types'
 
 type ViewMode = 'fecha' | 'estado' | 'kanban'
@@ -64,20 +64,25 @@ export function Dashboard() {
   const [mode, setMode] = useState<ViewMode>(loadMode)
   const [sinFechaCollapsed, setSinFechaCollapsed] = useState(true)
   const [cerradoCollapsed, setCerradoCollapsed] = useState(true)
-  // Filtros de tipo (pills). Estado local → se resetea al salir de la vista.
-  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
+  // Filtros persistentes por vista (clave propia en localStorage).
+  const [typeFilters, setTypeFilters] = useState<Set<GeneralType>>(() => loadFilters<GeneralType>('mis_tareas_type_filters'))
+  const [ctxFilters, setCtxFilters] = useState<Set<ContextFilter>>(() => loadFilters<ContextFilter>('mis_tareas_context_filters'))
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
+  useEffect(() => { saveFilters('mis_tareas_type_filters', typeFilters) }, [typeFilters])
+  useEffect(() => { saveFilters('mis_tareas_context_filters', ctxFilters) }, [ctxFilters])
 
   // Set base de tareas activas (incluye subtareas con due_date propio para que no
   // queden invisibles; excluye recordatorios — esos viven anidados bajo su padre).
-  // Aplicamos el filtro de tipo encima.
-  const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio && matchesTypeFilter(t, typeFilters))
+  // Aplicamos los filtros de tipo + contexto encima.
+  const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio
+    && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
   // Base más amplia para los modos por estado / kanban: incluye también las
   // archivadas (status en CLOSING_STATES) para que aparezcan en la columna
   // "Cerrado". Sigue excluyendo done (checkbox) y recordatorios.
-  const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio && matchesTypeFilter(t, typeFilters))
-  const showRecurrentes = includesRecurrentes(typeFilters)
+  const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio
+    && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
+  const showRecurrentes = generalIncludesRecurrentes(typeFilters)
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
@@ -106,8 +111,13 @@ export function Dashboard() {
   const sinFecha = active.filter(t => !t.due_date)
 
   // Recurrentes próximas (solo la siguiente por definición).
-  // Recurrentes solo si el filtro las incluye (sin filtros = todas incluidas).
-  const recInstances = showRecurrentes ? recurrentes.map(r => ({ rec: r, date: nextRecurringDueDate(r) })) : []
+  // Recurrentes solo si el filtro de tipo las incluye, y filtradas por contexto
+  // si hay context filter activo.
+  const recInstances = showRecurrentes
+    ? recurrentes
+        .filter(r => !ctxFilters.size || ctxFilters.has(r.context as ContextFilter))
+        .map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
+    : []
   const recHoy = recInstances.filter(i => i.date === today)
   const recManana = recInstances.filter(i => i.date === tomorrow)
   const recProxSem = recInstances.filter(i => i.date >= dayAfterTomorrow && i.date <= nextSunday)
@@ -174,25 +184,27 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Toggle de 3 modos + filtros de tipo. El modo persiste en
-          localStorage (mis_tareas_view_mode); los filtros son locales y se
-          resetean al salir de la vista. */}
-      <div className="flex items-start gap-3 mb-4 flex-wrap">
-        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
-          {([
-            { v: 'fecha', l: 'Por fecha' },
-            { v: 'estado', l: 'Por estado' },
-            { v: 'kanban', l: 'Kanban' },
-          ] as { v: ViewMode; l: string }[]).map(o => (
-            <button key={o.v} onClick={() => setMode(o.v)}
-              className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
-                mode === o.v ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
-              }`}>
-              {o.l}
-            </button>
-          ))}
+      {/* Toggle de 3 modos + filtros de tipo + filtros de contexto.
+          Cada filtro persiste con su propia clave en localStorage. */}
+      <div className="flex flex-col gap-2 mb-4">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
+            {([
+              { v: 'fecha', l: 'Por fecha' },
+              { v: 'estado', l: 'Por estado' },
+              { v: 'kanban', l: 'Kanban' },
+            ] as { v: ViewMode; l: string }[]).map(o => (
+              <button key={o.v} onClick={() => setMode(o.v)}
+                className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
+                  mode === o.v ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
+                }`}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+          <FilterPills value={typeFilters} onChange={setTypeFilters} pills={GENERAL_PILLS} />
         </div>
-        <TypeFilterPills value={typeFilters} onChange={setTypeFilters} />
+        <FilterPills value={ctxFilters} onChange={setCtxFilters} pills={CONTEXT_PILLS} allLabel="Todos" />
       </div>
 
       {mode === 'kanban' ? (
