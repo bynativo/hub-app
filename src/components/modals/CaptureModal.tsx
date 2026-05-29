@@ -51,6 +51,53 @@ function normTipo(t: string): TipoTarea {
   return t === 'subtarea' ? 'subtarea' : t === 'proyecto' ? 'proyecto' : 'independiente'
 }
 
+// Inserta recursivamente el árbol de PendingSubtask con parent_task_id apuntando
+// al padre real. Cada nodo hereda context/client/project del root. Devuelve void.
+async function insertPendingSubtree(opts: {
+  items: PendingSubtask[]
+  parentTaskId: number
+  context: string
+  clientId: number | null
+  projectId: number | null
+  prefix: string
+}) {
+  for (const it of opts.items) {
+    if (!it.title.trim()) continue
+    const isReminder = it.tipo === 'recordatorio' || it.tipo === 'responder_correo'
+    const isContent = it.tipo === 'contenido' || it.tipo === 'influencer'
+    const isInfluencer = it.tipo === 'influencer'
+    const { data } = await supabase.from('tasks').insert({
+      title: buildTitle(opts.prefix, it.title.trim()),
+      context: opts.context,
+      client_id: opts.context === 'agencia' ? opts.clientId : null,
+      project_id: opts.projectId,
+      parent_task_id: opts.parentTaskId,
+      task_type: isContent ? 'contenido' : 'independiente',
+      priority: it.priority,
+      origin: 'propia',
+      status: isReminder ? 'Recordatorio' : 'Inbox',
+      due_date: (!isReminder && it.dueDate) ? it.dueDate : null,
+      es_recordatorio: isReminder,
+      recordatorio_at: (isReminder && it.dueDate) ? new Date(`${it.dueDate}T09:00:00`).toISOString() : null,
+      tipo_recordatorio: it.tipo === 'responder_correo' ? 'responder_correo' : (isReminder ? 'general' : null),
+      es_influencer: isContent ? isInfluencer : null,
+      requested_at: todayISO(),
+      done: false,
+      cats: [], plan: [], meeting_agenda: [],
+    }).select('id').single()
+    if (data && it.children.length) {
+      await insertPendingSubtree({
+        items: it.children,
+        parentTaskId: data.id,
+        context: opts.context,
+        clientId: opts.clientId,
+        projectId: opts.projectId,
+        prefix: opts.prefix,
+      })
+    }
+  }
+}
+
 // Crea las N subtareas "Perfil 1..N — {título}" para una solicitud de influencers.
 // Cada perfil queda en task_type='influencer' con influencer_tipos preseleccionados
 // (array de {tipo, cantidad}) pero nombre/handle/agencia vacíos — se completan a
@@ -433,6 +480,93 @@ async function extractFromAttachments(
   return parseSuggested(await callProxy(content), fixedContext)
 }
 
+// Subtareas a crear inline desde el modal (toggle "Es tarea padre"). Cada
+// nodo puede tener sus propias hijas, sin límite de profundidad.
+type SubtaskType = 'tarea' | 'contenido' | 'influencer' | 'recordatorio' | 'responder_correo'
+type PendingSubtask = {
+  id: string
+  title: string
+  tipo: SubtaskType
+  priority: 'alta' | 'media' | 'baja'
+  dueDate: string
+  children: PendingSubtask[]
+}
+
+let _pendingId = 1
+function makeEmptySubtask(): PendingSubtask {
+  return { id: `s${_pendingId++}`, title: '', tipo: 'tarea', priority: 'media', dueDate: '', children: [] }
+}
+
+const SUBTASK_TYPES: { v: SubtaskType; label: string }[] = [
+  { v: 'tarea', label: '📋 Tarea' },
+  { v: 'contenido', label: '🎬 Contenido' },
+  { v: 'influencer', label: '⭐ Influencer' },
+  { v: 'recordatorio', label: '🔔 Recordatorio' },
+  { v: 'responder_correo', label: '📧 Responder correo' },
+]
+
+// Fila editable de una subtarea pending. Recursiva: las hijas se renderizan
+// con el mismo componente, indentadas. Cada nivel tiene su propio borde.
+function SubtaskRow({
+  item, level, onChange, onRemove,
+}: {
+  item: PendingSubtask
+  level: number
+  onChange: (next: PendingSubtask) => void
+  onRemove: () => void
+}) {
+  const borderColors = ['#7c3aed', '#0d9488', '#2563eb', '#d97706']
+  const indentBorder = borderColors[level % borderColors.length] + '30'
+  function updateChild(idx: number, next: PendingSubtask) {
+    onChange({ ...item, children: item.children.map((c, i) => i === idx ? next : c) })
+  }
+  function removeChild(idx: number) {
+    onChange({ ...item, children: item.children.filter((_, i) => i !== idx) })
+  }
+  function addChild() {
+    onChange({ ...item, children: [...item.children, makeEmptySubtask()] })
+  }
+  const fld = 'bg-bg2 border border-black/7 rounded-md px-2 py-1 text-[12px] outline-none focus:border-claude/20'
+  return (
+    <div>
+      <div className="bg-bg3 border border-black/7 rounded-md p-2 flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <input value={item.title} onChange={e => onChange({ ...item, title: e.target.value })}
+            placeholder="Título de la subtarea" className={fld + ' flex-1'} />
+          <button type="button" onClick={onRemove}
+            className="text-[12px] text-danger hover:text-white hover:bg-danger px-1.5 py-0.5 rounded cursor-pointer">×</button>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <select value={item.tipo} onChange={e => onChange({ ...item, tipo: e.target.value as SubtaskType })}
+            className={fld + ' cursor-pointer'}>
+            {SUBTASK_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+          </select>
+          <select value={item.priority} onChange={e => onChange({ ...item, priority: e.target.value as PendingSubtask['priority'] })}
+            className={fld + ' cursor-pointer'}>
+            <option value="alta">🔴 Alta</option>
+            <option value="media">🟡 Media</option>
+            <option value="baja">🟢 Baja</option>
+          </select>
+          <input type="date" value={item.dueDate} onChange={e => onChange({ ...item, dueDate: e.target.value })} className={fld} />
+        </div>
+        <button type="button" onClick={addChild}
+          className="text-[10px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors self-start">
+          + Sub-subtarea
+        </button>
+      </div>
+      {item.children.length > 0 && (
+        <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l-2 pl-2.5" style={{ borderColor: indentBorder }}>
+          {item.children.map((c, i) => (
+            <SubtaskRow key={c.id} item={c} level={level + 1}
+              onChange={next => updateChild(i, next)}
+              onRemove={() => removeChild(i)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CaptureModal({ onClose, preselectContext, preselectClientId, preselectProjectId, preselectParentId, preselectReminder, template }: {
   onClose: () => void
   preselectContext?: string
@@ -465,6 +599,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [recordingDate, setRecordingDate] = useState('')
   const [briefDate, setBriefDate] = useState('')
   const [numPerfiles, setNumPerfiles] = useState<number>(1)
+  // "Es tarea padre — agregar subtareas ahora" (solo aplica a tipo independiente).
+  const [isParent, setIsParent] = useState(false)
+  const [pendingSubtasks, setPendingSubtasks] = useState<PendingSubtask[]>([])
   // Tipos de contenido por perfil — un array de {tipo, cantidad} por perfil.
   // Default por perfil: 1 unidad de 'colab'. Se sincroniza con numPerfiles.
   const [perfilesTipos, setPerfilesTipos] = useState<TipoConCantidad[][]>([[{ tipo: 'colab', cantidad: 1 }]])
@@ -611,6 +748,18 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         clientId,
         projectId: resolvedProjectId,
         dueDate: dueDate || null,
+      })
+    }
+    // Tarea independiente con toggle "Es tarea padre": insertar el árbol
+    // de subtareas pendientes recursivamente con parent_task_id correcto.
+    if (!reminder && isParent && tipo === 'independiente' && pendingSubtasks.length) {
+      await insertPendingSubtree({
+        items: pendingSubtasks,
+        parentTaskId: inserted.id,
+        context,
+        clientId,
+        projectId: resolvedProjectId,
+        prefix: titlePrefix,
       })
     }
     await loadAll()
@@ -1569,6 +1718,39 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   </>
                 )}
               </div>
+              )}
+
+              {/* "Es tarea padre" — solo aplica a tipo independiente sin recordatorio. */}
+              {!isReminder && tipo === 'independiente' && (
+                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={() => { const next = !isParent; setIsParent(next); if (next && !pendingSubtasks.length) setPendingSubtasks([makeEmptySubtask()]) }}
+                      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isParent ? 'bg-claude' : 'bg-bg4'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isParent ? 'left-5.5' : 'left-0.5'}`} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">Es tarea padre — agregar subtareas ahora</div>
+                      <div className="text-[11px] text-gray-400">Las subtareas se crean junto con la tarea, sin límite de profundidad.</div>
+                    </div>
+                  </label>
+                  {isParent && (
+                    <div className="flex flex-col gap-2 mt-1">
+                      <div className="text-[10px] font-mono text-gray-400 tracking-wider uppercase">
+                        Subtareas a crear ({pendingSubtasks.length})
+                      </div>
+                      {pendingSubtasks.map((s, i) => (
+                        <SubtaskRow key={s.id} item={s} level={0}
+                          onChange={next => setPendingSubtasks(prev => prev.map((x, j) => j === i ? next : x))}
+                          onRemove={() => setPendingSubtasks(prev => prev.filter((_, j) => j !== i))} />
+                      ))}
+                      <button type="button"
+                        onClick={() => setPendingSubtasks(prev => [...prev, makeEmptySubtask()])}
+                        className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-3 py-1.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors self-start">
+                        + Agregar subtarea
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="mb-4">
