@@ -345,8 +345,8 @@ export function SeguimientoView() {
 
   return (
     <div className="animate-fade-in p-5">
-      <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
-      <p className="text-gray-500 text-[13px] mb-5">Tareas esperando respuesta · {waiting.length}</p>
+      <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Recordatorios y seguimientos</h1>
+      <p className="text-gray-500 text-[13px] mb-5">Tareas en seguimiento + recordatorios activos · {waiting.length}</p>
 
       {waiting.length ? (
         <div className="max-w-[760px]">

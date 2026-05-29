@@ -98,7 +98,7 @@ export function Sidebar() {
       {/* General (siempre visible) */}
       <GroupHeader label="General" />
       <NavItem label="Mis tareas" view="mis-tareas" count={hoyCount} />
-      <NavItem label="Seguimiento" view="seguimiento" count={seguimientoCount} />
+      <NavItem label="Recordatorios y seguimientos" view="recordatorios-seguimientos" count={seguimientoCount} />
       <NavItem label="Calendario" view="calendario" />
       <NavItem label="Recurrentes" view="recurrentes" />
       <NavItem label="Plantillas" view="plantillas" />

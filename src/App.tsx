@@ -84,7 +84,8 @@ export default function App() {
       // General
       case 'mis-tareas': return <Dashboard />
       case 'hoy': return <Dashboard /> // alias legacy
-      case 'seguimiento': return <SeguimientoView />
+      case 'recordatorios-seguimientos': return <SeguimientoView />
+      case 'seguimiento': return <SeguimientoView /> // alias legacy
       case 'calendario': return <CalendarView />
       case 'recurrentes': return <RecurrentesView />
       case 'plantillas': return <TemplatesView />
