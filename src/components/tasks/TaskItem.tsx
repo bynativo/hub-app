@@ -29,6 +29,8 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
   const reminders = linked.filter(t => t.es_recordatorio)
   const hasChildren = children.length > 0 || reminders.length > 0
   const isEmail = task.task_type === 'responder_email'
+  // Solicitud de influencers: tarea madre que coordina el pedido a la agencia.
+  const isSolicitud = task.task_type === 'solicitud_influencers'
   // Perfil pendiente / confirmado: subtarea de "Solicitar influencers" que se
   // marca confirmada cuando ya tiene nombre + handle (los completa el usuario
   // a medida que la agencia responde).
@@ -67,6 +69,7 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
         <div className="flex-1 min-w-0">
           <div className={`text-[13px] leading-snug font-medium ${task.done ? 'line-through text-gray-400' : ''}`}>
             {isEmail && <span className="mr-1">✉️</span>}
+            {isSolicitud && <span className="mr-1">🎬</span>}
             {isPerfil && <span className="mr-1">👤</span>}
             {prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{prefix} |</span>}
             {name}
@@ -119,6 +122,10 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
               perfilConfirmado
                 ? <Tag bg="rgba(22,163,74,0.10)" color="#16a34a">✓ Perfil confirmado</Tag>
                 : <Tag bg="rgba(217,119,6,0.10)" color="#d97706">⏳ Perfil pendiente</Tag>
+            )}
+
+            {isSolicitud && (
+              <Tag bg="rgba(124,58,237,0.10)" color="#7c3aed">🎬 Solicitud influencers</Tag>
             )}
 
             {(() => {

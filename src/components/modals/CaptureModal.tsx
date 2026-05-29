@@ -528,8 +528,13 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
     setSaving(true)
     const reminder = isReminder && !!reminderAt
 
+    // El proyecto se vincula cuando el usuario seleccionó uno en el selector
+    // de Proyecto/Campaña, que ahora es visible para tipo='proyecto',
+    // tipo='solicitud_influencers' y tareas de contenido. Antes solo se
+    // capturaba con tipo='proyecto' → influencers + content quedaban sin
+    // project_id aunque el usuario eligiera uno.
     let resolvedProjectId: number | null = null
-    if (!reminder && tipo === 'proyecto' && projectId) {
+    if (!reminder && projectId && (tipo === 'proyecto' || tipo === 'solicitud_influencers' || isContent)) {
       resolvedProjectId = Number(projectId)
     }
 
@@ -1311,9 +1316,16 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 </div>
               )}
 
-              {tipo === 'proyecto' && (
+              {/* Selector de proyecto/campaña: para tipo='proyecto' es obligatorio
+                  semánticamente (la tarea ES parte de un proyecto); para
+                  solicitud_influencers y contenido es opcional (la tarea
+                  puede vincularse a una campaña pero no es requisito). */}
+              {(tipo === 'proyecto' || tipo === 'solicitud_influencers' || isContent) && (
                 <div className="mb-3">
-                  <label className={labelCls}>Proyecto / Campaña</label>
+                  <label className={labelCls}>
+                    Proyecto / Campaña
+                    {tipo !== 'proyecto' && <span className="text-gray-400 font-normal normal-case font-sans"> (opcional)</span>}
+                  </label>
                   <select value={projectId} onChange={e => {
                     const v = e.target.value
                     if (v === '__new__') {
@@ -1322,7 +1334,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                       setProjectId(v === '' ? '' : Number(v))
                     }
                   }} className={fieldCls}>
-                    <option value="">Seleccionar proyecto / campaña…</option>
+                    <option value="">{tipo === 'proyecto' ? 'Seleccionar proyecto / campaña…' : 'Sin proyecto vinculado'}</option>
                     {ctxProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     <option value="__new__">+ Crear nuevo proyecto / campaña</option>
                   </select>
