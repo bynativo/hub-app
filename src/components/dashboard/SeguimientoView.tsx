@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
 import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
-import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange } from '../../lib/helpers'
+import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange, nextMonthRange } from '../../lib/helpers'
 import type { Task } from '../../lib/types'
 
 // Contenido cuyo día de entrega es hoy (y aún no entregado/cerrado)
@@ -249,23 +249,21 @@ function FollowupCard({ task }: { task: Task }) {
   )
 }
 
-// Fecha de la alarma de una tarea como YYYY-MM-DD LOCAL (no UTC), o null si
-// no hay alarma propia. Las tareas de contenido que vencen hoy se cuentan como
-// "hoy" aunque no tengan followup_at/recordatorio_at.
+// Fecha de la alarma de una tarea de seguimiento como YYYY-MM-DD LOCAL.
+// Prioridad: followup_at > due_date (cuando la tarea está en estado Esperando).
+// Si no hay ninguna, devuelve null y la tarea cae en "Sin fecha".
 function alarmDateISO(t: Task): string | null {
-  const ts = t.es_recordatorio ? t.recordatorio_at : t.followup_at
-  if (ts) {
-    const d = new Date(ts)
+  if (t.followup_at) {
+    const d = new Date(t.followup_at)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
-  if (isContentDueToday(t)) return todayISO()
+  if (WAITING_STATES.includes(t.status) && t.due_date) return t.due_date
   return null
 }
 
 function alarmTimeMs(t: Task): number {
-  const ts = t.es_recordatorio ? t.recordatorio_at : t.followup_at
-  if (ts) return new Date(ts).getTime()
-  if (isContentDueToday(t)) return new Date(`${todayISO()}T23:59:59`).getTime()
+  if (t.followup_at) return new Date(t.followup_at).getTime()
+  if (WAITING_STATES.includes(t.status) && t.due_date) return new Date(`${t.due_date}T23:59:59`).getTime()
   return Infinity
 }
 
@@ -288,36 +286,45 @@ function SectionHeader({ icon, label, count, color }: { icon: string; label: str
 
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
-  // Recordatorios (incluso los vinculados a una tarea) + esperando respuesta (top-level)
-  // + contenido que vence hoy (cualquier nivel)
-  const waiting = tasks.filter(t => !t.done && !t.archived_at && (
-    t.es_recordatorio || (!t.parent_task_id && WAITING_STATES.includes(t.status)) || isContentDueToday(t)
+  // Filtro estricto: solo tareas top-level (no recordatorios, no subtareas) con
+  // followup_at definido o en estado Esperando. Los recordatorios viven
+  // anidados bajo su padre o en "Mis tareas" según fecha. El contenido que
+  // vence hoy va a "Mis tareas", no acá.
+  const waiting = tasks.filter(t => !t.done && !t.archived_at && !t.parent_task_id && !t.es_recordatorio && (
+    !!t.followup_at || WAITING_STATES.includes(t.status)
   ))
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
   const dayAfterTomorrow = addDaysISO(today, 2)
-  // "Domingo de la próxima semana" según helper: from=lunes próximo, to=domingo próximo.
   const { to: nextSunday } = nextWeekRange()
+  const { from: proxMesFrom, to: proxMesTo } = nextMonthRange()
 
-  // Clasificación por categoría según la fecha de alarma. Items sin alarma
-  // van al final en "Más adelante" (cualquier waiting state sin followup configurado).
+  // Clasificación por categoría según la fecha de alarma. Las tareas sin
+  // alarma (estado Esperando sin followup_at ni due_date) van a una sección
+  // chica "Sin fecha definida" — un recordatorio para que el usuario les
+  // setee followup_at.
   const vencidas: Task[] = []
   const hoy: Task[] = []
   const manana: Task[] = []
   const proxSem: Task[] = []
-  const masAdelante: Task[] = []
+  const proxMes: Task[] = []
+  const sinFecha: Task[] = []
   for (const t of waiting) {
     const d = alarmDateISO(t)
-    if (!d) { masAdelante.push(t); continue }
+    if (!d) { sinFecha.push(t); continue }
     if (d < today) vencidas.push(t)
     else if (d === today) hoy.push(t)
     else if (d === tomorrow) manana.push(t)
     else if (d >= dayAfterTomorrow && d <= nextSunday) proxSem.push(t)
-    else masAdelante.push(t)
+    else if (d <= proxMesTo) proxMes.push(t)  // incluye gap entre nextSunday+1 y proxMesFrom
+    else sinFecha.push(t)
   }
   const sortByAlarm = (a: Task, b: Task) => alarmTimeMs(a) - alarmTimeMs(b)
-  vencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); masAdelante.sort(sortByAlarm)
+  vencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
+  // Nota: proxMesFrom no se usa explícitamente porque incluimos también el gap;
+  // referencia para devs que pisen este código.
+  void proxMesFrom
 
   function renderCard(t: Task) {
     const d = alarmDateISO(t)
@@ -328,7 +335,7 @@ export function SeguimientoView() {
         {overdueDays > 0 && (
           <div className="-mt-1 pl-3">
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-danger/10 text-danger inline-block">
-              {overdueDays} día{overdueDays === 1 ? '' : 's'} sin atender
+              {overdueDays} día{overdueDays === 1 ? '' : 's'} sin movimiento
             </span>
           </div>
         )}
@@ -339,13 +346,13 @@ export function SeguimientoView() {
   return (
     <div className="animate-fade-in p-5">
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
-      <p className="text-gray-500 text-[13px] mb-5">Esperando respuesta y recordatorios · {waiting.length}</p>
+      <p className="text-gray-500 text-[13px] mb-5">Tareas esperando respuesta · {waiting.length}</p>
 
       {waiting.length ? (
         <div className="max-w-[760px]">
           {vencidas.length > 0 && (
             <>
-              <SectionHeader icon="🔴" label="Vencidas" count={vencidas.length} color="#dc2626" />
+              <SectionHeader icon="🔴" label="Atrasadas" count={vencidas.length} color="#dc2626" />
               <div className="flex flex-col gap-2">{vencidas.map(renderCard)}</div>
             </>
           )}
@@ -357,20 +364,26 @@ export function SeguimientoView() {
           )}
           {manana.length > 0 && (
             <>
-              <SectionHeader icon="📅" label="Mañana" count={manana.length} />
+              <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
               <div className="flex flex-col gap-2">{manana.map(renderCard)}</div>
             </>
           )}
           {proxSem.length > 0 && (
             <>
-              <SectionHeader icon="📆" label="Próxima semana" count={proxSem.length} />
+              <SectionHeader icon="📅" label="Próxima semana" count={proxSem.length} />
               <div className="flex flex-col gap-2">{proxSem.map(renderCard)}</div>
             </>
           )}
-          {masAdelante.length > 0 && (
+          {proxMes.length > 0 && (
             <>
-              <SectionHeader icon="⏳" label="Más adelante" count={masAdelante.length} />
-              <div className="flex flex-col gap-2">{masAdelante.map(renderCard)}</div>
+              <SectionHeader icon="🗓" label="Próximo mes" count={proxMes.length} />
+              <div className="flex flex-col gap-2">{proxMes.map(renderCard)}</div>
+            </>
+          )}
+          {sinFecha.length > 0 && (
+            <>
+              <SectionHeader icon="📭" label="Sin fecha definida" count={sinFecha.length} />
+              <div className="flex flex-col gap-2">{sinFecha.map(renderCard)}</div>
             </>
           )}
         </div>

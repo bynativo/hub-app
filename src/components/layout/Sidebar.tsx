@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { WAITING_STATES, CLOSING_STATES } from '../../lib/constants'
-import { todayISO, daysUntil, nextWeekRange, nextRecurringDueDate } from '../../lib/helpers'
+import { WAITING_STATES } from '../../lib/constants'
+import { todayISO, nextRecurringDueDate } from '../../lib/helpers'
 
 const STORAGE_KEY = 'sidebar_collapsed'
 function loadCollapsed(): Record<string, boolean> {
@@ -73,20 +73,13 @@ export function Sidebar() {
   // Instancias próximas de recurrentes — se suman a los contadores de fecha
   // para que los counts del sidebar coincidan con lo que se ve en cada vista.
   const recInstances = recurrentes.map(r => nextRecurringDueDate(r))
+  // "Mis tareas" muestra el count de tareas que vencen hoy (incluye recurrentes
+  // próximas) — número útil para saber qué tan cargado está el día desde el sidebar.
   const hoyCount = dated.filter(t => t.due_date === today).length + recInstances.filter(d => d === today).length
-  const semanaCount = dated.filter(t => {
-    const d = daysUntil(t.due_date)
-    return d !== null && d >= 0 && d <= 7
-  }).length + recInstances.filter(d => {
-    const n = daysUntil(d)
-    return n !== null && n >= 0 && n <= 7
-  }).length
-  const pw = nextWeekRange()
-  const proximaCount = dated.filter(t => t.due_date && t.due_date >= pw.from && t.due_date <= pw.to).length
-    + recInstances.filter(d => d >= pw.from && d <= pw.to).length
-  // Seguimiento = recordatorios/esperando (top-level) + contenido que vence hoy
-  const contentDueCount = dated.filter(t => t.task_type === 'contenido' && t.due_date === today && !CLOSING_STATES.includes(t.status) && !WAITING_STATES.includes(t.status)).length
-  const seguimientoCount = active.filter(t => t.es_recordatorio || WAITING_STATES.includes(t.status)).length + contentDueCount
+  // Seguimiento = tareas con followup_at definido O en estado Esperando.
+  // No incluye recordatorios (esos viven anidados bajo su padre o en su propia
+  // vista). No incluye contenido que vence hoy (ese va a "Mis tareas").
+  const seguimientoCount = active.filter(t => (!!t.followup_at || WAITING_STATES.includes(t.status))).length
 
   const ctxCount = (ctx: string) => active.filter(t => t.context === ctx && !t.es_recordatorio).length
 
@@ -104,9 +97,7 @@ export function Sidebar() {
 
       {/* General (siempre visible) */}
       <GroupHeader label="General" />
-      <NavItem label="Hoy" view="hoy" count={hoyCount} />
-      <NavItem label="Esta semana" view="semana" count={semanaCount} />
-      <NavItem label="Próxima semana" view="proxima-semana" count={proximaCount} />
+      <NavItem label="Mis tareas" view="mis-tareas" count={hoyCount} />
       <NavItem label="Seguimiento" view="seguimiento" count={seguimientoCount} />
       <NavItem label="Calendario" view="calendario" />
       <NavItem label="Recurrentes" view="recurrentes" />

@@ -40,6 +40,14 @@ export function nextWeekRange(): { from: string; to: string } {
   return { from, to: addDaysISO(from, 6) }
 }
 
+// Primer y último día del mes siguiente al actual (ISO YYYY-MM-DD).
+export function nextMonthRange(): { from: string; to: string } {
+  const now = new Date()
+  const first = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const last = new Date(now.getFullYear(), now.getMonth() + 2, 0)
+  return { from: localISO(first), to: localISO(last) }
+}
+
 // Dias desde hoy hasta `due` (negativo = vencida). null si no hay fecha.
 export function daysUntil(due: string | null): number | null {
   if (!due) return null

@@ -97,7 +97,7 @@ export const useStore = create<AppState>((set, get) => ({
   templateTasks: [],
   loading: true,
   initialized: false,
-  activeView: 'hoy',
+  activeView: 'mis-tareas',
   activeClientId: null,
   currentTaskId: null,
   detailOpen: false,

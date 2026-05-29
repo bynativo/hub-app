@@ -5,7 +5,6 @@ import { Sidebar } from './components/layout/Sidebar'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
 import { AgenciaView } from './components/dashboard/AgenciaView'
-import { WeekView } from './components/dashboard/WeekView'
 import { CalendarView } from './components/dashboard/CalendarView'
 import { ProjectsView } from './components/dashboard/ProjectsView'
 import { RecurrentesView } from './components/dashboard/RecurrentesView'
@@ -83,9 +82,8 @@ export default function App() {
   function renderView() {
     switch (activeView) {
       // General
-      case 'hoy': return <Dashboard />
-      case 'semana': return <WeekView range="esta" />
-      case 'proxima-semana': return <WeekView range="proxima" />
+      case 'mis-tareas': return <Dashboard />
+      case 'hoy': return <Dashboard /> // alias legacy
       case 'seguimiento': return <SeguimientoView />
       case 'calendario': return <CalendarView />
       case 'recurrentes': return <RecurrentesView />
