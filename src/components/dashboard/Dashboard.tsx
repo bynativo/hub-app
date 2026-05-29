@@ -1,11 +1,32 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange } from '../../lib/helpers'
+import { KANBAN_GROUPS } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import type { Task, Recurrente } from '../../lib/types'
+
+type ViewMode = 'fecha' | 'estado' | 'kanban'
+const STORAGE_KEY = 'mis_tareas_view_mode'
+function loadMode(): ViewMode {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    if (v === 'fecha' || v === 'estado' || v === 'kanban') return v
+  } catch { /* ignore */ }
+  return 'fecha'
+}
+
+const PRIO_ORDER: Record<string, number> = { alta: 0, media: 1, baja: 2 }
+function sortByPrioDate(a: Task, b: Task): number {
+  const dp = (PRIO_ORDER[a.priority] ?? 1) - (PRIO_ORDER[b.priority] ?? 1)
+  if (dp !== 0) return dp
+  if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
+  if (a.due_date) return -1
+  if (b.due_date) return 1
+  return 0
+}
 
 type DayItem =
   | { kind: 'task'; task: Task }
@@ -39,12 +60,19 @@ export function Dashboard() {
   const tasks = useStore(s => s.tasks)
   const calendarEvents = useStore(s => s.calendarEvents)
   const recurrentes = useStore(s => s.recurrentes)
-  const [mode, setMode] = useState<'list' | 'kanban'>('list')
+  const [mode, setMode] = useState<ViewMode>(loadMode)
   const [sinFechaCollapsed, setSinFechaCollapsed] = useState(true)
+  const [cerradoCollapsed, setCerradoCollapsed] = useState(true)
+
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
 
   // Set base de tareas activas (incluye subtareas con due_date propio para que no
   // queden invisibles; excluye recordatorios — esos viven anidados bajo su padre).
   const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio)
+  // Base más amplia para los modos por estado / kanban: incluye también las
+  // archivadas (status en CLOSING_STATES) para que aparezcan en la columna
+  // "Cerrado". Sigue excluyendo done (checkbox) y recordatorios.
+  const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio)
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
@@ -140,22 +168,53 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Toggle Lista / Kanban */}
+      {/* Toggle de 3 modos. Persiste en localStorage (mis_tareas_view_mode). */}
       <div className="flex items-center gap-2 mb-4">
         <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
-          {(['list', 'kanban'] as const).map(m => (
-            <button key={m} onClick={() => setMode(m)}
+          {([
+            { v: 'fecha', l: 'Por fecha' },
+            { v: 'estado', l: 'Por estado' },
+            { v: 'kanban', l: 'Kanban' },
+          ] as { v: ViewMode; l: string }[]).map(o => (
+            <button key={o.v} onClick={() => setMode(o.v)}
               className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
-                mode === m ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
+                mode === o.v ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
               }`}>
-              {m === 'list' ? 'Lista' : 'Kanban'}
+              {o.l}
             </button>
           ))}
         </div>
       </div>
 
       {mode === 'kanban' ? (
-        <KanbanBoard />
+        <KanbanBoard items={allByStatus} />
+      ) : mode === 'estado' ? (
+        <div className="max-w-[900px]">
+          {KANBAN_GROUPS.map(grp => {
+            const items = allByStatus
+              .filter(t => grp.statuses.includes(t.status || 'Inbox'))
+              .sort(sortByPrioDate)
+            if (!items.length) return null
+            const isCerrado = grp.key === 'cerrado'
+            const collapsed = isCerrado && cerradoCollapsed
+            return (
+              <div key={grp.key} className="mb-5">
+                <button
+                  onClick={() => isCerrado && setCerradoCollapsed(c => !c)}
+                  className={`flex items-center gap-2 mb-2.5 ${isCerrado ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                >
+                  {isCerrado && <span className="text-[10px] text-gray-400 w-3">{collapsed ? '▶' : '▼'}</span>}
+                  <span className="text-[11px] font-mono text-gray-500 tracking-wider uppercase">{grp.label}</span>
+                  <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{items.length}</span>
+                </button>
+                {!collapsed && <TaskList tasks={items} />}
+              </div>
+            )
+          })}
+          {allByStatus.length === 0 && (
+            <div className="text-center py-10 text-gray-400 text-[13px]">Sin tareas activas.</div>
+          )}
+        </div>
       ) : (
         <div className="max-w-[900px]">
           {/* 🔴 ATRASADAS — TaskItem ya muestra "Vencio hace Xd" como tag rojo */}
