@@ -4,6 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
 import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange, nextMonthRange } from '../../lib/helpers'
+import { TypeFilterPills, matchesTypeFilter, type TypeFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 // Contenido cuyo día de entrega es hoy (y aún no entregado/cerrado)
@@ -323,6 +324,7 @@ export function SeguimientoView() {
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
   const [mode, setMode] = useState<ViewMode>(loadMode)
+  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
 
@@ -330,9 +332,10 @@ export function SeguimientoView() {
   // (incluso los anidados — esta es la vista de seguimiento, no se duplican
   // porque acá viven con su propio rendering y en otras vistas viven nested).
   // El contenido due-today va a "Mis tareas", no acá.
+  // Aplica también el filtro de tipo (pills) por encima.
   const waiting = tasks.filter(t => !t.done && !t.archived_at && (
     t.es_recordatorio || (!t.parent_task_id && !!t.followup_at) || (!t.parent_task_id && WAITING_STATES.includes(t.status))
-  ))
+  ) && matchesTypeFilter(t, typeFilters))
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
@@ -428,9 +431,10 @@ export function SeguimientoView() {
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
       <p className="text-gray-500 text-[13px] mb-5">Tareas en seguimiento + recordatorios activos · {waiting.length}</p>
 
-      {/* Toggle 3 modos */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
+      {/* Toggle 3 modos + filtros de tipo (sin recurrentes — esta vista no
+          muestra recurrentes). Filtros locales, se resetean al salir. */}
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
           {([
             { v: 'fecha', l: 'Por fecha' },
             { v: 'estado', l: 'Por estado' },
@@ -444,6 +448,7 @@ export function SeguimientoView() {
             </button>
           ))}
         </div>
+        <TypeFilterPills value={typeFilters} onChange={setTypeFilters} hideRecurrentes />
       </div>
 
       {!waiting.length ? (

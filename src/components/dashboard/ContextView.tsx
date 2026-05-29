@@ -5,6 +5,7 @@ import { KanbanBoard } from './KanbanBoard'
 import { ctxLabel, ctxColor, todayISO, nextRecurringDueDate } from '../../lib/helpers'
 import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
+import { TypeFilterPills, matchesTypeFilter, includesRecurrentes, type TypeFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 // Filtro local por cliente en la vista de tareas de agencia.
@@ -19,13 +20,15 @@ export function ContextView({ context }: { context: string }) {
   const recurrentes = useStore(s => s.recurrentes)
   const [mode, setMode] = useState<'list' | 'kanban'>('list')
   const [clientFilter, setClientFilter] = useState<ClientFilter>('all')
+  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
 
-  // Reset del filtro al cambiar de contexto (banco↔agencia↔personal sin desmontar).
+  // Reset de filtros al cambiar de contexto (banco↔agencia↔personal sin desmontar).
   // Cuando se sale a otra vista y se vuelve, ContextView se desmonta y el estado
   // se reinicia naturalmente.
-  useEffect(() => { setClientFilter('all') }, [context])
+  useEffect(() => { setClientFilter('all'); setTypeFilters(new Set()) }, [context])
 
-  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
+  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at && matchesTypeFilter(t, typeFilters))
+  const showRecurrentes = includesRecurrentes(typeFilters)
 
   const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
   const selectedClient = typeof clientFilter === 'number' ? agClients.find(c => c.id === clientFilter) : null
@@ -53,9 +56,10 @@ export function ContextView({ context }: { context: string }) {
     : clientFilter === 'none'
       ? recScope.filter(r => !r.client_id)
       : recScope.filter(r => r.client_id === clientFilter)
-  const recInstances = recForClient
-    .map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const recInstances = showRecurrentes
+    ? recForClient.map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : []
 
   const columns = STATUS_COLUMNS[context] || STATUS_COLUMNS.banco
   const kanbanCols = columns.map(s => ({ key: s, label: s, statuses: [s] }))
@@ -151,6 +155,11 @@ export function ContextView({ context }: { context: string }) {
             )}
           </div>
         )}
+
+        {/* Filtros de tipo (pills). Combinable con el filtro de cliente. */}
+        <div className="basis-full">
+          <TypeFilterPills value={typeFilters} onChange={setTypeFilters} />
+        </div>
       </div>
 
       {mode === 'kanban' ? (

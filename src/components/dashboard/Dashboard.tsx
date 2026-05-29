@@ -6,6 +6,7 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
+import { TypeFilterPills, matchesTypeFilter, includesRecurrentes, type TypeFilter } from '../tasks/TypeFilterPills'
 import type { Task, Recurrente } from '../../lib/types'
 
 type ViewMode = 'fecha' | 'estado' | 'kanban'
@@ -63,16 +64,20 @@ export function Dashboard() {
   const [mode, setMode] = useState<ViewMode>(loadMode)
   const [sinFechaCollapsed, setSinFechaCollapsed] = useState(true)
   const [cerradoCollapsed, setCerradoCollapsed] = useState(true)
+  // Filtros de tipo (pills). Estado local → se resetea al salir de la vista.
+  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
 
   // Set base de tareas activas (incluye subtareas con due_date propio para que no
   // queden invisibles; excluye recordatorios — esos viven anidados bajo su padre).
-  const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio)
+  // Aplicamos el filtro de tipo encima.
+  const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio && matchesTypeFilter(t, typeFilters))
   // Base más amplia para los modos por estado / kanban: incluye también las
   // archivadas (status en CLOSING_STATES) para que aparezcan en la columna
   // "Cerrado". Sigue excluyendo done (checkbox) y recordatorios.
-  const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio)
+  const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio && matchesTypeFilter(t, typeFilters))
+  const showRecurrentes = includesRecurrentes(typeFilters)
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
@@ -101,7 +106,8 @@ export function Dashboard() {
   const sinFecha = active.filter(t => !t.due_date)
 
   // Recurrentes próximas (solo la siguiente por definición).
-  const recInstances = recurrentes.map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
+  // Recurrentes solo si el filtro las incluye (sin filtros = todas incluidas).
+  const recInstances = showRecurrentes ? recurrentes.map(r => ({ rec: r, date: nextRecurringDueDate(r) })) : []
   const recHoy = recInstances.filter(i => i.date === today)
   const recManana = recInstances.filter(i => i.date === tomorrow)
   const recProxSem = recInstances.filter(i => i.date >= dayAfterTomorrow && i.date <= nextSunday)
@@ -168,9 +174,11 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Toggle de 3 modos. Persiste en localStorage (mis_tareas_view_mode). */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
+      {/* Toggle de 3 modos + filtros de tipo. El modo persiste en
+          localStorage (mis_tareas_view_mode); los filtros son locales y se
+          resetean al salir de la vista. */}
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
           {([
             { v: 'fecha', l: 'Por fecha' },
             { v: 'estado', l: 'Por estado' },
@@ -184,6 +192,7 @@ export function Dashboard() {
             </button>
           ))}
         </div>
+        <TypeFilterPills value={typeFilters} onChange={setTypeFilters} />
       </div>
 
       {mode === 'kanban' ? (

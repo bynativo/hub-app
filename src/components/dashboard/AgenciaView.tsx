@@ -4,6 +4,7 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import { ctxColor, todayISO, clientBadge, nextRecurringDueDate } from '../../lib/helpers'
+import { TypeFilterPills, matchesTypeFilter, includesRecurrentes, type TypeFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 type AgenciaMode = 'list' | 'porcliente' | 'kanban'
@@ -42,11 +43,14 @@ export function AgenciaView() {
   const [kanbanClient, setKanbanClient] = useState<KanbanClientFilter>('all')
   // Estado de colapso por cliente en modo "Por cliente" (transient).
   const [collapsedClients, setCollapsedClients] = useState<Record<string, boolean>>({})
+  // Filtros de tipo (pills) — combinable con el filtro de cliente del Kanban.
+  const [typeFilters, setTypeFilters] = useState<Set<TypeFilter>>(new Set())
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
 
-  const active = tasks.filter(t => !t.done && t.context === 'agencia' && !t.parent_task_id && !t.es_recordatorio && !t.archived_at)
+  const active = tasks.filter(t => !t.done && t.context === 'agencia' && !t.parent_task_id && !t.es_recordatorio && !t.archived_at && matchesTypeFilter(t, typeFilters))
   const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
+  const showRecurrentes = includesRecurrentes(typeFilters)
 
   // Atrasadas (común a Lista / Por cliente)
   const today = todayISO()
@@ -54,9 +58,11 @@ export function AgenciaView() {
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
 
   // Recurrentes de agencia con su próxima fecha calculada
-  const recInstances = recurrentes.filter(r => r.context === 'agencia')
-    .map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const recInstances = showRecurrentes
+    ? recurrentes.filter(r => r.context === 'agencia')
+        .map(r => ({ rec: r, date: nextRecurringDueDate(r) }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : []
 
   // ---- Kanban: tareas filtradas por el dropdown
   const kanbanFiltered = kanbanClient === 'all'
@@ -148,6 +154,11 @@ export function AgenciaView() {
             )}
           </div>
         )}
+
+        {/* Filtros de tipo (pills). Combinable con el filtro de cliente. */}
+        <div className="basis-full">
+          <TypeFilterPills value={typeFilters} onChange={setTypeFilters} />
+        </div>
       </div>
 
       {mode === 'kanban' ? (
