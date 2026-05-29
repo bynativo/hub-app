@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { REDES } from '../../lib/constants'
 import { RecurrenteModal } from '../modals/RecurrenteModal'
 import { QuickClientModal } from '../modals/QuickClientModal'
+import { ReminderRow } from '../tasks/ReminderRow'
 import type { Recurrente } from '../../lib/types'
 
 interface ClientForm {
@@ -67,6 +68,13 @@ export function ClientesView() {
   const clientRecurrentes = selected ? recurrentes.filter(r => r.client_id === selected.id) : []
   const clientProjects = selected ? projects.filter(p => p.client_id === selected.id) : []
   const clientTaskCount = selected ? tasks.filter(t => t.client_id === selected.id && !t.done).length : 0
+  // Recordatorios "flotantes" del cliente: vinculados al cliente pero sin
+  // tarea padre ni proyecto. Los que sí tienen tarea/proyecto aparecen en
+  // esas vistas, no acá (evita duplicación).
+  const clientReminders = selected ? tasks.filter(t =>
+    t.client_id === selected.id && t.es_recordatorio && !t.done && !t.archived_at
+    && !t.parent_task_id && !t.project_id
+  ).sort((a, b) => (a.recordatorio_at || '').localeCompare(b.recordatorio_at || '')) : []
 
   const activos = agClients.filter(c => c.tipo !== 'prospecto')
   const prospectos = agClients.filter(c => c.tipo === 'prospecto')
@@ -316,6 +324,20 @@ export function ClientesView() {
               </div>
             ) : (
               <div className="text-xs text-gray-400">Sin recurrentes para este cliente</div>
+            )}
+
+            {/* Recordatorios "flotantes" del cliente (vinculados al cliente
+                pero sin tarea ni proyecto). Los anidados bajo tarea o de
+                proyecto viven en sus respectivas vistas. */}
+            {clientReminders.length > 0 && (
+              <div className="mt-5">
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2">
+                  Recordatorios <span className="text-gray-300">· {clientReminders.length}</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {clientReminders.map(r => <ReminderRow key={r.id} reminder={r} />)}
+                </div>
+              </div>
             )}
           </div>
         </div>

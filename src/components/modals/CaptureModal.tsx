@@ -484,6 +484,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [reminderTime, setReminderTime] = useState('')
   const [reminderCustomTime, setReminderCustomTime] = useState(false)
   const reminderAt = reminderDate && reminderTime ? `${reminderDate}T${reminderTime}` : ''
+  // Vínculos del recordatorio (opcionales): proyecto/campaña + tarea. El
+  // cliente para agencia se toma del selector del header (clientId).
+  const [reminderProjectId, setReminderProjectId] = useState<number | null>(preselectProjectId ?? null)
+  const [reminderTaskId, setReminderTaskId] = useState<number | null>(preselectParentId ?? null)
   const [reminderType, setReminderType] = useState('general')
   const [correoCtx, setCorreoCtx] = useState('')
   const [desc, setDesc] = useState(template?.notes ?? '')
@@ -536,10 +540,16 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       priority,
       origin,
       client_id: context === 'agencia' ? clientId : null,
-      // Para recordatorios: si vienen preseleccionados a un proyecto (creados desde
-      // la vista del proyecto), respetar ese vínculo.
-      project_id: reminder ? (preselectProjectId ?? null) : resolvedProjectId,
-      parent_task_id: reminder ? (parentId ?? null) : (tipo === 'subtarea' ? parentId : null),
+      // Para recordatorios: los vínculos vienen del bloque "Vincular a (opcional)"
+      // — si hay tarea, project_id queda null (se infiere del padre); si solo hay
+      // proyecto, parent_task_id queda null. Si no se eligió nada y el cliente
+      // está seteado (agencia), el recordatorio queda flotando con client_id.
+      project_id: reminder
+        ? (reminderTaskId ? null : (reminderProjectId ?? null))
+        : resolvedProjectId,
+      parent_task_id: reminder
+        ? (reminderTaskId ?? null)
+        : (tipo === 'subtarea' ? parentId : null),
       task_type: isSolicitud ? 'solicitud_influencers'
         : isContent ? 'contenido'
         : 'independiente',
@@ -1205,6 +1215,67 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                       )}
                     </div>
                   )}
+
+                  {/* Vincular a (opcional) — al elegir tarea, el recordatorio
+                      aparece como pseudo-tarea hija de esa tarea. Al elegir solo
+                      proyecto, aparece en la lista unificada del proyecto. Al
+                      no elegir nada (y agencia con cliente), aparece en el
+                      panel del cliente bajo "Recordatorios". */}
+                  {(() => {
+                    const ctxProjects = projects.filter(p => p.context === context && (
+                      context !== 'agencia' || !clientId || p.client_id === clientId
+                    ))
+                    const ctxTasks = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio
+                      && t.context === context && !t.parent_task_id
+                      && (context !== 'agencia' || !clientId || t.client_id === clientId)
+                      && (!reminderProjectId || t.project_id === reminderProjectId)
+                    )
+                    return (
+                      <div className="border border-black/7 rounded-md p-2.5 flex flex-col gap-2 bg-bg2">
+                        <div className="text-[10px] font-mono text-gray-400 tracking-wider uppercase">Vincular a (opcional)</div>
+                        {context === 'agencia' && clientId && (
+                          <div className="text-[10px] text-gray-500">
+                            Cliente: <span className="font-medium text-agencia">{clients.find(c => c.id === clientId)?.name}</span> (del selector arriba)
+                          </div>
+                        )}
+                        <div>
+                          <label className={labelCls}>{context === 'banco' ? 'Proyecto / Campaña' : 'Proyecto'}</label>
+                          <select value={reminderProjectId ?? ''}
+                            onChange={e => {
+                              const v = e.target.value ? Number(e.target.value) : null
+                              setReminderProjectId(v)
+                              // Si la tarea elegida pertenece a otro proyecto, la des-vincula.
+                              if (v && reminderTaskId) {
+                                const t = tasks.find(x => x.id === reminderTaskId)
+                                if (t && t.project_id !== v) setReminderTaskId(null)
+                              }
+                            }}
+                            className={fieldCls}>
+                            <option value="">Sin proyecto vinculado</option>
+                            {ctxProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Tarea relacionada</label>
+                          <select value={reminderTaskId ?? ''}
+                            onChange={e => setReminderTaskId(e.target.value ? Number(e.target.value) : null)}
+                            className={fieldCls}>
+                            <option value="">Sin tarea vinculada</option>
+                            {ctxTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                          </select>
+                        </div>
+                        <div className="text-[10px] text-gray-400 leading-snug">
+                          {reminderTaskId
+                            ? '🔔 Aparecerá como pseudo-tarea hija de esa tarea.'
+                            : reminderProjectId
+                              ? '🔔 Aparecerá en la lista unificada del proyecto.'
+                              : context === 'agencia' && clientId
+                                ? '🔔 Aparecerá en el panel del cliente bajo "Recordatorios".'
+                                : '🔔 Aparecerá solo en Seguimiento / Mis tareas.'}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
