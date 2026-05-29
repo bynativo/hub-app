@@ -13,7 +13,14 @@ function Tag({ children, bg, color }: { children: React.ReactNode; bg: string; c
   )
 }
 
-export function TaskItem({ task, nested = false }: { task: Task; nested?: boolean }) {
+// Colores cíclicos para el borde de indent del árbol — un color por nivel.
+// Permite distinguir visualmente la profundidad cuando hay 3+ niveles anidados.
+const LEVEL_COLORS = ['#7c3aed', '#0d9488', '#2563eb', '#d97706']
+function indentColor(level: number): string {
+  return LEVEL_COLORS[(level) % LEVEL_COLORS.length]
+}
+
+export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
   const { toggleTask, openDetail } = useStore()
   const allTasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
@@ -23,8 +30,9 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
   const overdue = overdueLabel(task.due_date)
   const { prefix, name } = splitTitle(task.title)
   const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
-  // Subtareas reales (un nivel) y recordatorios vinculados — colapsados por defecto.
-  const linked = nested ? [] : allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
+  // Subtareas reales + recordatorios vinculados — recursivo a cualquier nivel.
+  // No hay short-circuit por "nested": permite jerarquía infinita.
+  const linked = allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
   const children = linked.filter(t => !t.es_recordatorio)
   const reminders = linked.filter(t => t.es_recordatorio)
   const hasChildren = children.length > 0 || reminders.length > 0
@@ -164,8 +172,10 @@ export function TaskItem({ task, nested = false }: { task: Task; nested?: boolea
       </div>
 
       {hasChildren && expanded && (
-        <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/15 pl-2.5">
-          {children.map(c => <TaskItem key={c.id} task={c} nested />)}
+        <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 pl-2.5"
+          style={{ borderColor: indentColor(level) + '30' }}>
+          {/* Recursivo: cada hija renderiza un TaskItem con level+1, sin tope. */}
+          {children.map(c => <TaskItem key={c.id} task={c} level={level + 1} />)}
           {reminders.length > 0 && (
             <>
               <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 uppercase tracking-wider mt-1 mb-0.5">
