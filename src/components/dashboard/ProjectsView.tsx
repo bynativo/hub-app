@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { ctxColor, ctxLabel, splitTitle, nextRecurringDueDate, fmtDue } from '../../lib/helpers'
-import { STATUS_ICON, STATUS_COLOR, TIPO_AGENCIA } from '../../lib/constants'
+import { ctxColor, ctxLabel, nextRecurringDueDate, fmtDue } from '../../lib/helpers'
+import { STATUS_COLOR, TIPO_AGENCIA } from '../../lib/constants'
 import { NewProjectModal } from '../modals/NewProjectModal'
 import { ReminderRow } from '../tasks/ReminderRow'
+import { TaskItem } from '../tasks/TaskItem'
 import type { Task, Recurrente } from '../../lib/types'
 
 const PROJECT_STATUSES = ['activo', 'en pausa', 'cerrado']
@@ -15,7 +16,6 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const clients = useStore(s => s.clients)
   const recurrentes = useStore(s => s.recurrentes)
   const presentations = useStore(s => s.presentations)
-  const openDetail = useStore(s => s.openDetail)
   const openCapture = useStore(s => s.openCapture)
   const openRecurrentCreate = useStore(s => s.openRecurrentCreate)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
@@ -290,27 +290,10 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
               <div className="flex flex-col gap-1">
                 {unified.map(it => {
                   if (it.kind === 'task') {
-                    const t = it.task
-                    const stColor = STATUS_COLOR[t.status] || '#6b7280'
-                    const childReminders = tasks.filter(r => r.parent_task_id === t.id && r.es_recordatorio && !r.done && !r.archived_at)
-                    return (
-                      <div key={`t${t.id}`}>
-                        <div onClick={() => openDetail(t.id)}
-                          className={`flex items-center gap-2.5 p-2.5 rounded-lg border border-black/7 cursor-pointer hover:border-black/13 hover:shadow-sm transition-all ${t.done ? 'opacity-40' : ''}`}>
-                          <div className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 flex items-center justify-center text-[9px] ${t.done ? 'bg-success border-success text-white' : 'border-black/13'}`}>{t.done && '✓'}</div>
-                          <span className={`text-[13px] flex-1 ${t.done ? 'line-through text-gray-400' : ''}`}>
-                            {(() => { const p = splitTitle(t.title); return <>{p.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{p.prefix} |</span>}{p.name}</> })()}
-                          </span>
-                          {t.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{t.due_date.slice(5).replace('-', '/')}</span>}
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: stColor + '16', color: stColor }}>{STATUS_ICON[t.status]} {t.status}</span>
-                        </div>
-                        {childReminders.length > 0 && (
-                          <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/15 pl-2.5">
-                            {childReminders.map(r => <ReminderRow key={r.id} reminder={r} />)}
-                          </div>
-                        )}
-                      </div>
-                    )
+                    // TaskItem es recursivo → al expandir, muestra el árbol
+                    // completo (subtareas, sub-subtareas y recordatorios anidados)
+                    // con indent y colores por nivel.
+                    return <TaskItem key={`t${it.task.id}`} task={it.task} />
                   }
                   if (it.kind === 'reminder') {
                     return <ReminderRow key={`r${it.task.id}`} reminder={it.task} />

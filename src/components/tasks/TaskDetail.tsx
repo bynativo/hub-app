@@ -8,6 +8,8 @@ import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposCheck
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import { TaskAttachments } from './TaskAttachments'
+import { TaskItem } from './TaskItem'
+import { ReminderRow } from './ReminderRow'
 import type { Checklist, Task } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -36,92 +38,6 @@ function parseAction(text: string): { json: any; clean: string } | null {
     } catch { /* sigue */ }
   }
   return null
-}
-
-function SubtaskRow({ sub }: { sub: Task }) {
-  const updateTask = useStore(s => s.updateTask)
-  const toggleTask = useStore(s => s.toggleTask)
-  const openDetail = useStore(s => s.openDetail)
-  const clients = useStore(s => s.clients)
-  const subPrefix = taskPrefix(sub.context, clients.find(c => c.id === sub.client_id) || null)
-  const subParts = splitTitle(sub.title)
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState(stripPrefix(sub.title))
-  const [status, setStatus] = useState(sub.status)
-  const [due, setDue] = useState(sub.due_date || '')
-  const [hours, setHours] = useState(sub.estimated_hours != null ? String(sub.estimated_hours) : '')
-  const [notes, setNotes] = useState(sub.notes || '')
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const states = ESTADOS[sub.context] || ESTADOS.banco
-  const mark = <T,>(setter: (v: T) => void, v: T) => { setter(v); setDirty(true) }
-
-  async function save() {
-    setSaving(true)
-    await updateTask(sub.id, {
-      title: buildTitle(subPrefix, title.trim() || stripPrefix(sub.title)), status, due_date: due || null,
-      estimated_hours: hours ? Number(hours) : null, notes: notes.trim() || null,
-    })
-    setSaving(false); setDirty(false)
-  }
-
-  const subField = 'w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20'
-  const subLabel = 'text-[10px] font-mono text-gray-400 uppercase block mb-1'
-
-  return (
-    <div className="rounded-lg border border-black/7 bg-bg2">
-      <div className="flex items-center gap-2 p-2.5">
-        <div onClick={() => toggleTask(sub.id)}
-          className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] ${sub.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'}`}>
-          {sub.done && '✓'}
-        </div>
-        <span onClick={() => setOpen(o => !o)} className={`text-[13px] flex-1 cursor-pointer hover:text-claude ${sub.done ? 'line-through text-gray-400' : ''}`}>
-          {subParts.prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{subParts.prefix} |</span>}{subParts.name}
-        </span>
-        {sub.due_date && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{sub.due_date.slice(5).replace('-', '/')}</span>}
-        {sub.estimated_hours != null && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{sub.estimated_hours}h</span>}
-        <span className="text-[10px]" style={{ color: STATUS_COLOR[sub.status] }}>{STATUS_ICON[sub.status]}</span>
-        <button onClick={() => setOpen(o => !o)} className="text-gray-400 hover:text-gray-900 cursor-pointer text-[11px] w-4">{open ? '▾' : '▸'}</button>
-        <button onClick={() => openDetail(sub.id)} title="Abrir como tarea" className="text-gray-400 hover:text-claude cursor-pointer text-[11px]">↗</button>
-      </div>
-
-      {open && (
-        <div className="border-t border-black/7 p-3 flex flex-col gap-2 bg-bg3">
-          <div>
-            <label className={subLabel}>Título</label>
-            <input value={title} onChange={e => mark(setTitle, e.target.value)} className={subField} />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className={subLabel}>Estado</label>
-              <select value={status} onChange={e => mark(setStatus, e.target.value)} className={subField + ' cursor-pointer'}>
-                {states.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={subLabel}>Fecha</label>
-              <input type="date" value={due} onChange={e => mark(setDue, e.target.value)} className={subField} />
-            </div>
-            <div>
-              <label className={subLabel}>Horas est.</label>
-              <input type="number" min="0" step="0.5" value={hours} onChange={e => mark(setHours, e.target.value)} className={subField} placeholder="1" />
-            </div>
-          </div>
-          <div>
-            <label className={subLabel}>Descripción</label>
-            <textarea value={notes} onChange={e => mark(setNotes, e.target.value)} rows={2} className={subField + ' resize-y'} placeholder="Detalles de la subtarea…" />
-          </div>
-          <div className="flex justify-end">
-            <button onClick={save} disabled={!dirty || saving}
-              className="text-[11px] bg-claude text-white px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed">
-              {saving ? 'Guardando…' : dirty ? 'Guardar' : 'Guardado'}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
 }
 
 export function TaskDetail() {
@@ -894,22 +810,41 @@ Reglas del bloque:
         )}
 
         {/* SUBTAREAS */}
-        {tab === 'subtareas' && (
-          <div className="animate-fade-in">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Subtareas vinculadas</div>
-              <button onClick={() => setSubModalOpen(true)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Nueva subtarea</button>
-            </div>
-
-            {subtasks.length ? (
-              <div className="flex flex-col gap-1.5">
-                {subtasks.map(s => <SubtaskRow key={s.id} sub={s} />)}
+        {tab === 'subtareas' && (() => {
+          const directChildren = subtasks.filter(s => !s.es_recordatorio && !s.archived_at)
+          const directReminders = subtasks.filter(s => s.es_recordatorio && !s.archived_at && !s.done)
+          return (
+            <div className="animate-fade-in">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">
+                  Árbol de subtareas {directChildren.length > 0 && <span className="text-gray-300">· {directChildren.length} directas</span>}
+                </div>
+                <button onClick={() => setSubModalOpen(true)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Nueva subtarea</button>
               </div>
-            ) : (
-              <div className="text-xs text-gray-400">Sin subtareas. Agregá una o pedíselas a Claude en el chat.</div>
-            )}
-          </div>
-        )}
+
+              {/* Cada hija usa TaskItem que ya es recursivo: al expandir muestra
+                  sus propias hijas con indent y colores por nivel, al infinito. */}
+              {directChildren.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  {directChildren.map(s => <TaskItem key={s.id} task={s} />)}
+                </div>
+              ) : !directReminders.length && (
+                <div className="text-xs text-gray-400">Sin subtareas. Agregá una o pedíselas a Claude en el chat.</div>
+              )}
+
+              {directReminders.length > 0 && (
+                <div className="mt-4">
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-1.5">
+                    <span className="h-px flex-1 bg-black/7" />Recordatorios directos<span className="h-px flex-1 bg-black/7" />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {directReminders.map(r => <ReminderRow key={r.id} reminder={r} />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* CHECKLIST */}
         {tab === 'checklist' && (
