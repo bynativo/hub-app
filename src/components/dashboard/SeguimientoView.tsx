@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
 import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
@@ -249,10 +250,14 @@ function FollowupCard({ task }: { task: Task }) {
   )
 }
 
-// Fecha de la alarma de una tarea de seguimiento como YYYY-MM-DD LOCAL.
-// Prioridad: followup_at > due_date (cuando la tarea está en estado Esperando).
-// Si no hay ninguna, devuelve null y la tarea cae en "Sin fecha".
+// Fecha de la alarma como YYYY-MM-DD LOCAL.
+// Prioridad: recordatorio_at (si es_recordatorio) > followup_at > due_date
+// (cuando la tarea está en estado Esperando). Si no hay ninguna, null → "Sin fecha".
 function alarmDateISO(t: Task): string | null {
+  if (t.es_recordatorio && t.recordatorio_at) {
+    const d = new Date(t.recordatorio_at)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
   if (t.followup_at) {
     const d = new Date(t.followup_at)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -262,6 +267,7 @@ function alarmDateISO(t: Task): string | null {
 }
 
 function alarmTimeMs(t: Task): number {
+  if (t.es_recordatorio && t.recordatorio_at) return new Date(t.recordatorio_at).getTime()
   if (t.followup_at) return new Date(t.followup_at).getTime()
   if (WAITING_STATES.includes(t.status) && t.due_date) return new Date(`${t.due_date}T23:59:59`).getTime()
   return Infinity
@@ -284,14 +290,48 @@ function SectionHeader({ icon, label, count, color }: { icon: string; label: str
   )
 }
 
+type ViewMode = 'fecha' | 'estado' | 'kanban'
+const STORAGE_KEY = 'seguimiento_view_mode'
+function loadMode(): ViewMode {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY)
+    if (v === 'fecha' || v === 'estado' || v === 'kanban') return v
+  } catch { /* ignore */ }
+  return 'fecha'
+}
+
+// Columnas del Kanban por urgencia. drop ⇒ se setea la alarma (followup_at o
+// recordatorio_at según es_recordatorio) al "target" de la columna. Sin target
+// para Atrasado: no permitimos dropear ahí adrede.
+const URGENCY_COLS: { key: 'atrasado' | 'hoy' | 'semana' | 'adelante'; label: string; color: string }[] = [
+  { key: 'atrasado', label: 'Atrasado', color: '#dc2626' },
+  { key: 'hoy', label: 'Hoy', color: '#d97706' },
+  { key: 'semana', label: 'Esta semana', color: '#7c3aed' },
+  { key: 'adelante', label: 'Más adelante', color: '#6b7280' },
+]
+
+function urgencyColumn(d: string | null, today: string, nextSunday: string): typeof URGENCY_COLS[number]['key'] | 'sinfecha' {
+  if (!d) return 'sinfecha'
+  if (d < today) return 'atrasado'
+  if (d === today) return 'hoy'
+  if (d <= nextSunday) return 'semana'
+  return 'adelante'
+}
+
 export function SeguimientoView() {
   const tasks = useStore(s => s.tasks)
-  // Filtro estricto: solo tareas top-level (no recordatorios, no subtareas) con
-  // followup_at definido o en estado Esperando. Los recordatorios viven
-  // anidados bajo su padre o en "Mis tareas" según fecha. El contenido que
-  // vence hoy va a "Mis tareas", no acá.
-  const waiting = tasks.filter(t => !t.done && !t.archived_at && !t.parent_task_id && !t.es_recordatorio && (
-    !!t.followup_at || WAITING_STATES.includes(t.status)
+  const updateTask = useStore(s => s.updateTask)
+  const loadAll = useStore(s => s.loadAll)
+  const [mode, setMode] = useState<ViewMode>(loadMode)
+
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
+
+  // Filtro: tareas top-level en Esperando + TODOS los recordatorios activos
+  // (incluso los anidados — esta es la vista de seguimiento, no se duplican
+  // porque acá viven con su propio rendering y en otras vistas viven nested).
+  // El contenido due-today va a "Mis tareas", no acá.
+  const waiting = tasks.filter(t => !t.done && !t.archived_at && (
+    t.es_recordatorio || (!t.parent_task_id && !!t.followup_at) || (!t.parent_task_id && WAITING_STATES.includes(t.status))
   ))
 
   const today = todayISO()
@@ -299,32 +339,9 @@ export function SeguimientoView() {
   const dayAfterTomorrow = addDaysISO(today, 2)
   const { to: nextSunday } = nextWeekRange()
   const { from: proxMesFrom, to: proxMesTo } = nextMonthRange()
-
-  // Clasificación por categoría según la fecha de alarma. Las tareas sin
-  // alarma (estado Esperando sin followup_at ni due_date) van a una sección
-  // chica "Sin fecha definida" — un recordatorio para que el usuario les
-  // setee followup_at.
-  const vencidas: Task[] = []
-  const hoy: Task[] = []
-  const manana: Task[] = []
-  const proxSem: Task[] = []
-  const proxMes: Task[] = []
-  const sinFecha: Task[] = []
-  for (const t of waiting) {
-    const d = alarmDateISO(t)
-    if (!d) { sinFecha.push(t); continue }
-    if (d < today) vencidas.push(t)
-    else if (d === today) hoy.push(t)
-    else if (d === tomorrow) manana.push(t)
-    else if (d >= dayAfterTomorrow && d <= nextSunday) proxSem.push(t)
-    else if (d <= proxMesTo) proxMes.push(t)  // incluye gap entre nextSunday+1 y proxMesFrom
-    else sinFecha.push(t)
-  }
-  const sortByAlarm = (a: Task, b: Task) => alarmTimeMs(a) - alarmTimeMs(b)
-  vencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
-  // Nota: proxMesFrom no se usa explícitamente porque incluimos también el gap;
-  // referencia para devs que pisen este código.
   void proxMesFrom
+
+  const sortByAlarm = (a: Task, b: Task) => alarmTimeMs(a) - alarmTimeMs(b)
 
   function renderCard(t: Task) {
     const d = alarmDateISO(t)
@@ -343,52 +360,166 @@ export function SeguimientoView() {
     )
   }
 
+  // ── Modo "Por fecha" ────────────────────────────────────────────────
+  const vencidas: Task[] = []
+  const hoy: Task[] = []
+  const manana: Task[] = []
+  const proxSem: Task[] = []
+  const proxMes: Task[] = []
+  const sinFecha: Task[] = []
+  for (const t of waiting) {
+    const d = alarmDateISO(t)
+    if (!d) { sinFecha.push(t); continue }
+    if (d < today) vencidas.push(t)
+    else if (d === today) hoy.push(t)
+    else if (d === tomorrow) manana.push(t)
+    else if (d >= dayAfterTomorrow && d <= nextSunday) proxSem.push(t)
+    else if (d <= proxMesTo) proxMes.push(t)
+    else sinFecha.push(t)
+  }
+  vencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
+
+  // ── Modo "Por estado" ───────────────────────────────────────────────
+  const byEstado = [
+    { key: 'esperando',        label: '👀 En seguimiento',         filter: (t: Task) => !t.es_recordatorio && WAITING_STATES.includes(t.status) },
+    { key: 'general',          label: '🔔 Recordatorios generales', filter: (t: Task) => t.es_recordatorio && (t.tipo_recordatorio || 'general') === 'general' },
+    { key: 'seguimiento',      label: '👀 Seguimientos',            filter: (t: Task) => t.es_recordatorio && t.tipo_recordatorio === 'seguimiento' },
+    { key: 'responder_correo', label: '📧 Responder correo',        filter: (t: Task) => t.es_recordatorio && t.tipo_recordatorio === 'responder_correo' },
+    { key: 'enviar_correo',    label: '📨 Enviar correo',           filter: (t: Task) => t.es_recordatorio && t.tipo_recordatorio === 'enviar_correo' },
+  ]
+
+  // ── Modo "Kanban" ───────────────────────────────────────────────────
+  const colMap: Record<string, Task[]> = { atrasado: [], hoy: [], semana: [], adelante: [] }
+  for (const t of waiting) {
+    const col = urgencyColumn(alarmDateISO(t), today, nextSunday)
+    if (col === 'sinfecha') continue
+    colMap[col].push(t)
+  }
+  for (const k of Object.keys(colMap)) colMap[k].sort(sortByAlarm)
+
+  // Drag&drop. Al dropear en una columna, actualizamos la alarma:
+  // - Hoy → today 09:00
+  // - Esta semana → mañana 09:00 (alarma corta dentro de la semana)
+  // - Más adelante → today+14 09:00
+  // Atrasado no acepta drop (no tiene sentido mover algo "a atrasado" adrede).
+  const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [overCol, setOverCol] = useState<string | null>(null)
+  async function onDrop(colKey: string) {
+    setOverCol(null)
+    if (!draggingId || colKey === 'atrasado') { setDraggingId(null); return }
+    const t = waiting.find(x => x.id === draggingId)
+    setDraggingId(null)
+    if (!t) return
+    const target = colKey === 'hoy'
+      ? new Date(`${today}T09:00:00`).toISOString()
+      : colKey === 'semana'
+        ? new Date(`${tomorrow}T09:00:00`).toISOString()
+        : new Date(`${addDaysISO(today, 14)}T09:00:00`).toISOString()
+    if (t.es_recordatorio) {
+      await supabase.from('tasks').update({ recordatorio_at: target }).eq('id', t.id)
+    } else {
+      await updateTask(t.id, { followup_at: target })
+    }
+    await loadAll()
+  }
+
   return (
     <div className="animate-fade-in p-5">
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
-      <p className="text-gray-500 text-[13px] mb-5">Tareas esperando respuesta · {waiting.length}</p>
+      <p className="text-gray-500 text-[13px] mb-5">Tareas en seguimiento + recordatorios activos · {waiting.length}</p>
 
-      {waiting.length ? (
+      {/* Toggle 3 modos */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
+          {([
+            { v: 'fecha', l: 'Por fecha' },
+            { v: 'estado', l: 'Por estado' },
+            { v: 'kanban', l: 'Kanban' },
+          ] as { v: ViewMode; l: string }[]).map(o => (
+            <button key={o.v} onClick={() => setMode(o.v)}
+              className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
+                mode === o.v ? 'bg-bg2 text-gray-900 shadow-sm font-medium' : 'text-gray-400 hover:text-gray-600'
+              }`}>
+              {o.l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {!waiting.length ? (
+        <div className="text-center py-7 text-gray-400 text-[13px]">Nada esperando respuesta</div>
+      ) : mode === 'fecha' ? (
         <div className="max-w-[760px]">
-          {vencidas.length > 0 && (
-            <>
-              <SectionHeader icon="🔴" label="Atrasadas" count={vencidas.length} color="#dc2626" />
-              <div className="flex flex-col gap-2">{vencidas.map(renderCard)}</div>
-            </>
-          )}
-          {hoy.length > 0 && (
-            <>
-              <SectionHeader icon="📌" label="Hoy" count={hoy.length} color="#d97706" />
-              <div className="flex flex-col gap-2">{hoy.map(renderCard)}</div>
-            </>
-          )}
-          {manana.length > 0 && (
-            <>
-              <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
-              <div className="flex flex-col gap-2">{manana.map(renderCard)}</div>
-            </>
-          )}
-          {proxSem.length > 0 && (
-            <>
-              <SectionHeader icon="📅" label="Próxima semana" count={proxSem.length} />
-              <div className="flex flex-col gap-2">{proxSem.map(renderCard)}</div>
-            </>
-          )}
-          {proxMes.length > 0 && (
-            <>
-              <SectionHeader icon="🗓" label="Próximo mes" count={proxMes.length} />
-              <div className="flex flex-col gap-2">{proxMes.map(renderCard)}</div>
-            </>
-          )}
-          {sinFecha.length > 0 && (
-            <>
-              <SectionHeader icon="📭" label="Sin fecha definida" count={sinFecha.length} />
-              <div className="flex flex-col gap-2">{sinFecha.map(renderCard)}</div>
-            </>
-          )}
+          {vencidas.length > 0 && (<>
+            <SectionHeader icon="🔴" label="Atrasadas" count={vencidas.length} color="#dc2626" />
+            <div className="flex flex-col gap-2">{vencidas.map(renderCard)}</div>
+          </>)}
+          {hoy.length > 0 && (<>
+            <SectionHeader icon="📌" label="Hoy" count={hoy.length} color="#d97706" />
+            <div className="flex flex-col gap-2">{hoy.map(renderCard)}</div>
+          </>)}
+          {manana.length > 0 && (<>
+            <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
+            <div className="flex flex-col gap-2">{manana.map(renderCard)}</div>
+          </>)}
+          {proxSem.length > 0 && (<>
+            <SectionHeader icon="📅" label="Próxima semana" count={proxSem.length} />
+            <div className="flex flex-col gap-2">{proxSem.map(renderCard)}</div>
+          </>)}
+          {proxMes.length > 0 && (<>
+            <SectionHeader icon="🗓" label="Próximo mes" count={proxMes.length} />
+            <div className="flex flex-col gap-2">{proxMes.map(renderCard)}</div>
+          </>)}
+          {sinFecha.length > 0 && (<>
+            <SectionHeader icon="📭" label="Sin fecha definida" count={sinFecha.length} />
+            <div className="flex flex-col gap-2">{sinFecha.map(renderCard)}</div>
+          </>)}
+        </div>
+      ) : mode === 'estado' ? (
+        <div className="max-w-[760px]">
+          {byEstado.map(grp => {
+            const items = waiting.filter(grp.filter).sort(sortByAlarm)
+            if (!items.length) return null
+            return (
+              <div key={grp.key} className="mb-5">
+                <SectionHeader icon="" label={grp.label} count={items.length} />
+                <div className="flex flex-col gap-2">{items.map(renderCard)}</div>
+              </div>
+            )
+          })}
         </div>
       ) : (
-        <div className="text-center py-7 text-gray-400 text-[13px]">Nada esperando respuesta</div>
+        // Kanban por urgencia
+        <div className="grid grid-cols-4 gap-3">
+          {URGENCY_COLS.map(col => {
+            const items = colMap[col.key]
+            const isAtrasado = col.key === 'atrasado'
+            const dropDisabled = isAtrasado
+            return (
+              <div key={col.key}
+                onDragOver={e => { if (!dropDisabled) { e.preventDefault(); setOverCol(col.key) } }}
+                onDragLeave={() => overCol === col.key && setOverCol(null)}
+                onDrop={() => onDrop(col.key)}
+                className={`rounded-lg border p-2 min-h-[200px] transition-colors ${
+                  overCol === col.key ? 'border-claude/40 bg-claude/5' : 'border-black/7 bg-bg3'
+                } ${dropDisabled ? 'opacity-95' : ''}`}>
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <span className="text-[11px] font-mono tracking-wider uppercase" style={{ color: col.color }}>{col.label}</span>
+                  <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{items.length}</span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {items.map(t => (
+                    <div key={t.id} draggable onDragStart={() => setDraggingId(t.id)} onDragEnd={() => setDraggingId(null)}
+                      className="cursor-grab active:cursor-grabbing">
+                      <FollowupCard task={t} />
+                    </div>
+                  ))}
+                  {!items.length && <div className="text-[11px] text-gray-400 italic px-1">—</div>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
