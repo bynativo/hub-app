@@ -51,21 +51,39 @@ function normTipo(t: string): TipoTarea {
   return t === 'subtarea' ? 'subtarea' : t === 'proyecto' ? 'proyecto' : 'independiente'
 }
 
-// Inserta recursivamente el árbol de PendingSubtask con parent_task_id apuntando
-// al padre real. Cada nodo hereda context/client/project del root. Devuelve void.
+// Calcula la fecha efectiva de una PendingSubtask. Prioridad:
+//   1. dueDate absoluto (si lo escribió el usuario)
+//   2. anchorDate + dayOffset (usado en bloque "Agregar tareas al proyecto")
+//   3. null
+function resolvePendingDate(it: PendingSubtask, anchorDate: string | null): string | null {
+  if (it.dueDate) return it.dueDate
+  if (it.dayOffset != null && anchorDate) {
+    const d = new Date(`${anchorDate}T00:00:00`)
+    d.setDate(d.getDate() + it.dayOffset)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  return null
+}
+
+// Inserta recursivamente el árbol de PendingSubtask. Si parentTaskId está
+// definido, todas las hojas top-level son hijas (subtareas) — caso del toggle
+// "Es tarea padre". Si parentTaskId es null, las top-level son tareas
+// independientes del proyecto (caso del bloque "Agregar tareas al proyecto").
 async function insertPendingSubtree(opts: {
   items: PendingSubtask[]
-  parentTaskId: number
+  parentTaskId: number | null
   context: string
   clientId: number | null
   projectId: number | null
   prefix: string
+  anchorDate: string | null
 }) {
   for (const it of opts.items) {
     if (!it.title.trim()) continue
     const isReminder = it.tipo === 'recordatorio' || it.tipo === 'responder_correo'
     const isContent = it.tipo === 'contenido' || it.tipo === 'influencer'
     const isInfluencer = it.tipo === 'influencer'
+    const effectiveDate = resolvePendingDate(it, opts.anchorDate)
     const { data } = await supabase.from('tasks').insert({
       title: buildTitle(opts.prefix, it.title.trim()),
       context: opts.context,
@@ -76,9 +94,9 @@ async function insertPendingSubtree(opts: {
       priority: it.priority,
       origin: 'propia',
       status: isReminder ? 'Recordatorio' : 'Inbox',
-      due_date: (!isReminder && it.dueDate) ? it.dueDate : null,
+      due_date: (!isReminder && effectiveDate) ? effectiveDate : null,
       es_recordatorio: isReminder,
-      recordatorio_at: (isReminder && it.dueDate) ? new Date(`${it.dueDate}T09:00:00`).toISOString() : null,
+      recordatorio_at: (isReminder && effectiveDate) ? new Date(`${effectiveDate}T09:00:00`).toISOString() : null,
       tipo_recordatorio: it.tipo === 'responder_correo' ? 'responder_correo' : (isReminder ? 'general' : null),
       es_influencer: isContent ? isInfluencer : null,
       requested_at: todayISO(),
@@ -93,6 +111,7 @@ async function insertPendingSubtree(opts: {
         clientId: opts.clientId,
         projectId: opts.projectId,
         prefix: opts.prefix,
+        anchorDate: opts.anchorDate,
       })
     }
   }
@@ -489,12 +508,16 @@ type PendingSubtask = {
   tipo: SubtaskType
   priority: 'alta' | 'media' | 'baja'
   dueDate: string
+  // dayOffset: solo se usa en el bloque "Agregar tareas al proyecto" (punto 3).
+  // Si dueDate está vacío y dayOffset tiene valor, se calcula
+  // due_date = anchorDate + dayOffset (anchorDate = fecha de la tarea principal o hoy).
+  dayOffset: number | null
   children: PendingSubtask[]
 }
 
 let _pendingId = 1
 function makeEmptySubtask(): PendingSubtask {
-  return { id: `s${_pendingId++}`, title: '', tipo: 'tarea', priority: 'media', dueDate: '', children: [] }
+  return { id: `s${_pendingId++}`, title: '', tipo: 'tarea', priority: 'media', dueDate: '', dayOffset: null, children: [] }
 }
 
 const SUBTASK_TYPES: { v: SubtaskType; label: string }[] = [
@@ -507,13 +530,16 @@ const SUBTASK_TYPES: { v: SubtaskType; label: string }[] = [
 
 // Fila editable de una subtarea pending. Recursiva: las hijas se renderizan
 // con el mismo componente, indentadas. Cada nivel tiene su propio borde.
+// showOffset agrega un input "Offset (días)" — usado en el bloque
+// "Agregar tareas al proyecto" para definir fechas relativas a la tarea principal.
 function SubtaskRow({
-  item, level, onChange, onRemove,
+  item, level, onChange, onRemove, showOffset = false,
 }: {
   item: PendingSubtask
   level: number
   onChange: (next: PendingSubtask) => void
   onRemove: () => void
+  showOffset?: boolean
 }) {
   const borderColors = ['#7c3aed', '#0d9488', '#2563eb', '#d97706']
   const indentBorder = borderColors[level % borderColors.length] + '30'
@@ -536,7 +562,7 @@ function SubtaskRow({
           <button type="button" onClick={onRemove}
             className="text-[12px] text-danger hover:text-white hover:bg-danger px-1.5 py-0.5 rounded cursor-pointer">×</button>
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className={`grid gap-1.5 ${showOffset ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <select value={item.tipo} onChange={e => onChange({ ...item, tipo: e.target.value as SubtaskType })}
             className={fld + ' cursor-pointer'}>
             {SUBTASK_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
@@ -547,7 +573,14 @@ function SubtaskRow({
             <option value="media">🟡 Media</option>
             <option value="baja">🟢 Baja</option>
           </select>
-          <input type="date" value={item.dueDate} onChange={e => onChange({ ...item, dueDate: e.target.value })} className={fld} />
+          <input type="date" value={item.dueDate} onChange={e => onChange({ ...item, dueDate: e.target.value })} className={fld} title="Fecha absoluta" />
+          {showOffset && (
+            <input type="number" placeholder="Offset (días)"
+              value={item.dayOffset ?? ''}
+              onChange={e => onChange({ ...item, dayOffset: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+              className={fld}
+              title="Días respecto a la fecha de la tarea principal (D-30, D-7, D+0, D+14…)" />
+          )}
         </div>
         <button type="button" onClick={addChild}
           className="text-[10px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors self-start">
@@ -557,7 +590,7 @@ function SubtaskRow({
       {item.children.length > 0 && (
         <div className="ml-4 mt-1.5 flex flex-col gap-1.5 border-l-2 pl-2.5" style={{ borderColor: indentBorder }}>
           {item.children.map((c, i) => (
-            <SubtaskRow key={c.id} item={c} level={level + 1}
+            <SubtaskRow key={c.id} item={c} level={level + 1} showOffset={showOffset}
               onChange={next => updateChild(i, next)}
               onRemove={() => removeChild(i)} />
           ))}
@@ -602,6 +635,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   // "Es tarea padre — agregar subtareas ahora" (solo aplica a tipo independiente).
   const [isParent, setIsParent] = useState(false)
   const [pendingSubtasks, setPendingSubtasks] = useState<PendingSubtask[]>([])
+  // "Agregar más tareas al proyecto" (solo aplica a tipo proyecto con projectId).
+  const [addingProjectTasks, setAddingProjectTasks] = useState(false)
+  const [projectTasks, setProjectTasks] = useState<PendingSubtask[]>([])
   // Tipos de contenido por perfil — un array de {tipo, cantidad} por perfil.
   // Default por perfil: 1 unidad de 'colab'. Se sincroniza con numPerfiles.
   const [perfilesTipos, setPerfilesTipos] = useState<TipoConCantidad[][]>([[{ tipo: 'colab', cantidad: 1 }]])
@@ -760,6 +796,21 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         clientId,
         projectId: resolvedProjectId,
         prefix: titlePrefix,
+        anchorDate: dueDate || null,
+      })
+    }
+    // Tipo proyecto con "Agregar tareas al proyecto": las project tasks van
+    // como top-level (parent_task_id=null) con project_id; cada una con sus
+    // subtareas propias vía recursión.
+    if (!reminder && tipo === 'proyecto' && resolvedProjectId && addingProjectTasks && projectTasks.length) {
+      await insertPendingSubtree({
+        items: projectTasks,
+        parentTaskId: null,
+        context,
+        clientId,
+        projectId: resolvedProjectId,
+        prefix: titlePrefix,
+        anchorDate: dueDate || null,
       })
     }
     await loadAll()
@@ -1487,6 +1538,49 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                     {ctxProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     <option value="__new__">+ Crear nuevo proyecto / campaña</option>
                   </select>
+                </div>
+              )}
+
+              {/* "Agregar más tareas a este proyecto" — solo cuando hay
+                  proyecto resuelto (existente o recién creado). Cada tarea
+                  puede tener subtareas anidadas (mismo árbol que punto 2). */}
+              {tipo === 'proyecto' && projectId && (
+                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button"
+                      onClick={() => {
+                        const next = !addingProjectTasks
+                        setAddingProjectTasks(next)
+                        if (next && !projectTasks.length) setProjectTasks([makeEmptySubtask()])
+                      }}
+                      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${addingProjectTasks ? 'bg-claude' : 'bg-bg4'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${addingProjectTasks ? 'left-5.5' : 'left-0.5'}`} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">Agregar más tareas a este proyecto ahora</div>
+                      <div className="text-[11px] text-gray-400">Cada tarea puede tener sus propias subtareas anidadas.</div>
+                    </div>
+                  </label>
+                  {addingProjectTasks && (
+                    <div className="flex flex-col gap-2 mt-1">
+                      <div className="text-[10px] font-mono text-gray-400 tracking-wider uppercase">
+                        Tareas del proyecto ({projectTasks.length})
+                      </div>
+                      {projectTasks.map((t, i) => (
+                        <SubtaskRow key={t.id} item={t} level={0} showOffset
+                          onChange={next => setProjectTasks(prev => prev.map((x, j) => j === i ? next : x))}
+                          onRemove={() => setProjectTasks(prev => prev.filter((_, j) => j !== i))} />
+                      ))}
+                      <button type="button"
+                        onClick={() => setProjectTasks(prev => [...prev, makeEmptySubtask()])}
+                        className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-3 py-1.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors self-start">
+                        + Agregar tarea al proyecto
+                      </button>
+                      <div className="text-[10px] text-gray-400 leading-snug">
+                        Offset = días respecto a la fecha de la tarea principal arriba (D-30, D-7, D+0, D+14…). Si dejás fecha en blanco y offset también, la tarea queda sin fecha.
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               </>)}
