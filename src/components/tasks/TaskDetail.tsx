@@ -40,6 +40,110 @@ function parseAction(text: string): { json: any; clean: string } | null {
   return null
 }
 
+// Mini-modal para crear N perfiles de influencer como subtareas bajo una
+// tarea existente. Inspirado en el flujo "Solicitar influencers" del
+// CaptureModal pero standalone — no crea brief ni recordatorio.
+function CreatePerfilesMiniModal({
+  parentTask, onClose, onCreated,
+}: {
+  parentTask: Task
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const clients = useStore(s => s.clients)
+  const loadAll = useStore(s => s.loadAll)
+  const showToast = useStore(s => s.showToast)
+  const [num, setNum] = useState(1)
+  const [tiposPerfiles, setTiposPerfiles] = useState<TipoConCantidad[][]>([[{ tipo: 'colab', cantidad: 1 }]])
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    const prefix = taskPrefix(parentTask.context, clients.find(c => c.id === parentTask.client_id) || null)
+    const parentClean = stripPrefix(parentTask.title).split(' — ')[0] || stripPrefix(parentTask.title)
+    const rows = Array.from({ length: num }, (_, i) => {
+      const tipos = tiposPerfiles[i] || []
+      return {
+        title: buildTitle(prefix, `Perfil ${i + 1} — ${parentClean}`),
+        context: parentTask.context,
+        client_id: parentTask.client_id,
+        project_id: parentTask.project_id,
+        parent_task_id: parentTask.id,
+        task_type: 'influencer',
+        priority: 'media',
+        origin: 'propia',
+        status: 'Inbox',
+        due_date: parentTask.due_date,
+        requested_at: new Date().toISOString().slice(0, 10),
+        es_influencer: true,
+        influencer_tipos: tipos.length ? tipos : null,
+        tipo_publicacion: tipos[0]?.tipo || 'colab',
+        done: false,
+        cats: [], plan: [], meeting_agenda: [],
+      }
+    })
+    const { error } = await supabase.from('tasks').insert(rows)
+    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    await loadAll()
+    showToast(`✓ ${num} perfil${num === 1 ? '' : 'es'} creado${num === 1 ? '' : 's'}`, { durationMs: 2500 })
+    setSaving(false)
+    onCreated()
+    onClose()
+  }
+
+  const lbl = 'text-[10px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
+  const fld = 'w-full bg-bg3 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20'
+
+  return (
+    <div className="fixed inset-0 z-[340] flex items-start justify-center pt-12 bg-black/40 backdrop-blur-sm overflow-y-auto" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[520px] max-w-[94vw] shadow-lg mb-10">
+        <div className="font-serif text-lg font-light mb-1">Crear perfiles de influencer</div>
+        <p className="text-[12px] text-gray-500 mb-4">Las subtareas se crean bajo <span className="font-medium">{stripPrefix(parentTask.title)}</span> con task_type='influencer'. Después podés confirmar cada perfil y generar sus subtareas de contenido.</p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className={lbl}>¿Cuántos perfiles?</label>
+            <input type="number" min={1} value={num}
+              onChange={e => {
+                const n = Math.max(1, parseInt(e.target.value, 10) || 1)
+                setNum(n)
+                setTiposPerfiles(prev => {
+                  if (n <= prev.length) return prev.slice(0, n)
+                  const extra = Array.from({ length: n - prev.length }, () => [{ tipo: 'colab', cantidad: 1 }] as TipoConCantidad[])
+                  return [...prev, ...extra]
+                })
+              }}
+              className={fld} />
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <label className={lbl}>Tipos de contenido por perfil</label>
+            {Array.from({ length: num }).map((_, i) => (
+              <div key={i} className="border border-black/7 bg-bg2 rounded-md p-2.5">
+                <div className="text-[11px] font-mono text-claude tracking-wider uppercase mb-1.5">Perfil {i + 1}</div>
+                <TiposChecklist
+                  value={tiposPerfiles[i] || []}
+                  onChange={next => setTiposPerfiles(prev => {
+                    const arr = [...prev]
+                    while (arr.length < num) arr.push([])
+                    arr[i] = next
+                    return arr
+                  })}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end mt-5">
+          <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
+          <button onClick={save} disabled={saving}
+            className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            {saving ? 'Creando…' : `Crear ${num} perfil${num === 1 ? '' : 'es'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function TaskDetail() {
   const tasks = useStore(s => s.tasks)
   const contacts = useStore(s => s.contacts)
@@ -70,6 +174,9 @@ export function TaskDetail() {
   const [profileRequestDate, setProfileRequestDate] = useState('')
   const [influencerTipos, setInfluencerTipos] = useState<TipoConCantidad[]>([])
   const [recordatorioAt, setRecordatorioAt] = useState('')
+  // Toggles convertir tipo de tarea desde Info. Inicializados desde task en useEffect.
+  const [isContent, setIsContent] = useState(false)
+  const [isReminder, setIsReminder] = useState(false)
   const [isInfluencer, setIsInfluencer] = useState(false)
   const [pubType, setPubType] = useState('propia')
   const [infName, setInfName] = useState('')
@@ -93,6 +200,11 @@ export function TaskDetail() {
   const [confirmDel, setConfirmDel] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmingPerfil, setConfirmingPerfil] = useState(false)
+  // Modal de confirmación al desactivar un tipo con datos vinculados.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<{ kind: 'contenido' | 'influencer' | 'recordatorio'; message: string; onConfirm: () => void } | null>(null)
+  // Estado de aviso/acción al activar "Es influencer".
+  const [influencerAviso, setInfluencerAviso] = useState<'has_content_children' | 'can_create_perfiles' | null>(null)
+  const [showCreatePerfiles, setShowCreatePerfiles] = useState(false)
 
   // Chat
   const [messages, setMessages] = useState<Msg[]>([])
@@ -122,7 +234,10 @@ export function TaskDetail() {
     } else {
       setInfluencerTipos([])
     }
+    setIsContent(task.task_type === 'contenido')
+    setIsReminder(!!task.es_recordatorio)
     setIsInfluencer(!!task.es_influencer)
+    setInfluencerAviso(null)
     setPubType(task.tipo_publicacion || task.content_pub_type || 'propia')
     setInfName(task.influencer_nombre || task.influencer_name || '')
     setInfHandle(task.influencer_handle || '')
@@ -147,7 +262,8 @@ export function TaskDetail() {
   const ctxStates = ESTADOS[task.context] || ESTADOS.banco
   const titlePrefix = taskPrefix(task.context, clients.find(c => c.id === task.client_id) || null)
   const headerTitle = splitTitle(task.title)
-  const isContent = task.task_type === 'contenido'
+  // isContent / isReminder ahora son state local (toggleable desde Info).
+  // isEmailReply / isPerfil siguen derivados de task_type (no editables).
   const pubWarn = isContent ? deliveryWarning(dueDate || null, publishDate || null) : null
   const recWarn = isContent ? recordingWarning(recordingDate || null, dueDate || null) : null
   const isEmailReply = task.task_type === 'responder_email'
@@ -168,6 +284,90 @@ export function TaskDetail() {
 
   function setInfo<T>(setter: (v: T) => void, v: T) { setter(v); setDirty(true) }
 
+  // ── Conversiones de tipo desde Info ────────────────────────────────
+  // Toggle "Es contenido": al desactivar con subtareas de contenido o slide
+  // vinculada, pide confirmación. Al desactivar también apaga "Es influencer".
+  function toggleContent() {
+    if (isContent) {
+      const hasContentChildren = subtasks.some(s => s.task_type === 'contenido' && !s.archived_at)
+      if (hasContentChildren) {
+        setConfirmDeactivate({
+          kind: 'contenido',
+          message: 'Esta tarea tiene subtareas de contenido vinculadas. Si desactivás "Es contenido", las subtareas se mantienen pero esta tarea pierde su rol de contenido y no aparece más en la grilla / calendario RRSS.',
+          onConfirm: () => {
+            setInfo(setIsContent, false)
+            if (isInfluencer) setInfo(setIsInfluencer, false)
+            setInfluencerAviso(null)
+            setConfirmDeactivate(null)
+          },
+        })
+      } else {
+        setInfo(setIsContent, false)
+        if (isInfluencer) setInfo(setIsInfluencer, false)
+        setInfluencerAviso(null)
+      }
+    } else {
+      setInfo(setIsContent, true)
+    }
+  }
+  // Toggle "Es influencer": al activar auto-activa "Es contenido" y muestra
+  // aviso/acción según si ya hay subtareas de contenido. Al desactivar con
+  // datos vinculados, pide confirmación.
+  function toggleInfluencer() {
+    if (isInfluencer) {
+      const hasPerfilChildren = subtasks.some(s => s.task_type === 'influencer' && !s.archived_at)
+      const hasData = !!(infName || '').trim() || !!(infHandle || '').trim() || !!(infAgency || '').trim()
+      if (hasPerfilChildren || hasData) {
+        setConfirmDeactivate({
+          kind: 'influencer',
+          message: hasPerfilChildren
+            ? 'Esta tarea tiene subtareas de perfil vinculadas. Si desactivás "Es influencer", las subtareas se mantienen pero los datos del influencer (nombre, handle, agencia, tipo) se vacían en esta tarea.'
+            : 'Vas a desactivar el modo influencer. Los campos (nombre, handle, agencia, tipo de publicación) se vacían en esta tarea.',
+          onConfirm: () => {
+            setInfo(setIsInfluencer, false)
+            setInfluencerAviso(null)
+            setConfirmDeactivate(null)
+          },
+        })
+      } else {
+        setInfo(setIsInfluencer, false)
+        setInfluencerAviso(null)
+      }
+    } else {
+      setInfo(setIsInfluencer, true)
+      if (!isContent) setInfo(setIsContent, true)
+      const hasContentChildren = subtasks.some(s => s.task_type === 'contenido' && !s.archived_at)
+      setInfluencerAviso(hasContentChildren ? 'has_content_children' : 'can_create_perfiles')
+    }
+  }
+  // Toggle "Es recordatorio": al desactivar con recordatorio_at definido pide
+  // confirmación. Al activar setea recordatorio_at a hoy 09:00 si está vacío.
+  function toggleReminderType() {
+    if (isReminder) {
+      const hasData = !!task?.recordatorio_at
+      if (hasData) {
+        setConfirmDeactivate({
+          kind: 'recordatorio',
+          message: 'Vas a convertir esto en tarea normal. La fecha y hora del recordatorio se pierde.',
+          onConfirm: () => {
+            setInfo(setIsReminder, false)
+            setInfo(setRecordatorioAt, '')
+            setConfirmDeactivate(null)
+          },
+        })
+      } else {
+        setInfo(setIsReminder, false)
+      }
+    } else {
+      setInfo(setIsReminder, true)
+      if (!recordatorioAt) {
+        const d = new Date()
+        const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T09:00`
+        setInfo(setRecordatorioAt, dt)
+      }
+    }
+  }
+
   async function saveInfo() {
     if (!task) return
     setSavingInfo(true)
@@ -181,8 +381,16 @@ export function TaskDetail() {
     const derivedTipoPub = isPerfil
       ? (influencerTipos[0]?.tipo || pubType || 'colab')
       : pubType
+    // task_type: si el usuario activa/desactiva isContent, mover entre
+    // 'contenido' e 'independiente'. Preservar tipos especiales
+    // (solicitud_influencers / influencer / responder_email).
+    const preservedTypes = ['solicitud_influencers', 'influencer', 'responder_email']
+    const newTaskType = preservedTypes.includes(task.task_type)
+      ? task.task_type
+      : (isContent ? 'contenido' : 'independiente')
     await updateTask(task.id, {
       title: buildTitle(titlePrefix, title.trim() || stripPrefix(task.title)), priority, due_date: dueDate || null,
+      task_type: newTaskType,
       publish_date: isContent ? (publishDate || null) : null,
       recording_date: isContent ? (recordingDate || null) : null,
       profile_request_date: (isContent && isInfluencer) ? (profileRequestDate || null) : null,
@@ -193,7 +401,8 @@ export function TaskDetail() {
       influencer_handle: saveInflFields ? (infHandle.trim() || null) : null,
       influencer_agencia: saveInflFields ? (infAgency.trim() || null) : null,
       content_format: isContent ? (contentFormat || null) : null,
-      ...(task.es_recordatorio ? { recordatorio_at: recordatorioAt ? new Date(recordatorioAt).toISOString() : null } : {}),
+      es_recordatorio: isReminder,
+      recordatorio_at: isReminder && recordatorioAt ? new Date(recordatorioAt).toISOString() : null,
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
     }, 'Edición de tarea')
@@ -519,6 +728,62 @@ Reglas del bloque:
               </div>
             </div>
 
+            {/* "Tipo de tarea" — convertir tipo en cualquier momento. Oculto
+                para task_type='influencer' (perfil) y 'solicitud_influencers':
+                esos tipos especiales se gestionan por su propio panel. */}
+            {!isPerfil && task.task_type !== 'solicitud_influencers' && !isEmailReply && (() => {
+              const togg = (on: boolean) => `w-10 h-5 rounded-full relative transition-colors shrink-0 ${on ? 'bg-claude' : 'bg-bg4'}`
+              const knob = (on: boolean) => `w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${on ? 'left-5.5' : 'left-0.5'}`
+              return (
+                <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
+                  <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Tipo de tarea</div>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={toggleContent} className={togg(isContent)}>
+                      <div className={knob(isContent)} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">🎬 Es contenido</div>
+                      <div className="text-[11px] text-gray-400">Activa tab Slide, fechas de contenido y vínculo a presentación.</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={toggleInfluencer} className={togg(isInfluencer)}>
+                      <div className={knob(isInfluencer)} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">⭐ Es influencer</div>
+                      <div className="text-[11px] text-gray-400">Activa campos de influencer. Al activar, "Es contenido" se enciende automáticamente.</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={toggleReminderType} className={togg(isReminder)}>
+                      <div className={knob(isReminder)} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">🔔 Es recordatorio</div>
+                      <div className="text-[11px] text-gray-400">Convierte en recordatorio. Fecha/hora abajo (auto-completada con hoy 9:00).</div>
+                    </div>
+                  </label>
+
+                  {/* Aviso al activar "Es influencer" */}
+                  {influencerAviso === 'has_content_children' && (
+                    <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
+                      ⚠ Esta tarea ya tiene subtareas de contenido vinculadas — los datos del influencer se aplican a esta tarea madre.
+                    </div>
+                  )}
+                  {influencerAviso === 'can_create_perfiles' && (
+                    <div className="flex items-center justify-between gap-2 bg-claude/5 border border-claude/15 rounded-md px-2.5 py-1.5">
+                      <span className="text-[11px] text-gray-600">¿Querés generar subtareas de perfil ahora?</span>
+                      <button type="button" onClick={() => setShowCreatePerfiles(true)}
+                        className="text-[11px] text-claude bg-claude/10 border border-claude/25 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude hover:text-white transition-colors font-medium">
+                        + Crear perfiles de influencer
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
             <div>
               <label className={labelCls}>Estado</label>
               <div className="flex gap-1.5 flex-wrap">
@@ -549,7 +814,7 @@ Reglas del bloque:
               </div>
             </div>
 
-            {task.es_recordatorio && (
+            {isReminder && (
               <div>
                 <label className={labelCls}>🔔 Fecha y hora del recordatorio</label>
                 <input type="datetime-local" value={recordatorioAt} onChange={e => setInfo(setRecordatorioAt, e.target.value)} className={fieldCls} />
@@ -627,13 +892,11 @@ Reglas del bloque:
 
             {isContent && (
               <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
-                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Influencer / tipo de publicación</div>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <button type="button" onClick={() => setInfo(setIsInfluencer, !isInfluencer)} className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isInfluencer ? 'bg-claude' : 'bg-bg4'}`}>
-                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isInfluencer ? 'left-5.5' : 'left-0.5'}`} />
-                  </button>
-                  <span className="text-[13px]">¿Involucra influencer externo?</span>
-                </label>
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">
+                  {isInfluencer ? 'Influencer / tipo de publicación' : 'Formato del contenido'}
+                </div>
+                {/* El toggle "Es influencer" vive arriba en "Tipo de tarea".
+                    Acá solo mostramos los campos cuando isInfluencer está ON. */}
                 {isInfluencer && (
                   <>
                     <div>
@@ -1017,6 +1280,29 @@ Reglas del bloque:
       {subModalOpen && (
         <CaptureModal onClose={() => setSubModalOpen(false)}
           preselectContext={task.context} preselectClientId={task.client_id} preselectParentId={task.id} />
+      )}
+
+      {confirmDeactivate && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmDeactivate(null) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[440px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">
+              Desactivar {confirmDeactivate.kind === 'contenido' ? '"Es contenido"' : confirmDeactivate.kind === 'influencer' ? '"Es influencer"' : '"Es recordatorio"'}
+            </div>
+            <p className="text-[13px] text-gray-500 mb-4">{confirmDeactivate.message}</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDeactivate(null)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
+              <button onClick={() => confirmDeactivate.onConfirm()} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer">Sí, desactivar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreatePerfiles && (
+        <CreatePerfilesMiniModal
+          parentTask={task}
+          onClose={() => setShowCreatePerfiles(false)}
+          onCreated={() => { setInfluencerAviso('has_content_children') }}
+        />
       )}
 
       {confirmingPerfil && (() => {
