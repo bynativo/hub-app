@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
-import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR, STATUS_ICON } from '../../lib/constants'
-import { ctxColor, splitTitle, stripPrefix, clientBadge } from '../../lib/helpers'
+import { KANBAN_GROUPS, ESTADOS, STATUS_COLOR } from '../../lib/constants'
+import { ctxColor, splitTitle, clientBadge } from '../../lib/helpers'
 import type { Task, Project } from '../../lib/types'
 
 // Estado destino al soltar una tarea en una columna universal:
@@ -9,23 +9,6 @@ import type { Task, Project } from '../../lib/types'
 function targetStatus(context: string, groupStatuses: string[]): string {
   const ctxStates = ESTADOS[context] || ESTADOS.banco
   return groupStatuses.find(s => ctxStates.includes(s)) || groupStatuses[0]
-}
-
-// Subtarea anidada dentro de la tarjeta padre: muestra su propio estado.
-function NestedSub({ sub }: { sub: Task }) {
-  const openDetail = useStore(s => s.openDetail)
-  const stColor = STATUS_COLOR[sub.status] || '#6b7280'
-  return (
-    <div
-      onClick={e => { e.stopPropagation(); openDetail(sub.id) }}
-      className={`flex items-center gap-1.5 bg-bg3 border border-black/7 rounded-md px-2 py-1 cursor-pointer hover:border-black/13 transition-colors ${sub.done ? 'opacity-50' : ''}`}
-    >
-      <span className="text-[10px] shrink-0" style={{ color: stColor }}>{STATUS_ICON[sub.status] || '○'}</span>
-      <span className={`text-[11px] leading-tight flex-1 truncate ${sub.done ? 'line-through text-gray-400' : 'text-gray-600'}`}>{stripPrefix(sub.title)}</span>
-      {sub.due_date && <span className="text-[9px] font-mono px-1 py-px rounded bg-bg4 text-gray-400 shrink-0">{sub.due_date.slice(5).replace('-', '/')}</span>}
-      <span className="text-[9px] font-mono shrink-0" style={{ color: stColor }}>{sub.status}</span>
-    </div>
-  )
 }
 
 function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
@@ -75,14 +58,13 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{task.due_date.slice(5).replace('-', '/')}</span>
         )}
         {subs.length > 0 && (
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">✓ {doneSubs}/{subs.length}</span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">
+            {doneSubs > 0 ? `${doneSubs}/${subs.length}` : `${subs.length}`} subtarea{subs.length === 1 ? '' : 's'}
+          </span>
         )}
       </div>
-      {subs.length > 0 && (
-        <div className="flex flex-col gap-1 mt-2 pl-[13px]">
-          {subs.map(s => <NestedSub key={s.id} sub={s} />)}
-        </div>
-      )}
+      {/* Las hijas NO se renderizan dentro del card — click en card abre el
+          panel de detalle con el árbol completo. El contador arriba lo informa. */}
     </div>
   )
 }

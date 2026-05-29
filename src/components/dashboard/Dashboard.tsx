@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
-import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange } from '../../lib/helpers'
+import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange, isShownAsTopLevel } from '../../lib/helpers'
 import { KANBAN_GROUPS } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
@@ -72,15 +72,17 @@ export function Dashboard() {
   useEffect(() => { saveFilters('mis_tareas_type_filters', typeFilters) }, [typeFilters])
   useEffect(() => { saveFilters('mis_tareas_context_filters', ctxFilters) }, [ctxFilters])
 
-  // Set base de tareas activas (incluye subtareas con due_date propio para que no
-  // queden invisibles; excluye recordatorios — esos viven anidados bajo su padre).
-  // Aplicamos los filtros de tipo + contexto encima.
+  // Set base de tareas activas (top-level por defecto; las hijas se ven al
+  // expandir su padre). Excepción: hija con due_date distinto a la padre se
+  // muestra también en su sección con badge "Parte de …". Excluye recordatorios.
+  // Aplica filtros de tipo + contexto.
   const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio
+    && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
-  // Base más amplia para los modos por estado / kanban: incluye también las
-  // archivadas (status en CLOSING_STATES) para que aparezcan en la columna
-  // "Cerrado". Sigue excluyendo done (checkbox) y recordatorios.
+  // Base para Por estado / Kanban: incluye también archivadas para mostrar
+  // la columna Cerrado. Mismas reglas top-level.
   const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio
+    && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
   const showRecurrentes = generalIncludesRecurrentes(typeFilters)
 

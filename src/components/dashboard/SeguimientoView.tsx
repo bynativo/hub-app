@@ -331,13 +331,12 @@ export function SeguimientoView() {
   useEffect(() => { saveFilters('seguimiento_type_filters', typeFilters) }, [typeFilters])
   useEffect(() => { saveFilters('seguimiento_context_filters', ctxFilters) }, [ctxFilters])
 
-  // Filtro: tareas top-level en Esperando + TODOS los recordatorios activos
-  // (incluso los anidados — esta es la vista de seguimiento, no se duplican
-  // porque acá viven con su propio rendering y en otras vistas viven nested).
-  // El contenido due-today va a "Mis tareas", no acá.
-  // Aplica también filtros de tipo (👀/🔔/📧/📨) y contexto.
-  const waiting = tasks.filter(t => !t.done && !t.archived_at && (
-    t.es_recordatorio || (!t.parent_task_id && !!t.followup_at) || (!t.parent_task_id && WAITING_STATES.includes(t.status))
+  // Filtro: solo top-level (no nested) — recordatorios nested viven bajo
+  // su tarea padre. Para top-level: reminders OR tareas con followup_at OR
+  // tareas en estado Esperando. El contenido due-today va a "Mis tareas",
+  // no acá. Aplica filtros de tipo (👀/🔔/📧/📨) y contexto.
+  const waiting = tasks.filter(t => !t.done && !t.archived_at && !t.parent_task_id && (
+    t.es_recordatorio || !!t.followup_at || WAITING_STATES.includes(t.status)
   ) && matchesSeguimientoType(t, typeFilters) && matchesContext(t, ctxFilters))
 
   const today = todayISO()

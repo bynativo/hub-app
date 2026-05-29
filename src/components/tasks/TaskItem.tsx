@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge, vaAGrilla } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
@@ -46,6 +46,14 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
   const perfilConfirmado = isPerfil
     && !!(task.influencer_nombre || task.influencer_name)?.trim()
     && !!(task.influencer_handle || '').trim()
+  // Tarea de contenido que va a la grilla RRSS (influencer colab o solo_contenido).
+  const enGrilla = task.task_type === 'contenido' && vaAGrilla(task.tipo_publicacion || task.content_pub_type)
+  // Cuando se renderiza como top-level (level=0) pero tiene parent_task_id,
+  // significa que aparece en una sección porque su fecha difiere de la del
+  // padre — mostramos un badge "parte de" indicando la madre.
+  const orphanDisplayParent = level === 0 && task.parent_task_id
+    ? allTasks.find(p => p.id === task.parent_task_id)
+    : null
 
   return (
     <div>
@@ -134,6 +142,20 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
 
             {isSolicitud && (
               <Tag bg="rgba(124,58,237,0.10)" color="#7c3aed">🎬 Solicitud influencers</Tag>
+            )}
+
+            {/* "📅 En grilla" — contenido (incluido influencer colab/solo_contenido)
+                que va al calendario RRSS. Útil para distinguir piezas de grilla
+                de las que viven solo en cuenta del influencer. */}
+            {enGrilla && (
+              <Tag bg="rgba(13,148,136,0.10)" color="#0d9488">📅 En grilla</Tag>
+            )}
+
+            {/* Hija que aparece top-level por tener fecha distinta a la padre. */}
+            {orphanDisplayParent && (
+              <Tag bg="var(--color-bg4)" color="#6b6860">
+                <span title={orphanDisplayParent.title}>↳ Parte de {splitTitle(orphanDisplayParent.title).name}</span>
+              </Tag>
             )}
 
             {(() => {
