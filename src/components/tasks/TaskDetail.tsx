@@ -330,6 +330,7 @@ export function TaskDetail() {
   const currentTaskId = useStore(s => s.currentTaskId)
   const closeDetail = useStore(s => s.closeDetail)
   const openDetail = useStore(s => s.openDetail)
+  const openProjectDetail = useStore(s => s.openProjectDetail)
   const updateTaskStatus = useStore(s => s.updateTaskStatus)
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
@@ -919,9 +920,16 @@ Reglas del bloque:
       {/* Header */}
       <div className="p-4 pb-3 border-b border-black/7 flex items-start gap-2.5 shrink-0 bg-bg2">
         <div className="flex-1 min-w-0">
-          {task.parent_task_id && (
-            <button onClick={() => openDetail(task.parent_task_id!)} className="text-[11px] text-claude hover:underline mb-1 cursor-pointer">↑ ver tarea padre</button>
-          )}
+          <div className="flex items-center gap-3 flex-wrap mb-1">
+            {task.parent_task_id && (
+              <button onClick={() => openDetail(task.parent_task_id!)} className="text-[11px] text-claude hover:underline cursor-pointer">↑ ver tarea padre</button>
+            )}
+            {task.project_id && (
+              <button onClick={() => openProjectDetail(task.project_id!)} className="text-[11px] text-claude hover:underline cursor-pointer">
+                📁 ver proyecto{task.projects?.name ? `: ${task.projects.name}` : ''}
+              </button>
+            )}
+          </div>
           <div className="font-serif text-[17px] font-light mb-1.5 leading-snug">
             {headerTitle.prefix && <span className="font-mono text-[13px] text-claude/70 mr-1">{headerTitle.prefix} |</span>}
             {headerTitle.name}
