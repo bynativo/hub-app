@@ -13,6 +13,7 @@ import { SeguimientoView } from './components/dashboard/SeguimientoView'
 import { ClientesView } from './components/dashboard/ClientesView'
 import { ContactsView } from './components/dashboard/ContactsView'
 import { TaskDetail } from './components/tasks/TaskDetail'
+import { ProjectDetail } from './components/projects/ProjectDetail'
 import { PresentationsView } from './components/presentations/PresentationsView'
 import { PresentationDetail } from './components/presentations/PresentationDetail'
 import { GrillaView } from './components/grilla/GrillaView'
@@ -27,6 +28,7 @@ export default function App() {
   const loading = useStore(s => s.loading)
   const activeView = useStore(s => s.activeView)
   const detailOpen = useStore(s => s.detailOpen)
+  const projectDetailOpen = useStore(s => s.projectDetailOpen)
   const captureOpen = useStore(s => s.captureOpen)
   const captureContext = useStore(s => s.captureContext)
   const captureClientId = useStore(s => s.captureClientId)
@@ -120,7 +122,7 @@ export default function App() {
           <Sidebar />
           <main
             className="flex-1 overflow-y-auto"
-            style={{ marginRight: detailOpen ? '540px' : '0', transition: 'margin-right 0.2s' }}
+            style={{ marginRight: (detailOpen || projectDetailOpen) ? '540px' : '0', transition: 'margin-right 0.2s' }}
           >
             {renderView()}
           </main>
@@ -128,6 +130,7 @@ export default function App() {
       </div>
 
       {detailOpen && <TaskDetail />}
+      {projectDetailOpen && <ProjectDetail />}
 
       <FollowupModal />
 

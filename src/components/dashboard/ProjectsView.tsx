@@ -17,6 +17,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const recurrentes = useStore(s => s.recurrentes)
   const presentations = useStore(s => s.presentations)
   const openCapture = useStore(s => s.openCapture)
+  const openProjectDetail = useStore(s => s.openProjectDetail)
   const openRecurrentCreate = useStore(s => s.openRecurrentCreate)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
   const markRecurrentExecuted = useStore(s => s.markRecurrentExecuted)
@@ -147,10 +148,8 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
           const pend = all.filter(t => !t.done).length
           const stColor = STATUS_COLOR[p.status || ''] || '#6b7280'
           return (
-            <div key={p.id} onClick={() => setSelectedId(selectedId === p.id ? null : p.id)}
-              className={`bg-bg2 border rounded-xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-px transition-all shadow-sm ${
-                selectedId === p.id ? 'border-claude/20 shadow-md' : 'border-black/7 hover:border-black/13'
-              }`}>
+            <div key={p.id} onClick={() => openProjectDetail(p.id)}
+              className="bg-bg2 border border-black/7 rounded-xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-px hover:border-black/13 transition-all shadow-sm">
               <div className="flex items-center justify-between mb-1.5 gap-3">
                 <div className="text-[15px] font-medium">{p.name}</div>
                 <div className="flex items-center gap-2 w-32 shrink-0">

@@ -8,13 +8,14 @@ import { TaskItem } from './TaskItem'
 // con ícono de carpeta y badge "Proyecto". Sus tareas vinculadas se anidan al expandir.
 function ProjectCard({ project, tasks }: { project: Project; tasks: Task[] }) {
   const openCapture = useStore(s => s.openCapture)
+  const openProjectDetail = useStore(s => s.openProjectDetail)
   const [expanded, setExpanded] = useState(false)
   const done = tasks.filter(t => t.done).length
   const accent = ctxColor(project.context)
   return (
     <div>
       <div
-        onClick={() => setExpanded(e => !e)}
+        onClick={() => openProjectDetail(project.id)}
         className="flex items-start gap-2.5 p-3 bg-bg2 border border-black/7 rounded-[10px] cursor-pointer transition-all shadow-sm hover:border-black/13 hover:shadow-md"
       >
         <button onClick={e => { e.stopPropagation(); setExpanded(x => !x) }}

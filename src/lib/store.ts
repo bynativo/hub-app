@@ -43,6 +43,8 @@ interface AppState {
   activeClientId: number | null
   currentTaskId: number | null
   detailOpen: boolean
+  currentProjectId: number | null
+  projectDetailOpen: boolean
   captureOpen: boolean
   captureClientId: number | null
   captureContext: string | null
@@ -62,6 +64,8 @@ interface AppState {
   setActiveClient: (id: number | null) => void
   openDetail: (id: number) => void
   closeDetail: () => void
+  openProjectDetail: (id: number) => void
+  closeProjectDetail: () => void
   openCapture: (opts?: { context?: string; clientId?: number | null; projectId?: number | null; reminder?: boolean }) => void
   closeCapture: () => void
   toggleTask: (id: number) => Promise<void>
@@ -101,6 +105,8 @@ export const useStore = create<AppState>((set, get) => ({
   activeClientId: null,
   currentTaskId: null,
   detailOpen: false,
+  currentProjectId: null,
+  projectDetailOpen: false,
   captureOpen: false,
   captureClientId: null,
   captureContext: null,
@@ -155,8 +161,11 @@ export const useStore = create<AppState>((set, get) => ({
   setView: (view) => set({ activeView: view }),
   setActiveClient: (id) => set({ activeClientId: id }),
 
-  openDetail: (id) => set({ currentTaskId: id, detailOpen: true }),
+  // Solo un panel abierto a la vez — abrir uno cierra el otro.
+  openDetail: (id) => set({ currentTaskId: id, detailOpen: true, projectDetailOpen: false, currentProjectId: null }),
   closeDetail: () => set({ detailOpen: false, currentTaskId: null }),
+  openProjectDetail: (id) => set({ currentProjectId: id, projectDetailOpen: true, detailOpen: false, currentTaskId: null }),
+  closeProjectDetail: () => set({ projectDetailOpen: false, currentProjectId: null }),
 
   openCapture: (opts) => set({
     captureOpen: true,
