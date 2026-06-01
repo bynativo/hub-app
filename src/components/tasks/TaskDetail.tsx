@@ -51,16 +51,24 @@ function ChecklistRow({
   onUpdate: (patch: Partial<Checklist>) => void | Promise<void>
   onDelete: () => void | Promise<void>
 }) {
-  // Convertir timestamptz a YYYY-MM-DDTHH:MM local para datetime-local input.
-  function toLocalDT(iso: string | null): string {
-    if (!iso) return ''
+  // Date + hora separados (mismo patrón que el reminder del CaptureModal).
+  // dueDate (YYYY-MM-DD), dueTime (HH:MM), customTime (true = mostrar input manual).
+  function splitLocalDT(iso: string | null): { date: string; time: string } {
+    if (!iso) return { date: '', time: '' }
     const d = new Date(iso)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    return { date, time }
   }
+  const initial = splitLocalDT(item.due_at)
+  const PRESETS = ['09:00', '11:00', '15:00', '17:00']
   const [expanded, setExpanded] = useState(false)
   const [title, setTitle] = useState(item.title)
   const [responsable, setResponsable] = useState(item.responsable || '')
-  const [dueAt, setDueAt] = useState(toLocalDT(item.due_at))
+  const [dueDate, setDueDate] = useState(initial.date)
+  const [dueTime, setDueTime] = useState(initial.time)
+  const [customTime, setCustomTime] = useState(!!initial.time && !PRESETS.includes(initial.time))
+  const dueAt = dueDate && dueTime ? `${dueDate}T${dueTime}` : ''
   const hasAlarm = !!item.due_at
   const dueLabel = item.due_at
     ? new Date(item.due_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -78,7 +86,7 @@ function ChecklistRow({
     setExpanded(false)
   }
   function clearAssignment() {
-    setResponsable(''); setDueAt('')
+    setResponsable(''); setDueDate(''); setDueTime(''); setCustomTime(false)
     onUpdate({ responsable: null, due_at: null })
   }
 
@@ -124,21 +132,61 @@ function ChecklistRow({
           className="text-gray-300 hover:text-danger text-xs cursor-pointer">✕</button>
       </div>
       {expanded && (
-        <div className="border-t border-black/7 px-2.5 py-2 flex flex-col gap-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={lbl}>Responsable</label>
-              <input value={responsable} onChange={e => setResponsable(e.target.value)} placeholder="Nombre" className={fld} />
-            </div>
-            <div>
-              <label className={lbl}>Fecha y hora del recordatorio</label>
-              <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} className={fld} />
-            </div>
+        <div className="border-t border-black/7 px-2.5 py-2 flex flex-col gap-2.5">
+          <div>
+            <label className={lbl}>Responsable</label>
+            <input value={responsable} onChange={e => setResponsable(e.target.value)} placeholder="Nombre" className={fld} />
           </div>
+          <div>
+            <label className={lbl}>Fecha del recordatorio</label>
+            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={fld} />
+          </div>
+          {dueDate && (
+            <div>
+              <label className={lbl}>Hora</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {([
+                  { v: '09:00', l: '9:00 AM', s: 'Inicio del día' },
+                  { v: '11:00', l: '11:00 AM', s: 'Media mañana' },
+                  { v: '15:00', l: '3:00 PM', s: 'Inicio de la tarde' },
+                  { v: '17:00', l: '5:00 PM', s: 'Fin del día' },
+                ]).map(p => {
+                  const active = !customTime && dueTime === p.v
+                  return (
+                    <button key={p.v} type="button"
+                      onClick={() => { setDueTime(p.v); setCustomTime(false) }}
+                      className={`flex flex-col items-center py-1.5 px-1 border rounded-lg cursor-pointer transition-all ${
+                        active ? 'border-claude/30 bg-claude/10 text-claude font-medium' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
+                      }`}>
+                      <span className="text-[12px] leading-tight">{p.l}</span>
+                      <span className="text-[9px] font-mono mt-0.5 opacity-70">{p.s}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <button type="button"
+                onClick={() => setCustomTime(c => !c)}
+                className={`mt-2 w-full text-[11px] py-1.5 px-2 border rounded-md cursor-pointer transition-all ${
+                  customTime ? 'border-claude/30 bg-claude/7 text-claude font-medium' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
+                }`}>
+                {customTime ? '▼ Otra hora' : '▸ Otra hora'}
+              </button>
+              {customTime && (
+                <input type="time" value={dueTime}
+                  onChange={e => setDueTime(e.target.value)}
+                  className={fld + ' mt-1.5'} />
+              )}
+              {dueTime && (
+                <div className="mt-2 text-[11px] text-gray-500 bg-claude/5 border border-claude/15 rounded-md px-2.5 py-1.5">
+                  Te avisaremos el <span className="font-medium text-claude">{new Date(`${dueDate}T00:00:00`).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}</span> a las <span className="font-medium text-claude">{dueTime}</span>.
+                </div>
+              )}
+            </div>
+          )}
           <div className="text-[10px] text-gray-400 leading-snug">
             {dueAt
               ? <>Se {hasAlarm ? 'actualiza' : 'crea'} un recordatorio 🔔 vinculado: <span className="text-claude font-medium">Verificar: {title.trim() || '(sin título)'}{responsable.trim() ? ` — ${responsable.trim()}` : ''}</span></>
-              : 'Sin fecha: no se crea recordatorio. Si había uno, al guardar se elimina.'}
+              : 'Sin fecha y hora: no se crea recordatorio. Si había uno, al guardar se elimina.'}
           </div>
           <div className="flex items-center justify-between gap-2">
             <button onClick={clearAssignment}
@@ -146,7 +194,13 @@ function ChecklistRow({
               Limpiar asignación
             </button>
             <div className="flex gap-2">
-              <button onClick={() => { setResponsable(item.responsable || ''); setDueAt(toLocalDT(item.due_at)); setExpanded(false) }}
+              <button onClick={() => {
+                  setResponsable(item.responsable || '')
+                  const reset = splitLocalDT(item.due_at)
+                  setDueDate(reset.date); setDueTime(reset.time)
+                  setCustomTime(!!reset.time && !PRESETS.includes(reset.time))
+                  setExpanded(false)
+                }}
                 className="text-[11px] bg-bg3 border border-black/7 text-gray-500 px-3 py-1 rounded-md cursor-pointer hover:bg-bg4">
                 Cancelar
               </button>
