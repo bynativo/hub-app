@@ -19,6 +19,16 @@ export function todayISO(): string {
   return localISO(new Date())
 }
 
+// Fecha efectiva de una tarea para clasificarla en las secciones temporales
+// del Dashboard (Atrasadas / Hoy / Mañana / Próxima sem / Próximo mes / Sin
+// fecha). Prioriza due_date; si es un recordatorio sin due_date, cae en
+// recordatorio_at (extraido como YYYY-MM-DD LOCAL). Sin ninguno → null = "Sin fecha".
+export function effectiveDate(t: { due_date: string | null; es_recordatorio?: boolean | null; recordatorio_at?: string | null }): string | null {
+  if (t.due_date) return t.due_date
+  if (t.es_recordatorio && t.recordatorio_at) return localISO(new Date(t.recordatorio_at))
+  return null
+}
+
 // Suma (o resta, con n negativo) días a una fecha ISO YYYY-MM-DD.
 export function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + 'T00:00:00')

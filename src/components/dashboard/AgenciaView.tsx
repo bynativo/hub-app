@@ -52,7 +52,9 @@ export function AgenciaView() {
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
   useEffect(() => { saveFilters('agencia_type_filters', typeFilters) }, [typeFilters])
 
-  const active = tasks.filter(t => !t.done && t.context === 'agencia' && !t.parent_task_id && !t.es_recordatorio && !t.archived_at && matchesGeneralType(t, typeFilters))
+  // Exclusion de recordatorios centralizada en matchesGeneralType (default
+  // los descarta; pill "Recordatorios" los incluye).
+  const active = tasks.filter(t => !t.done && t.context === 'agencia' && !t.parent_task_id && !t.archived_at && matchesGeneralType(t, typeFilters))
   const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
   const showRecurrentes = generalIncludesRecurrentes(typeFilters)
 

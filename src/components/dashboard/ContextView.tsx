@@ -42,7 +42,9 @@ export function ContextView({ context }: { context: string }) {
     else saveFilters(filterStorageKey, typeFiltersGeneral)
   }, [typeFiltersGeneral, typeFiltersPersonal, filterStorageKey, isPersonal])
 
-  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.es_recordatorio && !t.archived_at
+  // La exclusion de recordatorios queda en matchesGeneralType/Personal: sin
+  // filtro los descarta; con pill "Recordatorios" los incluye.
+  const active = tasks.filter(t => !t.done && t.context === context && !t.parent_task_id && !t.archived_at
     && (isPersonal ? matchesPersonalType(t, typeFiltersPersonal) : matchesGeneralType(t, typeFiltersGeneral)))
   const showRecurrentes = isPersonal ? personalIncludesRecurrentes(typeFiltersPersonal) : generalIncludesRecurrentes(typeFiltersGeneral)
 

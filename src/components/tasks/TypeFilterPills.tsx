@@ -83,8 +83,10 @@ export function FilterPills<V extends string>({
 // ── Predicados ─────────────────────────────────────────────────────────
 
 // Cuando hay varios filtros activos, la tarea matchea si encaja en ALGUNO (OR).
+// Sin filtros activos, por default NO se muestran recordatorios — su home es
+// la vista de Seguimiento. Para verlos en estas vistas hay que togglear el pill.
 export function matchesGeneralType(t: Task, filters: Set<GeneralType>): boolean {
-  if (!filters.size) return true
+  if (!filters.size) return !t.es_recordatorio
   if (filters.has('recordatorios') && t.es_recordatorio) return true
   if (filters.has('influencer') && (t.es_influencer || t.task_type === 'solicitud_influencers' || t.task_type === 'influencer')) return true
   if (filters.has('contenido') && t.task_type === 'contenido' && !t.es_influencer) return true
@@ -103,7 +105,7 @@ export function generalIncludesRecurrentes(filters: Set<GeneralType>): boolean {
 }
 
 export function matchesPersonalType(t: Task, filters: Set<PersonalType>): boolean {
-  if (!filters.size) return true
+  if (!filters.size) return !t.es_recordatorio
   if (filters.has('recordatorios') && t.es_recordatorio) return true
   if (filters.has('tareas') && !t.es_recordatorio) return true
   return false

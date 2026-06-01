@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
-import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange, isShownAsTopLevel } from '../../lib/helpers'
+import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange, isShownAsTopLevel, effectiveDate } from '../../lib/helpers'
 import { KANBAN_GROUPS, isWaitingState } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
@@ -75,14 +75,15 @@ export function Dashboard() {
 
   // Set base de tareas activas (top-level por defecto; las hijas se ven al
   // expandir su padre). Excepción: hija con due_date distinto a la padre se
-  // muestra también en su sección con badge "Parte de …". Excluye recordatorios.
-  // Aplica filtros de tipo + contexto.
-  const active = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio
+  // muestra también en su sección con badge "Parte de …". La regla de mostrar/
+  // ocultar recordatorios queda centralizada en matchesGeneralType: sin filtro
+  // los excluye (van a Seguimiento); con pill "Recordatorios" los incluye.
+  const active = tasks.filter(t => !t.done && !t.archived_at
     && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
   // Base para Por estado / Kanban: incluye también archivadas para mostrar
   // la columna Cerrado. Mismas reglas top-level.
-  const allByStatus = tasks.filter(t => !t.done && !t.es_recordatorio
+  const allByStatus = tasks.filter(t => !t.done
     && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
   const showRecurrentes = generalIncludesRecurrentes(typeFilters)
@@ -100,23 +101,38 @@ export function Dashboard() {
   const freeH = Math.max(0, Math.round((720 - busyMin) / 60 * 10) / 10)
 
   // ── Clasificación temporal ────────────────────────────────────────────
+  // Usamos effectiveDate(t) en lugar de t.due_date directamente: para tareas
+  // normales es lo mismo; para recordatorios sin due_date toma recordatorio_at,
+  // lo que permite ubicarlos en su sección temporal correcta cuando entran al
+  // listado (pill Recordatorios activo).
   // Atrasadas se separan en dos buckets:
-  //   atrasadasDependeVos: due_date < hoy y status NO en espera (Inbox, Trabajando, etc.)
-  //   esperandoVencidas:   due_date < hoy y status en WAITING_STATES (Delegado, etc.)
-  const overdueAll = active.filter(t => t.due_date && t.due_date < today)
-    .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
+  //   atrasadasDependeVos: fecha efectiva < hoy y status NO en espera
+  //   esperandoVencidas:   fecha efectiva < hoy y status en WAITING_STATES del contexto
+  const overdueAll = active
+    .map(t => ({ t, d: effectiveDate(t) }))
+    .filter(({ d }) => !!d && d < today)
+    .sort((a, b) => a.d!.localeCompare(b.d!))
+    .map(({ t }) => t)
   const atrasadasDependeVos = overdueAll.filter(t => !isWaitingState(t.context, t.status))
   const esperandoVencidas = overdueAll.filter(t => isWaitingState(t.context, t.status))
-  const hoy = active.filter(t => t.due_date === today)
-  const manana = active.filter(t => t.due_date === tomorrow)
-  const proxSemTasks = active.filter(t => t.due_date && t.due_date >= dayAfterTomorrow && t.due_date <= nextSunday)
-  const proxMesTasks = active.filter(t => t.due_date && t.due_date >= proxMesFrom && t.due_date <= proxMesTo)
-  // Tareas con due_date entre el final de "próxima semana" y el inicio de "próximo
+  const hoy = active.filter(t => effectiveDate(t) === today)
+  const manana = active.filter(t => effectiveDate(t) === tomorrow)
+  const proxSemTasks = active.filter(t => {
+    const d = effectiveDate(t); return !!d && d >= dayAfterTomorrow && d <= nextSunday
+  })
+  const proxMesTasks = active.filter(t => {
+    const d = effectiveDate(t); return !!d && d >= proxMesFrom && d <= proxMesTo
+  })
+  // Tareas con fecha entre el final de "próxima semana" y el inicio de "próximo
   // mes" — gap del calendario. Las incluimos en "Próximo mes" para que no queden
   // invisibles, aunque técnicamente caen en este mes.
-  const gapTasks = active.filter(t => t.due_date && t.due_date > nextSunday && t.due_date < proxMesFrom)
-  const proxMesAll = [...gapTasks, ...proxMesTasks].sort((a, b) => a.due_date!.localeCompare(b.due_date!))
-  const sinFecha = active.filter(t => !t.due_date)
+  const gapTasks = active.filter(t => {
+    const d = effectiveDate(t); return !!d && d > nextSunday && d < proxMesFrom
+  })
+  const proxMesAll = [...gapTasks, ...proxMesTasks].sort(
+    (a, b) => (effectiveDate(a) || '').localeCompare(effectiveDate(b) || '')
+  )
+  const sinFecha = active.filter(t => !effectiveDate(t))
 
   // Recurrentes próximas (solo la siguiente por definición).
   // Recurrentes solo si el filtro de tipo las incluye, y filtradas por contexto
@@ -135,7 +151,10 @@ export function Dashboard() {
 
   // Próxima semana agrupada por día (solo días con contenido).
   const proxSemByDay: Record<string, DayItem[]> = {}
-  for (const t of proxSemTasks) (proxSemByDay[t.due_date!] ||= []).push({ kind: 'task', task: t })
+  for (const t of proxSemTasks) {
+    const d = effectiveDate(t)
+    if (d) (proxSemByDay[d] ||= []).push({ kind: 'task', task: t })
+  }
   for (const r of recProxSem) (proxSemByDay[r.date] ||= []).push({ kind: 'recurrent', rec: r.rec, date: r.date })
   const proxSemDays = Object.keys(proxSemByDay).sort()
 
@@ -149,7 +168,10 @@ export function Dashboard() {
     return mon
   }
   const proxMesByWeek: Record<string, DayItem[]> = {}
-  for (const t of proxMesAll) (proxMesByWeek[weekBucket(t.due_date!)] ||= []).push({ kind: 'task', task: t })
+  for (const t of proxMesAll) {
+    const d = effectiveDate(t)
+    if (d) (proxMesByWeek[weekBucket(d)] ||= []).push({ kind: 'task', task: t })
+  }
   for (const r of recProxMes) (proxMesByWeek[weekBucket(r.date)] ||= []).push({ kind: 'recurrent', rec: r.rec, date: r.date })
   const proxMesWeeks = Object.keys(proxMesByWeek).sort()
 
