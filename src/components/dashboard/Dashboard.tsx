@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange, isShownAsTopLevel } from '../../lib/helpers'
-import { KANBAN_GROUPS } from '../../lib/constants'
+import { KANBAN_GROUPS, WAITING_STATES } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ClaudeChat } from './ClaudeChat'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
+import { WaitingOverdueRow } from '../tasks/WaitingOverdueRow'
 import { FilterPills, GENERAL_PILLS, CONTEXT_PILLS, matchesGeneralType, generalIncludesRecurrentes, matchesContext, loadFilters, saveFilters, type GeneralType, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task, Recurrente } from '../../lib/types'
 
@@ -99,8 +100,12 @@ export function Dashboard() {
   const freeH = Math.max(0, Math.round((720 - busyMin) / 60 * 10) / 10)
 
   // ── Clasificación temporal ────────────────────────────────────────────
-  const atrasadas = active.filter(t => t.due_date && t.due_date < today)
+  // Atrasadas separadas: las que dependen del usuario (acción pendiente) vs
+  // las que están esperando respuesta de otro (estado Esperando).
+  const overdueAll = active.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
+  const atrasadas = overdueAll.filter(t => !WAITING_STATES.includes(t.status))
+  const esperandoVencidas = overdueAll.filter(t => WAITING_STATES.includes(t.status))
   const hoy = active.filter(t => t.due_date === today)
   const manana = active.filter(t => t.due_date === tomorrow)
   const proxSemTasks = active.filter(t => t.due_date && t.due_date >= dayAfterTomorrow && t.due_date <= nextSunday)
@@ -163,7 +168,7 @@ export function Dashboard() {
       <h1 className="font-serif text-[26px] font-light mb-0.5">Mis tareas</h1>
       <p className="text-gray-500 text-[13px] mb-5">
         {active.length} tarea{active.length === 1 ? '' : 's'} activa{active.length === 1 ? '' : 's'}
-        {atrasadas.length ? ` · ${atrasadas.length} atrasada${atrasadas.length === 1 ? '' : 's'}` : ''}
+        {overdueAll.length ? ` · ${overdueAll.length} atrasada${overdueAll.length === 1 ? '' : 's'}` : ''}
         {hoy.length ? ` · ${hoy.length} para hoy` : ''}
       </p>
 
@@ -243,8 +248,19 @@ export function Dashboard() {
           {/* 🔴 ATRASADAS — TaskItem ya muestra "Vencio hace Xd" como tag rojo */}
           {atrasadas.length > 0 && (
             <>
-              <SectionHeader icon="🔴" label="Atrasadas" sub={`${atrasadas.length} tarea${atrasadas.length === 1 ? '' : 's'} atrasada${atrasadas.length === 1 ? '' : 's'}`} color="#dc2626" />
+              <SectionHeader icon="🔴" label="Atrasadas — depende de vos"
+                sub={`${atrasadas.length} tarea${atrasadas.length === 1 ? '' : 's'} requieren tu acción`} color="#dc2626" />
               <TaskList tasks={atrasadas} />
+            </>
+          )}
+
+          {esperandoVencidas.length > 0 && (
+            <>
+              <SectionHeader icon="🟡" label="Esperando respuesta vencida — depende de otro"
+                sub={`${esperandoVencidas.length} tarea${esperandoVencidas.length === 1 ? '' : 's'} esperando — hacé seguimiento`} color="#d97706" />
+              <div className="flex flex-col gap-1.5">
+                {esperandoVencidas.map(t => <WaitingOverdueRow key={t.id} task={t} today={today} />)}
+              </div>
             </>
           )}
 

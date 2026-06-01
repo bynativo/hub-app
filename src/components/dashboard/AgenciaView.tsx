@@ -4,7 +4,9 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import { ctxColor, todayISO, clientBadge, nextRecurringDueDate } from '../../lib/helpers'
+import { WAITING_STATES } from '../../lib/constants'
 import { FilterPills, GENERAL_PILLS, matchesGeneralType, generalIncludesRecurrentes, loadFilters, saveFilters, type GeneralType } from '../tasks/TypeFilterPills'
+import { WaitingOverdueRow } from '../tasks/WaitingOverdueRow'
 import type { Task } from '../../lib/types'
 
 type AgenciaMode = 'list' | 'porcliente' | 'kanban'
@@ -54,10 +56,13 @@ export function AgenciaView() {
   const agClients = clients.filter(c => c.context === 'agencia').sort((a, b) => a.name.localeCompare(b.name))
   const showRecurrentes = generalIncludesRecurrentes(typeFilters)
 
-  // Atrasadas (común a Lista / Por cliente)
+  // Atrasadas (común a Lista / Por cliente). Se separan en dos buckets:
+  // depende_vos vs esperando_vencida (status en WAITING_STATES).
   const today = todayISO()
-  const atrasadas = active.filter(t => t.due_date && t.due_date < today)
+  const overdueAll = active.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
+  const atrasadas = overdueAll.filter(t => !WAITING_STATES.includes(t.status))
+  const esperandoVencidas = overdueAll.filter(t => WAITING_STATES.includes(t.status))
 
   // Recurrentes de agencia con su próxima fecha calculada
   const recInstances = showRecurrentes
@@ -84,12 +89,11 @@ export function AgenciaView() {
     setCollapsedClients(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  // Lista plana (modo "Lista"): excluye atrasadas (van en su propia sección arriba)
-  const listSorted = active.filter(t => !atrasadas.includes(t)).sort(sortByPrioDate)
+  // Lista plana (modo "Lista"): excluye ambos buckets de vencidas
+  const listSorted = active.filter(t => !overdueAll.includes(t)).sort(sortByPrioDate)
 
-  // Agrupado por cliente (modo "Por cliente"): excluye atrasadas para no duplicar.
-  // Cada cliente con sus tareas ordenadas por prio+fecha. Sin cliente al final.
-  const restForGroups = active.filter(t => !atrasadas.includes(t))
+  // Agrupado por cliente (modo "Por cliente"): excluye ambos buckets para no duplicar.
+  const restForGroups = active.filter(t => !overdueAll.includes(t))
   const groupsMap = new Map<number | null, Task[]>()
   for (const t of restForGroups) {
     const key = t.client_id ?? null
@@ -170,10 +174,22 @@ export function AgenciaView() {
           {atrasadas.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[11px] font-mono tracking-wider uppercase text-danger">🚨 Atrasadas</span>
-                <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{atrasadas.length}</span>
+                <span className="text-[11px] font-mono tracking-wider uppercase text-danger">🔴 Atrasadas — depende de vos</span>
+                <span className="font-mono text-[10px] text-gray-400">· {atrasadas.length} requieren tu acción</span>
               </div>
               <TaskList tasks={atrasadas} />
+            </div>
+          )}
+
+          {esperandoVencidas.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[11px] font-mono tracking-wider uppercase text-warn">🟡 Esperando respuesta vencida — depende de otro</span>
+                <span className="font-mono text-[10px] text-gray-400">· {esperandoVencidas.length} esperando — hacé seguimiento</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {esperandoVencidas.map(t => <WaitingOverdueRow key={t.id} task={t} today={today} />)}
+              </div>
             </div>
           )}
 
