@@ -3,8 +3,9 @@ import { useStore } from '../../lib/store'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ctxLabel, ctxColor, todayISO, nextRecurringDueDate } from '../../lib/helpers'
-import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
+import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR, WAITING_STATES } from '../../lib/constants'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
+import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
 import { FilterPills, GENERAL_PILLS, PERSONAL_PILLS, matchesGeneralType, matchesPersonalType, generalIncludesRecurrentes, personalIncludesRecurrentes, loadFilters, saveFilters, type GeneralType, type PersonalType } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
@@ -55,11 +56,14 @@ export function ContextView({ context }: { context: string }) {
       ? active.filter(t => !t.client_id)
       : active.filter(t => t.client_id === clientFilter)
 
-  // Atrasadas: due_date < hoy. Se muestran arriba en su propia sección y se
-  // excluyen del agrupado por status/cliente para no duplicar.
+  // Atrasadas: due_date < hoy. Se splittean en dos secciones (depende de vos
+  // vs esperando respuesta vencida) y se excluyen del agrupado por status/cliente
+  // para no duplicar.
   const today = todayISO()
-  const atrasadas = filtered.filter(t => t.due_date && t.due_date < today)
+  const overdueAll = filtered.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
+  const atrasadasDependeVos = overdueAll.filter(t => !WAITING_STATES.includes(t.status))
+  const esperandoVencidas = overdueAll.filter(t => WAITING_STATES.includes(t.status))
   const restFiltered = filtered.filter(t => !(t.due_date && t.due_date < today))
 
   // Recurrentes del contexto (respetando el filtro por cliente en agencia)
@@ -185,13 +189,25 @@ export function ContextView({ context }: { context: string }) {
         <div className="text-center py-7 text-gray-400 text-[13px]">Sin tareas</div>
       ) : (
         <div className="max-w-[860px]">
-          {atrasadas.length > 0 && (
+          {atrasadasDependeVos.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[11px] font-mono tracking-wider uppercase text-danger">🚨 Atrasadas</span>
-                <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{atrasadas.length}</span>
+                <span className="text-[11px] font-mono tracking-wider uppercase text-danger">🔴 Atrasadas — requieren tu acción</span>
+                <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{atrasadasDependeVos.length}</span>
               </div>
-              <TaskList tasks={atrasadas} />
+              <TaskList tasks={atrasadasDependeVos} />
+            </div>
+          )}
+
+          {esperandoVencidas.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[11px] font-mono tracking-wider uppercase text-warn">🟡 Esperando respuesta vencida — hacé seguimiento</span>
+                <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{esperandoVencidas.length}</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {esperandoVencidas.map(t => <WaitingTaskCard key={t.id} task={t} today={today} />)}
+              </div>
             </div>
           )}
           {recInstances.length > 0 && (

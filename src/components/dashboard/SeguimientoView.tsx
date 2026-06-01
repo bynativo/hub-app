@@ -366,7 +366,12 @@ export function SeguimientoView() {
   }
 
   // ── Modo "Por fecha" ────────────────────────────────────────────────
-  const vencidas: Task[] = []
+  // Vencidas se divide en dos secciones (spec split atrasadas):
+  //  - esperandoVencidas: tareas en WAITING_STATES con due_date pasado.
+  //    Llevan la accion principal "seguimiento con Claude" (ya provista por FollowupCard).
+  //  - otrasVencidas: recordatorios y tareas con followup_at pasado.
+  const esperandoVencidas: Task[] = []
+  const otrasVencidas: Task[] = []
   const hoy: Task[] = []
   const manana: Task[] = []
   const proxSem: Task[] = []
@@ -375,14 +380,17 @@ export function SeguimientoView() {
   for (const t of waiting) {
     const d = alarmDateISO(t)
     if (!d) { sinFecha.push(t); continue }
-    if (d < today) vencidas.push(t)
+    if (d < today) {
+      if (!t.es_recordatorio && WAITING_STATES.includes(t.status)) esperandoVencidas.push(t)
+      else otrasVencidas.push(t)
+    }
     else if (d === today) hoy.push(t)
     else if (d === tomorrow) manana.push(t)
     else if (d >= dayAfterTomorrow && d <= nextSunday) proxSem.push(t)
     else if (d <= proxMesTo) proxMes.push(t)
     else sinFecha.push(t)
   }
-  vencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
+  esperandoVencidas.sort(sortByAlarm); otrasVencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
 
   // ── Modo "Por estado" ───────────────────────────────────────────────
   const byEstado = [
@@ -461,9 +469,13 @@ export function SeguimientoView() {
         <div className="text-center py-7 text-gray-400 text-[13px]">Nada esperando respuesta</div>
       ) : mode === 'fecha' ? (
         <div className="max-w-[760px]">
-          {vencidas.length > 0 && (<>
-            <SectionHeader icon="🔴" label="Atrasadas" count={vencidas.length} color="#dc2626" />
-            <div className="flex flex-col gap-2">{vencidas.map(renderCard)}</div>
+          {esperandoVencidas.length > 0 && (<>
+            <SectionHeader icon="🟡" label="Esperando respuesta vencida — hacé seguimiento" count={esperandoVencidas.length} color="#d97706" />
+            <div className="flex flex-col gap-2">{esperandoVencidas.map(renderCard)}</div>
+          </>)}
+          {otrasVencidas.length > 0 && (<>
+            <SectionHeader icon="🔴" label="Atrasadas (recordatorios y seguimientos)" count={otrasVencidas.length} color="#dc2626" />
+            <div className="flex flex-col gap-2">{otrasVencidas.map(renderCard)}</div>
           </>)}
           {hoy.length > 0 && (<>
             <SectionHeader icon="📌" label="Hoy" count={hoy.length} color="#d97706" />
