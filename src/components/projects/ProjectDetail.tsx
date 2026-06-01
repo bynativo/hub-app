@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { ctxColor, ctxLabel, nextRecurringDueDate, fmtDue } from '../../lib/helpers'
+import { ctxColor, ctxLabel, nextRecurringDueDate, fmtDue, todayISO } from '../../lib/helpers'
 import { TIPO_AGENCIA } from '../../lib/constants'
 import { TaskItem } from '../tasks/TaskItem'
 import { ReminderRow } from '../tasks/ReminderRow'
@@ -257,7 +257,7 @@ export function ProjectDetail() {
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/10 text-claude">Recurrente</span>
                   {due && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium"
                     style={{ background: due.urgent ? 'rgba(220,38,38,0.07)' : 'var(--color-bg4)', color: due.urgent ? '#dc2626' : '#6b6860' }}>{due.text}</span>}
-                  {it.date === new Date().toISOString().slice(0, 10) && (
+                  {it.date === todayISO() && (
                     <button onClick={e => { e.stopPropagation(); markRecurrentExecuted(r.id) }}
                       className="text-[10px] text-success bg-success/10 border border-success/25 px-2 py-0.5 rounded cursor-pointer hover:bg-success hover:text-white transition-colors">
                       ✓ Hecha

@@ -15,6 +15,14 @@ function localISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// Convierte un timestamp ISO (puede ser UTC tipo "...Z" o local) a YYYY-MM-DD
+// usando el huso del navegador. Reemplaza el patron buggy iso.slice(0,10) que
+// devolvia la fecha UTC y por la noche en zonas UTC-X clasificaba mal los eventos.
+export function dateOfLocal(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  return localISO(new Date(iso))
+}
+
 export function todayISO(): string {
   return localISO(new Date())
 }
@@ -42,7 +50,17 @@ export function tomorrowISO(): string {
   return localISO(d)
 }
 
-// Lunes a domingo de la próxima semana (ISO YYYY-MM-DD).
+// Lunes a domingo de la semana actual (LOCAL).
+export function thisWeekRange(): { from: string; to: string } {
+  const dow = new Date().getDay() // 0=dom..6=sab
+  // Días hacia atrás hasta el lunes de ESTA semana. Lunes (dow=1) → 0; domingo (dow=0) → 6.
+  const toThisMon = (dow + 6) % 7
+  const from = addDaysISO(todayISO(), -toThisMon)
+  return { from, to: addDaysISO(from, 6) }
+}
+
+// Lunes a domingo de la próxima semana (LOCAL). "Próxima" = la calendaria
+// siguiente — si hoy es domingo, el lunes de mañana ya cuenta como próxima.
 export function nextWeekRange(): { from: string; to: string } {
   const dow = new Date().getDay() // 0=dom..6=sab
   const toMon = ((1 - dow + 7) % 7) || 7 // días hasta el próximo lunes (si hoy es lunes, +7)

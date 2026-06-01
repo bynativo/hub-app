@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
-import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange, isShownAsTopLevel, effectiveDate } from '../../lib/helpers'
+import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, thisWeekRange, nextWeekRange, nextMonthRange, isShownAsTopLevel, effectiveDate, dateOfLocal } from '../../lib/helpers'
 import { KANBAN_GROUPS, isWaitingState } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
@@ -91,11 +91,17 @@ export function Dashboard() {
   const today = todayISO()
   const tomorrow = tomorrowISO()
   const dayAfterTomorrow = addDaysISO(today, 2)
-  const { to: nextSunday } = nextWeekRange()
+  // Rangos LOCALES: thisWeekRange = lun-dom de la semana actual;
+  // nextWeekRange = lun-dom de la próxima semana calendaria.
+  const { to: thisWeekEnd } = thisWeekRange()
+  const { from: nextWeekFrom, to: nextWeekTo } = nextWeekRange()
   const { from: proxMesFrom, to: proxMesTo } = nextMonthRange()
 
   // Agenda de hoy (eventos de Google Calendar). Útil para enmarcar el día.
-  const todayEvents = calendarEvents.filter(e => (e.starts_at || '').slice(0, 10) === today)
+  // Comparar la fecha LOCAL del evento (no UTC) — un evento a las 21h Chile
+  // (UTC-4) tiene starts_at en UTC del día siguiente; slice(0,10) lo mandaba
+  // a mañana en vez de hoy.
+  const todayEvents = calendarEvents.filter(e => dateOfLocal(e.starts_at) === today)
     .sort((a, b) => (a.starts_at || '').localeCompare(b.starts_at || ''))
   const busyMin = todayEvents.filter(e => !e.all_day && e.ends_at).reduce((s, e) => s + (new Date(e.ends_at as string).getTime() - new Date(e.starts_at).getTime()) / 60000, 0)
   const freeH = Math.max(0, Math.round((720 - busyMin) / 60 * 10) / 10)
@@ -117,8 +123,15 @@ export function Dashboard() {
   const esperandoVencidas = overdueAll.filter(t => isWaitingState(t.context, t.status))
   const hoy = active.filter(t => effectiveDate(t) === today)
   const manana = active.filter(t => effectiveDate(t) === tomorrow)
+  // "Esta semana": entre pasado mañana y el domingo de la semana actual.
+  // Si hoy es viernes/sábado/domingo puede ser vacío y la sección no renderiza.
+  const estaSemTasks = active.filter(t => {
+    const d = effectiveDate(t); return !!d && d >= dayAfterTomorrow && d <= thisWeekEnd
+  })
+  // "Próxima semana": lunes-domingo de la próxima semana, estricto.
+  // (Excluye a mañana cuando hoy es domingo — mañana ya tiene su seccion).
   const proxSemTasks = active.filter(t => {
-    const d = effectiveDate(t); return !!d && d >= dayAfterTomorrow && d <= nextSunday
+    const d = effectiveDate(t); return !!d && d >= nextWeekFrom && d <= nextWeekTo && d > tomorrow
   })
   const proxMesTasks = active.filter(t => {
     const d = effectiveDate(t); return !!d && d >= proxMesFrom && d <= proxMesTo
@@ -127,7 +140,7 @@ export function Dashboard() {
   // mes" — gap del calendario. Las incluimos en "Próximo mes" para que no queden
   // invisibles, aunque técnicamente caen en este mes.
   const gapTasks = active.filter(t => {
-    const d = effectiveDate(t); return !!d && d > nextSunday && d < proxMesFrom
+    const d = effectiveDate(t); return !!d && d > nextWeekTo && d < proxMesFrom
   })
   const proxMesAll = [...gapTasks, ...proxMesTasks].sort(
     (a, b) => (effectiveDate(a) || '').localeCompare(effectiveDate(b) || '')
@@ -144,10 +157,20 @@ export function Dashboard() {
     : []
   const recHoy = recInstances.filter(i => i.date === today)
   const recManana = recInstances.filter(i => i.date === tomorrow)
-  const recProxSem = recInstances.filter(i => i.date >= dayAfterTomorrow && i.date <= nextSunday)
-  const recProxMes = recInstances.filter(i => i.date > nextSunday && i.date <= proxMesTo)
+  const recEstaSem = recInstances.filter(i => i.date >= dayAfterTomorrow && i.date <= thisWeekEnd)
+  const recProxSem = recInstances.filter(i => i.date >= nextWeekFrom && i.date <= nextWeekTo && i.date > tomorrow)
+  const recProxMes = recInstances.filter(i => i.date > nextWeekTo && i.date <= proxMesTo)
 
   const horasHoy = hoy.reduce((s, t) => s + (t.estimated_hours || 0), 0)
+
+  // Esta semana agrupada por día.
+  const estaSemByDay: Record<string, DayItem[]> = {}
+  for (const t of estaSemTasks) {
+    const d = effectiveDate(t)
+    if (d) (estaSemByDay[d] ||= []).push({ kind: 'task', task: t })
+  }
+  for (const r of recEstaSem) (estaSemByDay[r.date] ||= []).push({ kind: 'recurrent', rec: r.rec, date: r.date })
+  const estaSemDays = Object.keys(estaSemByDay).sort()
 
   // Próxima semana agrupada por día (solo días con contenido).
   const proxSemByDay: Record<string, DayItem[]> = {}
@@ -310,6 +333,19 @@ export function Dashboard() {
             </>
           )}
 
+          {/* 📆 ESTA SEMANA (pasado mañana hasta domingo de esta semana, agrupado por día) */}
+          {estaSemDays.length > 0 && (
+            <>
+              <SectionHeader icon="📆" label="Esta semana" sub={`${estaSemTasks.length + recEstaSem.length} tarea${(estaSemTasks.length + recEstaSem.length) === 1 ? '' : 's'}`} />
+              {estaSemDays.map(d => (
+                <div key={d} className="mb-3">
+                  <div className="text-[11px] font-mono text-gray-500 mb-1.5 capitalize">{dayLabel(d)}</div>
+                  {renderDayItems(estaSemByDay[d])}
+                </div>
+              ))}
+            </>
+          )}
+
           {/* 📅 PRÓXIMA SEMANA (agrupada por día) */}
           {proxSemDays.length > 0 && (
             <>
@@ -355,7 +391,7 @@ export function Dashboard() {
           )}
 
           {/* Empty state global */}
-          {!atrasadasDependeVos.length && !esperandoVencidas.length && !hoy.length && !manana.length && !proxSemDays.length && !proxMesWeeks.length && !sinFecha.length && !recHoy.length && !recManana.length && !recProxSem.length && !recProxMes.length && (
+          {!atrasadasDependeVos.length && !esperandoVencidas.length && !hoy.length && !manana.length && !estaSemDays.length && !proxSemDays.length && !proxMesWeeks.length && !sinFecha.length && !recHoy.length && !recManana.length && !recEstaSem.length && !recProxSem.length && !recProxMes.length && (
             <div className="text-center py-10 text-gray-400 text-[13px]">Nada que hacer — todo al día.</div>
           )}
         </div>

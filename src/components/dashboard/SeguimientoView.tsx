@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
 import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR, isWaitingState } from '../../lib/constants'
-import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange, nextMonthRange } from '../../lib/helpers'
+import { ctxLabel, todayISO, addDaysISO, tomorrowISO, thisWeekRange, nextWeekRange, nextMonthRange } from '../../lib/helpers'
 import { FilterPills, SEGUIMIENTO_PILLS, CONTEXT_PILLS, matchesSeguimientoType, matchesContext, loadFilters, saveFilters, type SeguimientoType, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
@@ -342,7 +342,9 @@ export function SeguimientoView() {
   const today = todayISO()
   const tomorrow = tomorrowISO()
   const dayAfterTomorrow = addDaysISO(today, 2)
-  const { to: nextSunday } = nextWeekRange()
+  // Rangos LOCALES (lun-dom) de esta semana y de la siguiente.
+  const { to: thisWeekEnd } = thisWeekRange()
+  const { from: nextWeekFrom, to: nextWeekTo } = nextWeekRange()
   const { from: proxMesFrom, to: proxMesTo } = nextMonthRange()
   void proxMesFrom
 
@@ -374,7 +376,8 @@ export function SeguimientoView() {
   const otrasVencidas: Task[] = []
   const hoy: Task[] = []
   const manana: Task[] = []
-  const proxSem: Task[] = []
+  const estaSem: Task[] = []  // resto de la semana actual (pasado mañana → domingo)
+  const proxSem: Task[] = []  // semana calendaria siguiente
   const proxMes: Task[] = []
   const sinFecha: Task[] = []
   for (const t of waiting) {
@@ -386,11 +389,12 @@ export function SeguimientoView() {
     }
     else if (d === today) hoy.push(t)
     else if (d === tomorrow) manana.push(t)
-    else if (d >= dayAfterTomorrow && d <= nextSunday) proxSem.push(t)
+    else if (d >= dayAfterTomorrow && d <= thisWeekEnd) estaSem.push(t)
+    else if (d >= nextWeekFrom && d <= nextWeekTo) proxSem.push(t)
     else if (d <= proxMesTo) proxMes.push(t)
     else sinFecha.push(t)
   }
-  esperandoVencidas.sort(sortByAlarm); otrasVencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
+  esperandoVencidas.sort(sortByAlarm); otrasVencidas.sort(sortByAlarm); hoy.sort(sortByAlarm); manana.sort(sortByAlarm); estaSem.sort(sortByAlarm); proxSem.sort(sortByAlarm); proxMes.sort(sortByAlarm); sinFecha.sort(sortByAlarm)
 
   // ── Modo "Por estado" ───────────────────────────────────────────────
   const byEstado = [
@@ -404,7 +408,7 @@ export function SeguimientoView() {
   // ── Modo "Kanban" ───────────────────────────────────────────────────
   const colMap: Record<string, Task[]> = { atrasado: [], hoy: [], semana: [], adelante: [] }
   for (const t of waiting) {
-    const col = urgencyColumn(alarmDateISO(t), today, nextSunday)
+    const col = urgencyColumn(alarmDateISO(t), today, nextWeekTo)
     if (col === 'sinfecha') continue
     colMap[col].push(t)
   }
@@ -484,6 +488,10 @@ export function SeguimientoView() {
           {manana.length > 0 && (<>
             <SectionHeader icon="🌅" label="Mañana" count={manana.length} />
             <div className="flex flex-col gap-2">{manana.map(renderCard)}</div>
+          </>)}
+          {estaSem.length > 0 && (<>
+            <SectionHeader icon="📆" label="Esta semana" count={estaSem.length} />
+            <div className="flex flex-col gap-2">{estaSem.map(renderCard)}</div>
           </>)}
           {proxSem.length > 0 && (<>
             <SectionHeader icon="📅" label="Próxima semana" count={proxSem.length} />

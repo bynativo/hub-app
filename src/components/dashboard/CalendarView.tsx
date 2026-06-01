@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { todayISO, addDaysISO, ctxColor } from '../../lib/helpers'
+import { todayISO, addDaysISO, ctxColor, dateOfLocal } from '../../lib/helpers'
 import type { CalendarEvent } from '../../lib/types'
 
 const PROXY = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/calendar-proxy'
@@ -33,7 +33,9 @@ export function CalendarView() {
 
   const days = view === 'day' ? [anchor] : Array.from({ length: 7 }, (_, i) => addDaysISO(mondayOf(anchor), i))
 
-  const eventsOfDay = (iso: string) => events.filter(e => (e.starts_at || '').slice(0, 10) === iso)
+  // Comparamos por fecha LOCAL del evento (starts_at puede venir como UTC con
+  // "Z"; slice(0,10) devolveria la fecha UTC y rompe en zonas UTC-X de tarde).
+  const eventsOfDay = (iso: string) => events.filter(e => dateOfLocal(e.starts_at) === iso)
     .sort((a, b) => (a.starts_at || '').localeCompare(b.starts_at || ''))
   const tasksOfDay = (iso: string) => tasks.filter(t => !t.done && !t.parent_task_id && t.due_date === iso && !t.archived_at)
 
