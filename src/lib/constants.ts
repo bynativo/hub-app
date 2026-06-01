@@ -55,8 +55,23 @@ export const KANBAN_GROUPS: { key: string; label: string; statuses: string[] }[]
   { key: 'cerrado', label: 'Cerrado', statuses: ['Cerrado', 'Entregado', 'Descartado'] },
 ]
 
-// Estados que disparan alarma de seguimiento ("Esperando")
+// Estados que disparan alarma de seguimiento ("Esperando"). Global = union de
+// todos los contextos. Usar para conteos generales (Sidebar, store).
 export const WAITING_STATES = ['Delegado', 'Pend. validación', 'En revisión cliente', 'Bloqueado']
+
+// Estados de espera POR contexto. Una tarea cuenta como "esperando respuesta
+// vencida" solo si su status esta en la lista de su propio contexto. Sirve para
+// no confundir entre contextos (ej: 'Pend. validación' es waiting solo en banco).
+export const WAITING_STATES_BY_CONTEXT: Record<string, string[]> = {
+  banco: ['Delegado', 'Pend. validación', 'Bloqueado'],
+  agencia: ['En revisión cliente', 'Delegado', 'Bloqueado'],
+  personal: ['Delegado'],
+}
+
+// True si el status pertenece al bucket "esperando" del contexto de la tarea.
+export function isWaitingState(context: string, status: string): boolean {
+  return (WAITING_STATES_BY_CONTEXT[context] || []).includes(status)
+}
 
 // Estados de cierre: al pasar a uno de estos, la tarea se archiva (archived_at) y se oculta de las vistas
 export const CLOSING_STATES = ['Cerrado', 'Entregado', 'Descartado']

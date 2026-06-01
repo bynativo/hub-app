@@ -4,7 +4,7 @@ import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import { ctxColor, todayISO, clientBadge, nextRecurringDueDate } from '../../lib/helpers'
-import { WAITING_STATES } from '../../lib/constants'
+import { isWaitingState } from '../../lib/constants'
 import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
 import { FilterPills, GENERAL_PILLS, matchesGeneralType, generalIncludesRecurrentes, loadFilters, saveFilters, type GeneralType } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
@@ -61,8 +61,8 @@ export function AgenciaView() {
   const today = todayISO()
   const overdueAll = active.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
-  const atrasadasDependeVos = overdueAll.filter(t => !WAITING_STATES.includes(t.status))
-  const esperandoVencidas = overdueAll.filter(t => WAITING_STATES.includes(t.status))
+  const atrasadasDependeVos = overdueAll.filter(t => !isWaitingState(t.context, t.status))
+  const esperandoVencidas = overdueAll.filter(t => isWaitingState(t.context, t.status))
 
   // Recurrentes de agencia con su próxima fecha calculada
   const recInstances = showRecurrentes

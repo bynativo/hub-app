@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { TaskList } from '../tasks/TaskList'
 import { KanbanBoard } from './KanbanBoard'
 import { ctxLabel, ctxColor, todayISO, nextRecurringDueDate } from '../../lib/helpers'
-import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR, WAITING_STATES } from '../../lib/constants'
+import { STATUS_COLUMNS, STATUS_ICON, STATUS_COLOR, isWaitingState } from '../../lib/constants'
 import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
 import { FilterPills, GENERAL_PILLS, PERSONAL_PILLS, matchesGeneralType, matchesPersonalType, generalIncludesRecurrentes, personalIncludesRecurrentes, loadFilters, saveFilters, type GeneralType, type PersonalType } from '../tasks/TypeFilterPills'
@@ -62,8 +62,8 @@ export function ContextView({ context }: { context: string }) {
   const today = todayISO()
   const overdueAll = filtered.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => (a.due_date! < b.due_date! ? -1 : 1))
-  const atrasadasDependeVos = overdueAll.filter(t => !WAITING_STATES.includes(t.status))
-  const esperandoVencidas = overdueAll.filter(t => WAITING_STATES.includes(t.status))
+  const atrasadasDependeVos = overdueAll.filter(t => !isWaitingState(t.context, t.status))
+  const esperandoVencidas = overdueAll.filter(t => isWaitingState(t.context, t.status))
   const restFiltered = filtered.filter(t => !(t.due_date && t.due_date < today))
 
   // Recurrentes del contexto (respetando el filtro por cliente en agencia)

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
-import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR } from '../../lib/constants'
+import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR, isWaitingState } from '../../lib/constants'
 import { ctxLabel, todayISO, addDaysISO, tomorrowISO, nextWeekRange, nextMonthRange } from '../../lib/helpers'
 import { FilterPills, SEGUIMIENTO_PILLS, CONTEXT_PILLS, matchesSeguimientoType, matchesContext, loadFilters, saveFilters, type SeguimientoType, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
@@ -381,7 +381,7 @@ export function SeguimientoView() {
     const d = alarmDateISO(t)
     if (!d) { sinFecha.push(t); continue }
     if (d < today) {
-      if (!t.es_recordatorio && WAITING_STATES.includes(t.status)) esperandoVencidas.push(t)
+      if (!t.es_recordatorio && isWaitingState(t.context, t.status)) esperandoVencidas.push(t)
       else otrasVencidas.push(t)
     }
     else if (d === today) hoy.push(t)

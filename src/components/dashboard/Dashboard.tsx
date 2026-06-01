@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, nextWeekRange, nextMonthRange, isShownAsTopLevel } from '../../lib/helpers'
-import { KANBAN_GROUPS, WAITING_STATES } from '../../lib/constants'
+import { KANBAN_GROUPS, isWaitingState } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
 import { KanbanBoard } from './KanbanBoard'
@@ -105,8 +105,8 @@ export function Dashboard() {
   //   esperandoVencidas:   due_date < hoy y status en WAITING_STATES (Delegado, etc.)
   const overdueAll = active.filter(t => t.due_date && t.due_date < today)
     .sort((a, b) => a.due_date!.localeCompare(b.due_date!))
-  const atrasadasDependeVos = overdueAll.filter(t => !WAITING_STATES.includes(t.status))
-  const esperandoVencidas = overdueAll.filter(t => WAITING_STATES.includes(t.status))
+  const atrasadasDependeVos = overdueAll.filter(t => !isWaitingState(t.context, t.status))
+  const esperandoVencidas = overdueAll.filter(t => isWaitingState(t.context, t.status))
   const hoy = active.filter(t => t.due_date === today)
   const manana = active.filter(t => t.due_date === tomorrow)
   const proxSemTasks = active.filter(t => t.due_date && t.due_date >= dayAfterTomorrow && t.due_date <= nextSunday)
