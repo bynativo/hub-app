@@ -9,7 +9,7 @@ import { TaskItem } from './TaskItem'
 function ProjectCard({ project, tasks }: { project: Project; tasks: Task[] }) {
   const openCapture = useStore(s => s.openCapture)
   const openProjectDetail = useStore(s => s.openProjectDetail)
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(true)
   const done = tasks.filter(t => t.done).length
   const accent = ctxColor(project.context)
   return (
