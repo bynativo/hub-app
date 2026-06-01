@@ -129,6 +129,11 @@ export interface Checklist {
   done: boolean
   position: number
   created_at: string
+  // Responsable + fecha de recordatorio. Si due_at está seteado, se crea
+  // automáticamente una tarea recordatorio vinculada via reminder_task_id.
+  responsable: string | null
+  due_at: string | null
+  reminder_task_id: number | null
 }
 
 export interface Contact {

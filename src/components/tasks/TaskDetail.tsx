@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
@@ -38,6 +38,128 @@ function parseAction(text: string): { json: any; clean: string } | null {
     } catch { /* sigue */ }
   }
   return null
+}
+
+// Fila de checklist con responsable + fecha. Al setear due_at se crea un
+// recordatorio automático (vía syncChecklistReminder en TaskDetail) — el
+// reminder_task_id queda apuntando a la tarea recordatorio en checklists.
+function ChecklistRow({
+  item, onToggleDone, onUpdate, onDelete,
+}: {
+  item: Checklist
+  onToggleDone: () => void | Promise<void>
+  onUpdate: (patch: Partial<Checklist>) => void | Promise<void>
+  onDelete: () => void | Promise<void>
+}) {
+  // Convertir timestamptz a YYYY-MM-DDTHH:MM local para datetime-local input.
+  function toLocalDT(iso: string | null): string {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  const [expanded, setExpanded] = useState(false)
+  const [title, setTitle] = useState(item.title)
+  const [responsable, setResponsable] = useState(item.responsable || '')
+  const [dueAt, setDueAt] = useState(toLocalDT(item.due_at))
+  const hasAlarm = !!item.due_at
+  const dueLabel = item.due_at
+    ? new Date(item.due_at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null
+
+  function commitTitle() {
+    if (title !== item.title) onUpdate({ title })
+  }
+  function applyAssignment() {
+    onUpdate({
+      responsable: responsable.trim() || null,
+      due_at: dueAt ? new Date(dueAt).toISOString() : null,
+      title: title.trim(),
+    })
+    setExpanded(false)
+  }
+  function clearAssignment() {
+    setResponsable(''); setDueAt('')
+    onUpdate({ responsable: null, due_at: null })
+  }
+
+  const fld = 'w-full bg-bg2 border border-black/7 rounded-md px-2 py-1 text-[12px] outline-none focus:border-claude/20'
+  const lbl = 'text-[10px] font-mono text-gray-400 tracking-wider uppercase block mb-1'
+
+  return (
+    <div className={`border rounded-md transition-colors ${expanded ? 'border-claude/20 bg-claude/5' : 'border-black/7 bg-bg2'}`}>
+      <div className="flex items-center gap-2 px-2.5 py-1.5 group">
+        <div onClick={() => onToggleDone()}
+          className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] ${item.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'}`}>
+          {item.done && '✓'}
+        </div>
+        <input value={title}
+          onChange={e => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          placeholder="Escribí el item…"
+          className={`flex-1 bg-transparent text-[13px] outline-none border-b border-transparent focus:border-black/13 ${item.done ? 'line-through text-gray-400' : ''}`} />
+        {/* Chips de responsable / fecha — compactos, click expande */}
+        {item.responsable && (
+          <span onClick={() => setExpanded(true)}
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 cursor-pointer hover:bg-bg3" title={`Responsable: ${item.responsable}`}>
+            👤 {item.responsable}
+          </span>
+        )}
+        {hasAlarm && (
+          <span onClick={() => setExpanded(true)}
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/10 text-claude cursor-pointer hover:bg-claude/15" title={`Recordatorio: ${dueLabel}`}>
+            🔔 {dueLabel}
+          </span>
+        )}
+        {!item.responsable && !hasAlarm && (
+          <button onClick={() => setExpanded(true)}
+            className="text-[10px] text-gray-400 hover:text-claude opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
+            title="Asignar responsable y fecha">+ asignar</button>
+        )}
+        <button onClick={() => setExpanded(e => !e)}
+          className="text-gray-300 hover:text-gray-700 text-[12px] cursor-pointer"
+          title={expanded ? 'Cerrar' : 'Editar'}>
+          {expanded ? '▾' : '⋯'}
+        </button>
+        <button onClick={() => onDelete()}
+          className="text-gray-300 hover:text-danger text-xs cursor-pointer">✕</button>
+      </div>
+      {expanded && (
+        <div className="border-t border-black/7 px-2.5 py-2 flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={lbl}>Responsable</label>
+              <input value={responsable} onChange={e => setResponsable(e.target.value)} placeholder="Nombre" className={fld} />
+            </div>
+            <div>
+              <label className={lbl}>Fecha y hora del recordatorio</label>
+              <input type="datetime-local" value={dueAt} onChange={e => setDueAt(e.target.value)} className={fld} />
+            </div>
+          </div>
+          <div className="text-[10px] text-gray-400 leading-snug">
+            {dueAt
+              ? <>Se {hasAlarm ? 'actualiza' : 'crea'} un recordatorio 🔔 vinculado: <span className="text-claude font-medium">Verificar: {title.trim() || '(sin título)'}{responsable.trim() ? ` — ${responsable.trim()}` : ''}</span></>
+              : 'Sin fecha: no se crea recordatorio. Si había uno, al guardar se elimina.'}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={clearAssignment}
+              className="text-[11px] text-gray-500 hover:text-danger cursor-pointer">
+              Limpiar asignación
+            </button>
+            <div className="flex gap-2">
+              <button onClick={() => { setResponsable(item.responsable || ''); setDueAt(toLocalDT(item.due_at)); setExpanded(false) }}
+                className="text-[11px] bg-bg3 border border-black/7 text-gray-500 px-3 py-1 rounded-md cursor-pointer hover:bg-bg4">
+                Cancelar
+              </button>
+              <button onClick={applyAssignment}
+                className="text-[11px] bg-claude text-white px-3 py-1 rounded-md cursor-pointer hover:bg-purple-700">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Mini-modal para crear N perfiles de influencer como subtareas bajo una
@@ -498,8 +620,79 @@ ${avg ? `Referencia: el promedio de tareas similares de este contexto es ${avg.t
     setChecklists(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
   }
   async function deleteChecklistItem(id: number) {
+    const item = checklists.find(c => c.id === id)
+    // Si tiene recordatorio vinculado, borrarlo también para evitar huérfanos.
+    if (item?.reminder_task_id) {
+      await supabase.from('tasks').delete().eq('id', item.reminder_task_id)
+    }
     await supabase.from('checklists').delete().eq('id', id)
     setChecklists(prev => prev.filter(c => c.id !== id))
+    await loadAll()
+  }
+
+  // Sincroniza el recordatorio vinculado a un item: lo crea si due_at se
+  // setea por primera vez, lo actualiza si cambia, lo borra si se limpia.
+  // Devuelve el reminder_task_id resultante.
+  async function syncChecklistReminder(item: Checklist, newTitle: string, newResponsable: string | null, newDueAt: string | null): Promise<number | null> {
+    if (!task) return null
+    const existingId = item.reminder_task_id
+    const isoDue = newDueAt ? new Date(newDueAt).toISOString() : null
+    if (existingId) {
+      if (!isoDue) {
+        // Limpiar el recordatorio
+        await supabase.from('tasks').delete().eq('id', existingId)
+        return null
+      }
+      const reminderTitle = `Verificar: ${newTitle.trim() || '(sin título)'}${newResponsable ? ` — ${newResponsable}` : ''}`
+      await supabase.from('tasks').update({
+        title: reminderTitle,
+        recordatorio_at: isoDue,
+        delegated_to: newResponsable || null,
+      }).eq('id', existingId)
+      return existingId
+    }
+    if (!isoDue) return null
+    // Crear nuevo recordatorio
+    const reminderTitle = `Verificar: ${newTitle.trim() || '(sin título)'}${newResponsable ? ` — ${newResponsable}` : ''}`
+    const { data, error } = await supabase.from('tasks').insert({
+      title: reminderTitle,
+      context: task.context,
+      client_id: task.client_id,
+      project_id: task.project_id,
+      parent_task_id: task.id,
+      priority: 'media',
+      origin: 'propia',
+      status: 'Recordatorio',
+      es_recordatorio: true,
+      recordatorio_at: isoDue,
+      tipo_recordatorio: 'general',
+      delegated_to: newResponsable || null,
+      requested_at: todayISO(),
+      done: false,
+      cats: [], plan: [], meeting_agenda: [],
+    }).select('id').single()
+    if (error) { console.error('[syncChecklistReminder]', error); return null }
+    return data?.id ?? null
+  }
+
+  // Guarda un cambio de checklist item + sincroniza recordatorio si cambió
+  // alguno de los campos relevantes (responsable, due_at, title).
+  async function updateChecklistFull(id: number, patch: Partial<Checklist>) {
+    const current = checklists.find(c => c.id === id)
+    if (!current) return
+    const next: Checklist = { ...current, ...patch }
+    const responsableChanged = patch.responsable !== undefined && patch.responsable !== current.responsable
+    const dueChanged = patch.due_at !== undefined && patch.due_at !== current.due_at
+    const titleChanged = patch.title !== undefined && patch.title !== current.title
+    let newReminderId = current.reminder_task_id
+    if (responsableChanged || dueChanged || (titleChanged && current.reminder_task_id)) {
+      newReminderId = await syncChecklistReminder(current, next.title, next.responsable, next.due_at)
+    }
+    const finalPatch = { ...patch, reminder_task_id: newReminderId }
+    await supabase.from('checklists').update(finalPatch).eq('id', id)
+    setChecklists(prev => prev.map(c => c.id === id ? { ...c, ...finalPatch } : c))
+    // Si se sincronizó un reminder, recargar para que aparezca en otras vistas.
+    if (responsableChanged || dueChanged) await loadAll()
   }
 
   // ---- Chat ----
@@ -1117,22 +1310,26 @@ Reglas del bloque:
               <button onClick={addChecklistItem} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-md cursor-pointer hover:bg-claude/15">+ Agregar item</button>
             </div>
             {checklists.length ? (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 {checklists.map(c => (
-                  <div key={c.id} className="flex items-center gap-2 py-1.5 group">
-                    <div onClick={() => updateChecklistItem(c.id, { done: !c.done })}
-                      className={`w-3.5 h-3.5 rounded border-[1.5px] shrink-0 cursor-pointer flex items-center justify-center text-[9px] ${c.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'}`}>
-                      {c.done && '✓'}
-                    </div>
-                    <input defaultValue={c.title} onBlur={e => updateChecklistItem(c.id, { title: e.target.value })}
-                      placeholder="Escribí el item…"
-                      className={`flex-1 bg-transparent text-[13px] outline-none border-b border-transparent focus:border-black/13 ${c.done ? 'line-through text-gray-400' : ''}`} />
-                    <button onClick={() => deleteChecklistItem(c.id)} className="text-gray-300 hover:text-danger text-xs opacity-0 group-hover:opacity-100 cursor-pointer">✕</button>
-                  </div>
+                  <ChecklistRow key={c.id} item={c}
+                    onToggleDone={async () => {
+                      const newDone = !c.done
+                      await updateChecklistItem(c.id, { done: newDone })
+                      // Si tiene reminder vinculado, espejear el done para que no
+                      // siga apareciendo en Seguimiento si el usuario ya marcó el item.
+                      if (c.reminder_task_id) {
+                        await supabase.from('tasks').update({ done: newDone }).eq('id', c.reminder_task_id)
+                        await loadAll()
+                      }
+                    }}
+                    onUpdate={patch => updateChecklistFull(c.id, patch)}
+                    onDelete={() => deleteChecklistItem(c.id)}
+                  />
                 ))}
               </div>
             ) : (
-              <div className="text-xs text-gray-400">Sin items. Agregá recordatorios rápidos de verificación.</div>
+              <div className="text-xs text-gray-400">Sin items. Agregá pasos rápidos de verificación; podés asignar responsable + fecha y se crea un recordatorio automático.</div>
             )}
           </div>
         )}
