@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../lib/store'
+import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 
 function fmtTime(d: Date) {
   return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
@@ -30,7 +31,12 @@ export function FollowupModal() {
   const tasks = useStore(s => s.tasks)
   const setFollowup = useStore(s => s.setFollowup)
   const closeFollowup = useStore(s => s.closeFollowup)
-  const [specific, setSpecific] = useState('')
+  // Estado para el selector custom (fecha + hora). Se llena con el picker;
+  // solo se aplica al apretar Confirmar.
+  const [pickerValue, setPickerValue] = useState('')
+  // Fecha simple para el caso "Recordatorio de seguimiento" (no es recordatorio):
+  // solo se pide fecha y la hora se fija en 9:00.
+  const [specificDate, setSpecificDate] = useState('')
 
   const task = tasks.find(t => t.id === pendingId)
   if (!task) return null
@@ -42,6 +48,17 @@ export function FollowupModal() {
   const isToday4 = d4.toDateString() === new Date().toDateString()
 
   const choose = (at: string | null, type: string) => setFollowup(task.id, at, type)
+
+  function confirmPicker() {
+    if (!pickerValue) return
+    // pickerValue es 'YYYY-MM-DDTHH:mm' en hora local. Convertir a ISO UTC.
+    choose(new Date(pickerValue).toISOString(), 'specific')
+  }
+
+  function confirmSpecificDate() {
+    if (!specificDate) return
+    choose(new Date(specificDate + 'T09:00:00').toISOString(), 'specific')
+  }
 
   const optionCls = 'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-black/7 bg-bg3 hover:border-claude/30 hover:bg-claude/5 cursor-pointer transition-all text-left'
 
@@ -77,17 +94,30 @@ export function FollowupModal() {
             <span className="text-[12px] font-mono text-gray-400">{fmtDate(dMon)}</span>
           </button>
 
-          <div className="flex items-center gap-2 px-4 py-3 rounded-lg border border-black/7 bg-bg3">
-            <span className="text-[13px] font-medium shrink-0">{isRem ? 'Fecha y hora' : 'Fecha específica'}</span>
-            <input type={isRem ? 'datetime-local' : 'date'} value={specific} onChange={e => setSpecific(e.target.value)}
-              className="ml-auto bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
-            <button
-              disabled={!specific}
-              onClick={() => { const d = isRem ? new Date(specific) : new Date(specific + 'T09:00:00'); choose(d.toISOString(), 'specific') }}
-              className="text-[11px] bg-claude text-white px-2.5 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed">
-              OK
-            </button>
-          </div>
+          {isRem ? (
+            <div className="border border-black/7 bg-bg3 rounded-lg p-3 flex flex-col gap-2">
+              <div className="text-[13px] font-medium">Fecha y hora específica</div>
+              <ReminderDateTimePicker value={pickerValue} onChange={setPickerValue} dateLabel="Fecha" />
+              {pickerValue && (
+                <button onClick={confirmPicker}
+                  className="w-full bg-claude text-white text-[12px] py-2 rounded-md cursor-pointer hover:bg-purple-700 transition-colors">
+                  Confirmar
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-lg border border-black/7 bg-bg3">
+              <span className="text-[13px] font-medium shrink-0">Fecha específica</span>
+              <input type="date" value={specificDate} onChange={e => setSpecificDate(e.target.value)}
+                className="ml-auto bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-xs outline-none focus:border-claude/20" />
+              <button
+                disabled={!specificDate}
+                onClick={confirmSpecificDate}
+                className="text-[11px] bg-claude text-white px-2.5 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                OK
+              </button>
+            </div>
+          )}
 
           {!isRem && (
             <button className={optionCls + ' justify-center text-gray-400'} onClick={() => choose(null, 'none')}>

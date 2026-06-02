@@ -5,6 +5,7 @@ import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
+import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import { TaskAttachments } from './TaskAttachments'
@@ -1072,7 +1073,11 @@ Reglas del bloque:
             {isReminder && (
               <div>
                 <label className={labelCls}>🔔 Fecha y hora del recordatorio</label>
-                <input type="datetime-local" value={recordatorioAt} onChange={e => setInfo(setRecordatorioAt, e.target.value)} className={fieldCls} />
+                <ReminderDateTimePicker
+                  value={recordatorioAt}
+                  onChange={v => setInfo(setRecordatorioAt, v)}
+                  dateLabel="Fecha"
+                />
               </div>
             )}
 

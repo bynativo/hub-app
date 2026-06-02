@@ -6,6 +6,7 @@ import { QuickClientModal } from './QuickClientModal'
 import { QuickProjectModal } from './QuickProjectModal'
 import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
 import { TiposChecklist, type TipoConCantidad } from '../tasks/TiposChecklist'
+import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { PUB_TYPES, FORMATOS } from '../../lib/constants'
 import { parseStructuredNotes } from '../../lib/notesParser'
 import type { RawTask } from '../../lib/notesParser'
@@ -312,7 +313,13 @@ function SuggestionForm({ s, onChange, onRemove, clients, projects, tasks, showE
             <button type="button" onClick={() => onChange({ isReminder: !s.isReminder })} className={togg(s.isReminder)}><div className={knob(s.isReminder)} /></button>
             🔔 Es recordatorio
           </label>
-          {s.isReminder && <div><label className={lbl}>Fecha y hora</label><input type="datetime-local" value={s.reminderAt} onChange={e => onChange({ reminderAt: e.target.value })} className={fld} /></div>}
+          {s.isReminder && (
+            <ReminderDateTimePicker
+              value={s.reminderAt}
+              onChange={v => onChange({ reminderAt: v })}
+              dateLabel="Fecha"
+            />
+          )}
 
           {!s.isReminder && (
             <div>
