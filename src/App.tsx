@@ -22,6 +22,9 @@ import { FollowupModal } from './components/modals/FollowupModal'
 import { SearchModal } from './components/modals/SearchModal'
 import { RecurrenteModal } from './components/modals/RecurrenteModal'
 import { Toast } from './components/layout/Toast'
+import { PWAUpdatePrompt } from './components/pwa/PWAUpdatePrompt'
+import { InstallBanner } from './components/pwa/InstallBanner'
+import { NotificationsSubscribe } from './components/pwa/NotificationsSubscribe'
 
 export default function App() {
   const loadAll = useStore(s => s.loadAll)
@@ -47,6 +50,34 @@ export default function App() {
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
+
+  // URL actions desde shortcuts del manifest (PWA). ?action=capture abre el
+  // modal Capturar; ?action=reminder lo abre con el toggle reminder activo.
+  // Limpiamos el query al consumir para no re-disparar.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const action = params.get('action')
+    if (action === 'capture') {
+      useStore.getState().openCapture({})
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (action === 'reminder') {
+      useStore.getState().openCapture({ reminder: true })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
+  // Click en una notificacion push: el SW manda postMessage OPEN_TASK al
+  // cliente. Abrimos el detalle de esa tarea.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    function onMsg(e: MessageEvent) {
+      if (e.data?.type === 'OPEN_TASK' && typeof e.data.taskId === 'number') {
+        useStore.getState().openDetail(e.data.taskId)
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [])
 
   useEffect(() => {
     function isTypingTarget(t: EventTarget | null): boolean {
@@ -163,6 +194,9 @@ export default function App() {
       )}
 
       <Toast />
+      <PWAUpdatePrompt />
+      <InstallBanner />
+      <NotificationsSubscribe />
     </>
   )
 }
