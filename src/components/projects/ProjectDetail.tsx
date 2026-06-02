@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { ctxColor, ctxLabel, nextRecurringDueDate, fmtDue, todayISO } from '../../lib/helpers'
 import { TIPO_AGENCIA } from '../../lib/constants'
+import { AttachmentsZone, type AttachmentsZoneHandle } from '../tasks/AttachmentsZone'
 import { TaskItem } from '../tasks/TaskItem'
 import { ReminderRow } from '../tasks/ReminderRow'
 import type { Task, Recurrente } from '../../lib/types'
@@ -118,8 +119,48 @@ export function ProjectDetail() {
   const fieldCls = 'w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20 focus:bg-bg2'
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
+  // Drag&drop a nivel del panel (mismo patron que TaskDetail).
+  const attachmentsRef = useRef<AttachmentsZoneHandle>(null)
+  const dragCounter = useRef(0)
+  const [dragActive, setDragActive] = useState(false)
+  function hasFiles(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types || []).includes('Files')
+  }
+  function onDragEnter(e: React.DragEvent) {
+    if (!hasFiles(e)) return
+    e.preventDefault(); dragCounter.current += 1; setDragActive(true)
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (!hasFiles(e)) return
+    dragCounter.current = Math.max(0, dragCounter.current - 1)
+    if (dragCounter.current === 0) setDragActive(false)
+  }
+  function onDragOver(e: React.DragEvent) { if (hasFiles(e)) e.preventDefault() }
+  function onPanelDrop(e: React.DragEvent) {
+    if (!hasFiles(e)) return
+    e.preventDefault(); dragCounter.current = 0; setDragActive(false)
+    if (e.dataTransfer.files?.length) attachmentsRef.current?.uploadFiles(e.dataTransfer.files)
+  }
+
   return (
-    <div className="fixed top-[52px] right-0 w-[540px] h-[calc(100vh-52px)] bg-bg border-l border-black/13 shadow-2xl overflow-y-auto z-[200] animate-fade-in">
+    <div
+      className="fixed top-[52px] right-0 w-[540px] h-[calc(100vh-52px)] bg-bg border-l border-black/13 shadow-2xl overflow-y-auto z-[200] animate-fade-in"
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onPanelDrop}
+    >
+      {dragActive && (
+        <div className="fixed top-[52px] right-0 w-[540px] h-[calc(100vh-52px)] z-[210] pointer-events-none flex items-center justify-center p-4">
+          <div className="w-full h-full border-2 border-dashed border-claude rounded-2xl bg-claude/10 backdrop-blur-sm flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-[40px] mb-1">📥</div>
+              <div className="text-[16px] font-medium text-claude">Soltá para adjuntar</div>
+              <div className="text-[12px] text-claude/70 mt-1">Se vincula al proyecto "{project.name}"</div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="sticky top-0 z-[1] bg-bg border-b border-black/7 px-5 py-3 flex items-start justify-between gap-3">
         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -210,6 +251,8 @@ export function ProjectDetail() {
             {saving ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Guardado'}
           </button>
         </div>
+
+        <AttachmentsZone ref={attachmentsRef} projectId={project.id} />
       </div>
 
       {/* Árbol unificado */}

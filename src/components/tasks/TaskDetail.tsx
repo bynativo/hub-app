@@ -8,7 +8,7 @@ import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposCheck
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
-import { TaskAttachments } from './TaskAttachments'
+import { AttachmentsZone, type AttachmentsZoneHandle } from './AttachmentsZone'
 import { TaskItem } from './TaskItem'
 import { ReminderRow } from './ReminderRow'
 import type { Checklist, Task } from '../../lib/types'
@@ -342,6 +342,12 @@ export function TaskDetail() {
   const [checklists, setChecklists] = useState<Checklist[]>([])
   const [newPresOpen, setNewPresOpen] = useState(false)
   const [assignPresId, setAssignPresId] = useState<number | ''>('')
+  // Adjuntos: ref para disparar uploadFiles desde el overlay drop full-panel.
+  const attachmentsRef = useRef<AttachmentsZoneHandle>(null)
+  // Contador de drag enter/leave (los browsers disparan ambos eventos al cruzar
+  // elementos hijos — usar contador evita parpadeos del overlay).
+  const dragCounter = useRef(0)
+  const [dragActive, setDragActive] = useState(false)
 
   // Info edits
   const [title, setTitle] = useState('')
@@ -916,8 +922,53 @@ Reglas del bloque:
   const fieldCls = 'w-full bg-bg2 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-claude/20'
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
+  // Handlers de drag&drop a nivel del panel — al arrastrar archivos sobre
+  // CUALQUIER parte del panel mostramos overlay y al soltar lo subimos via
+  // el ref de AttachmentsZone. dragCounter evita parpadeos en cruces a hijos.
+  function hasFiles(e: React.DragEvent) {
+    return Array.from(e.dataTransfer.types || []).includes('Files')
+  }
+  function onDragEnter(e: React.DragEvent) {
+    if (!hasFiles(e)) return
+    e.preventDefault()
+    dragCounter.current += 1
+    setDragActive(true)
+  }
+  function onDragLeave(e: React.DragEvent) {
+    if (!hasFiles(e)) return
+    dragCounter.current = Math.max(0, dragCounter.current - 1)
+    if (dragCounter.current === 0) setDragActive(false)
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (hasFiles(e)) e.preventDefault()
+  }
+  function onPanelDrop(e: React.DragEvent) {
+    if (!hasFiles(e)) return
+    e.preventDefault()
+    dragCounter.current = 0
+    setDragActive(false)
+    if (e.dataTransfer.files?.length) attachmentsRef.current?.uploadFiles(e.dataTransfer.files)
+  }
+
   return (
-    <div className="fixed top-[52px] right-0 bottom-0 w-[540px] bg-bg border-l border-black/13 z-50 flex flex-col shadow-[-4px_0_20px_rgba(0,0,0,0.08)]">
+    <div
+      className="fixed top-[52px] right-0 bottom-0 w-[540px] bg-bg border-l border-black/13 z-50 flex flex-col shadow-[-4px_0_20px_rgba(0,0,0,0.08)]"
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDrop={onPanelDrop}
+    >
+      {dragActive && (
+        <div className="absolute inset-0 z-[55] pointer-events-none flex items-center justify-center p-4">
+          <div className="w-full h-full border-2 border-dashed border-claude rounded-2xl bg-claude/10 backdrop-blur-sm flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-[40px] mb-1">📥</div>
+              <div className="text-[16px] font-medium text-claude">Soltá para adjuntar</div>
+              <div className="text-[12px] text-claude/70 mt-1">Se vincula a "{task.title}"</div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="p-4 pb-3 border-b border-black/7 flex items-start gap-2.5 shrink-0 bg-bg2">
         <div className="flex-1 min-w-0">
@@ -1328,7 +1379,7 @@ Reglas del bloque:
               </div>
             </div>
 
-            <TaskAttachments taskId={task.id} />
+            <AttachmentsZone ref={attachmentsRef} taskId={task.id} />
           </div>
         )}
 
