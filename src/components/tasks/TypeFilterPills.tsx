@@ -67,12 +67,12 @@ export function FilterPills<V extends string>({
       : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
   }`
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <button type="button" onClick={() => onChange(new Set())} className={cls(allEmpty)}>
+    <div className="flex items-center gap-1.5 flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible -mx-1 md:mx-0 px-1 md:px-0 scrollbar-thin">
+      <button type="button" onClick={() => onChange(new Set())} className={cls(allEmpty) + ' shrink-0'}>
         {allLabel}
       </button>
       {pills.map(p => (
-        <button key={p.v} type="button" onClick={() => toggle(p.v)} className={cls(value.has(p.v))}>
+        <button key={p.v} type="button" onClick={() => toggle(p.v)} className={cls(value.has(p.v)) + ' shrink-0'}>
           {p.icon} {p.label}
         </button>
       ))}

@@ -144,14 +144,14 @@ export function ProjectDetail() {
 
   return (
     <div
-      className="fixed top-[52px] right-0 w-[540px] h-[calc(100vh-52px)] bg-bg border-l border-black/13 shadow-2xl overflow-y-auto z-[200] animate-fade-in"
+      className="fixed top-0 md:top-[52px] right-0 left-0 md:left-auto w-full md:w-[540px] h-screen md:h-[calc(100vh-52px)] bg-bg md:border-l border-black/13 shadow-2xl overflow-y-auto z-[200] animate-fade-in"
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
       onDrop={onPanelDrop}
     >
       {dragActive && (
-        <div className="fixed top-[52px] right-0 w-[540px] h-[calc(100vh-52px)] z-[210] pointer-events-none flex items-center justify-center p-4">
+        <div className="fixed top-0 md:top-[52px] right-0 left-0 md:left-auto w-full md:w-[540px] h-screen md:h-[calc(100vh-52px)] z-[210] pointer-events-none flex items-center justify-center p-4">
           <div className="w-full h-full border-2 border-dashed border-claude rounded-2xl bg-claude/10 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center">
               <div className="text-[40px] mb-1">📥</div>

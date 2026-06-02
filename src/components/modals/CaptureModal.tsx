@@ -1278,10 +1278,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[300] flex items-start justify-center pt-8 overflow-y-auto backdrop-blur-sm"
+    <div className="fixed inset-0 bg-black/40 z-[300] flex items-start md:items-start justify-center md:pt-8 overflow-y-auto backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
       onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-      <div className="bg-bg2 border border-black/7 rounded-2xl w-[580px] max-w-[96vw] mb-10 shadow-lg overflow-hidden relative">
+      <div className="bg-bg2 border border-black/7 rounded-none md:rounded-2xl w-full md:w-[580px] md:max-w-[96vw] min-h-screen md:min-h-0 md:mb-10 shadow-lg overflow-hidden relative">
         {dragOver && (
           <div className="absolute inset-0 z-[10] pointer-events-none flex items-center justify-center bg-claude/10 backdrop-blur-sm border-2 border-dashed border-claude rounded-2xl">
             <div className="text-claude text-base font-medium flex flex-col items-center gap-2">

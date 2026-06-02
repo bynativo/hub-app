@@ -63,9 +63,9 @@ export function FollowupModal() {
   const optionCls = 'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border border-black/7 bg-bg3 hover:border-claude/30 hover:bg-claude/5 cursor-pointer transition-all text-left'
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[320] flex items-start justify-center pt-16 overflow-y-auto backdrop-blur-sm"
+    <div className="fixed inset-0 bg-black/40 z-[320] flex items-end md:items-start justify-center md:pt-16 overflow-y-auto backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) closeFollowup() }}>
-      <div className="bg-bg2 border border-black/7 rounded-2xl p-6 w-[460px] max-w-[96vw] shadow-lg">
+      <div className="bg-bg2 border border-black/7 rounded-t-2xl md:rounded-2xl p-5 md:p-6 w-full md:w-[460px] md:max-w-[96vw] shadow-lg pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="flex items-start gap-2 mb-1">
           <span className="text-lg">⏰</span>
           <div className="flex-1">

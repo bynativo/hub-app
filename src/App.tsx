@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from './lib/store'
 import { Topbar } from './components/layout/Topbar'
 import { Sidebar } from './components/layout/Sidebar'
+import { BottomNav } from './components/layout/BottomNav'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ContextView } from './components/dashboard/ContextView'
 import { AgenciaView } from './components/dashboard/AgenciaView'
@@ -173,6 +174,11 @@ export default function App() {
     }
   }
 
+  // En mobile (<md) los paneles de detalle son full-screen — no aplicamos
+  // margin-right (Tailwind md:mr-[540px] solo se activa desde md, así que en
+  // mobile naturalmente queda en 0).
+  const detailOpenAny = detailOpen || projectDetailOpen
+
   return (
     <>
       <div className="h-screen flex flex-col overflow-hidden">
@@ -180,12 +186,12 @@ export default function App() {
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main
-            className="flex-1 overflow-y-auto"
-            style={{ marginRight: (detailOpen || projectDetailOpen) ? '540px' : '0', transition: 'margin-right 0.2s' }}
+            className={`flex-1 overflow-y-auto pb-16 md:pb-0 transition-[margin] duration-200 ${detailOpenAny ? 'md:mr-[540px]' : 'mr-0'}`}
           >
             {renderView()}
           </main>
         </div>
+        <BottomNav />
       </div>
 
       {detailOpen && <TaskDetail />}

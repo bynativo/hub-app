@@ -68,8 +68,8 @@ export function SearchModal({ onClose, onOpenPres }: { onClose: () => void; onOp
     ) : null
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[340] flex items-start justify-center pt-20 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-bg2 border border-black/7 rounded-2xl w-[640px] max-w-[94vw] shadow-2xl overflow-hidden flex flex-col max-h-[70vh]">
+    <div className="fixed inset-0 bg-black/40 z-[340] flex items-start justify-center pt-4 md:pt-20 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-bg2 border border-black/7 rounded-2xl w-[calc(100vw-1rem)] md:w-[640px] md:max-w-[94vw] shadow-2xl overflow-hidden flex flex-col max-h-[88vh] md:max-h-[70vh]">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-black/7">
           <span className="text-gray-400">🔍</span>
           <input value={q} onChange={e => setQ(e.target.value)} autoFocus

@@ -61,8 +61,8 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-[300] flex items-start justify-center pt-8 overflow-y-auto backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-bg2 border border-black/7 rounded-2xl p-6 w-[520px] max-w-[96vw] mb-10 shadow-lg">
+    <div className="fixed inset-0 bg-black/40 z-[300] flex items-end md:items-start justify-center md:pt-8 overflow-y-auto backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-bg2 border border-black/7 rounded-t-2xl md:rounded-2xl p-5 md:p-6 w-full md:w-[520px] md:max-w-[96vw] md:mb-10 shadow-lg pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="font-serif text-xl font-light mb-4">{isEdit ? 'Editar recurrente' : 'Nueva recurrente'}</div>
 
         <div className="mb-3">

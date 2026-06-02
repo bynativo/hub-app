@@ -84,7 +84,7 @@ export function Sidebar() {
   const ctxCount = (ctx: string) => active.filter(t => t.context === ctx && !t.es_recordatorio).length
 
   return (
-    <aside className="w-[230px] shrink-0 bg-bg2 border-r border-black/7 overflow-y-auto py-3 shadow-sm flex flex-col">
+    <aside className="w-[230px] shrink-0 bg-bg2 border-r border-black/7 overflow-y-auto py-3 shadow-sm hidden md:flex flex-col">
       {/* Capturar destacado (siempre visible) */}
       <div className="px-3 pb-1">
         <button

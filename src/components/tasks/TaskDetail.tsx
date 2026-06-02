@@ -952,7 +952,7 @@ Reglas del bloque:
 
   return (
     <div
-      className="fixed top-[52px] right-0 bottom-0 w-[540px] bg-bg border-l border-black/13 z-50 flex flex-col shadow-[-4px_0_20px_rgba(0,0,0,0.08)]"
+      className="fixed top-0 md:top-[52px] right-0 bottom-0 left-0 md:left-auto w-full md:w-[540px] bg-bg md:border-l border-black/13 z-50 flex flex-col shadow-[-4px_0_20px_rgba(0,0,0,0.08)]"
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
