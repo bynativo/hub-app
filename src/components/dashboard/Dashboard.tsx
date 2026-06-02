@@ -62,6 +62,7 @@ export function Dashboard() {
   const tasks = useStore(s => s.tasks)
   const calendarEvents = useStore(s => s.calendarEvents)
   const recurrentes = useStore(s => s.recurrentes)
+  const refreshCalendar = useStore(s => s.refreshCalendar)
   const [mode, setMode] = useState<ViewMode>(loadMode)
   const [sinFechaCollapsed, setSinFechaCollapsed] = useState(true)
   const [cerradoCollapsed, setCerradoCollapsed] = useState(true)
@@ -72,6 +73,19 @@ export function Dashboard() {
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
   useEffect(() => { saveFilters('mis_tareas_type_filters', typeFilters) }, [typeFilters])
   useEffect(() => { saveFilters('mis_tareas_context_filters', ctxFilters) }, [ctxFilters])
+
+  // Al montar el dashboard, si el calendario no se refrescó en > 5 min, dispara
+  // un refresh background con un rango chico (semana actual) para que la
+  // "Agenda de hoy" del header refleje cambios recientes.
+  useEffect(() => {
+    const last = useStore.getState().calendarLastSync
+    const STALE = 5 * 60 * 1000
+    if (last && Date.now() - last < STALE) return
+    const from = new Date(); from.setHours(0, 0, 0, 0)
+    const to = new Date(); to.setDate(to.getDate() + 7); to.setHours(23, 59, 59, 999)
+    refreshCalendar({ from: from.toISOString(), to: to.toISOString(), silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Set base de tareas activas (top-level por defecto; las hijas se ven al
   // expandir su padre). Excepción: hija con due_date distinto a la padre se

@@ -51,6 +51,34 @@ export default function App() {
 
   useEffect(() => { loadAll() }, [])
 
+  // Polling silencioso del calendario cada 5 min mientras la app está abierta.
+  // También dispara un refresh al volver a focus si pasaron 5 min, para que
+  // cuando uno vuelve a la pestaña la agenda esté fresca.
+  useEffect(() => {
+    const POLL_MS = 5 * 60 * 1000
+    function defaultRange() {
+      // Ventana amplia: ayer hasta +60 días — cubre reuniones pasadas con cambios
+      // y futuras razonables.
+      const from = new Date(); from.setDate(from.getDate() - 1); from.setHours(0, 0, 0, 0)
+      const to = new Date(); to.setDate(to.getDate() + 60); to.setHours(23, 59, 59, 999)
+      return { from: from.toISOString(), to: to.toISOString() }
+    }
+    function shouldSync() {
+      const last = useStore.getState().calendarLastSync
+      return !last || (Date.now() - last) > POLL_MS
+    }
+    function poll() {
+      const { from, to } = defaultRange()
+      useStore.getState().refreshCalendar({ from, to, silent: true })
+    }
+    function onVis() {
+      if (document.visibilityState === 'visible' && shouldSync()) poll()
+    }
+    const interval = setInterval(poll, POLL_MS)
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
+  }, [])
+
   // URL actions desde shortcuts del manifest (PWA). ?action=capture abre el
   // modal Capturar; ?action=reminder lo abre con el toggle reminder activo.
   // Limpiamos el query al consumir para no re-disparar.

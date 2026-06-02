@@ -27,6 +27,27 @@ let _historyAutoId = 1
 let _toastAutoId = 1
 let _toastTimer: ReturnType<typeof setTimeout> | null = null
 
+// Cache de eventos de calendario en localStorage para pintar la UI rápido al
+// cold-start mientras el background-poll trae la versión fresca.
+const CAL_CACHE_KEY = 'hub_calendar_cache_v1'
+const CAL_PROXY = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/calendar-proxy'
+
+function loadCalendarCache(): { events: CalendarEvent[]; lastSync: number | null } {
+  try {
+    const raw = localStorage.getItem(CAL_CACHE_KEY)
+    if (!raw) return { events: [], lastSync: null }
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed?.events)) {
+      return { events: parsed.events as CalendarEvent[], lastSync: typeof parsed.lastSync === 'number' ? parsed.lastSync : null }
+    }
+  } catch { /* ignore */ }
+  return { events: [], lastSync: null }
+}
+
+function saveCalendarCache(events: CalendarEvent[], lastSync: number) {
+  try { localStorage.setItem(CAL_CACHE_KEY, JSON.stringify({ events, lastSync })) } catch { /* ignore */ }
+}
+
 interface AppState {
   tasks: Task[]
   projects: Project[]
@@ -35,6 +56,8 @@ interface AppState {
   presentations: Presentation[]
   contacts: Contact[]
   calendarEvents: CalendarEvent[]
+  calendarLastSync: number | null
+  calendarSyncing: boolean
   templates: Template[]
   templateTasks: TemplateTask[]
   loading: boolean
@@ -58,6 +81,10 @@ interface AppState {
   toast: ToastState | null
 
   loadAll: () => Promise<void>
+  // Refetch de calendar_events. Si pasa from/to también dispara el proxy de
+  // Google para sincronizar ese rango antes de leer. silent=true evita el
+  // toast de "Calendario actualizado".
+  refreshCalendar: (opts?: { from?: string; to?: string; silent?: boolean }) => Promise<void>
   openSearch: () => void
   closeSearch: () => void
   setView: (view: string) => void
@@ -89,6 +116,10 @@ interface AppState {
   deleteTaskSoft: (id: number) => Promise<void>
 }
 
+// Bootstrap del cache al crear el store: el array inicial ya viene poblado
+// con lo último que vimos, así el primer paint no muestra "sin agenda".
+const _calBoot = loadCalendarCache()
+
 export const useStore = create<AppState>((set, get) => ({
   tasks: [],
   projects: [],
@@ -96,7 +127,9 @@ export const useStore = create<AppState>((set, get) => ({
   recurrentes: [],
   presentations: [],
   contacts: [],
-  calendarEvents: [],
+  calendarEvents: _calBoot.events,
+  calendarLastSync: _calBoot.lastSync,
+  calendarSyncing: false,
   templates: [],
   templateTasks: [],
   loading: true,
@@ -143,6 +176,8 @@ export const useStore = create<AppState>((set, get) => ({
     // Surface de errores: antes un fallo de query dejaba las listas en [] en silencio.
     const errored = [tc, pc, cc, rc, prc, ct, ce, tmp, tmpt].find(r => r.error)
     if (errored?.error) console.error('[loadAll] Supabase error:', errored.error)
+    const events = (ce.data || []) as CalendarEvent[]
+    saveCalendarCache(events, Date.now())
     set({
       tasks: tc.data || [],
       projects: pc.data || [],
@@ -150,12 +185,49 @@ export const useStore = create<AppState>((set, get) => ({
       recurrentes: rc.data || [],
       presentations: prc.data || [],
       contacts: ct.data || [],
-      calendarEvents: ce.data || [],
+      calendarEvents: events,
+      calendarLastSync: Date.now(),
       templates: tmp.data || [],
       templateTasks: tmpt.data || [],
       loading: false,
       initialized: true,
     })
+  },
+
+  // Refrescar SOLO los eventos del calendario. Si se pasa from/to, primero
+  // empuja al proxy de Google a sincronizar ese rango; después refetch directo
+  // de calendar_events. Pintura optimista: el cache ya está en estado.
+  // silent=true salta el toast (lo usa el polling).
+  refreshCalendar: async (opts) => {
+    if (get().calendarSyncing) return
+    set({ calendarSyncing: true })
+    try {
+      if (opts?.from && opts?.to) {
+        try {
+          await fetch(CAL_PROXY, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from: opts.from, to: opts.to }),
+          })
+        } catch (e) {
+          // Si el proxy falla seguimos: refetch del cache de Supabase igual
+          // sirve si alguien sincronizó desde otro lado.
+          console.warn('[refreshCalendar] proxy falló:', e)
+        }
+      }
+      const { data, error } = await supabase.from('calendar_events').select('*').order('starts_at')
+      if (error) throw error
+      const events = (data || []) as CalendarEvent[]
+      const now = Date.now()
+      saveCalendarCache(events, now)
+      set({ calendarEvents: events, calendarLastSync: now })
+      if (!opts?.silent) get().showToast('✓ Calendario actualizado', { durationMs: 2000 })
+    } catch (e) {
+      console.error('[refreshCalendar] error:', e)
+      if (!opts?.silent) get().showToast('No se pudo actualizar el calendario', { durationMs: 2500 })
+    } finally {
+      set({ calendarSyncing: false })
+    }
   },
 
   setView: (view) => set({ activeView: view }),

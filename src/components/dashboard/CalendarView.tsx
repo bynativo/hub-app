@@ -1,12 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { todayISO, addDaysISO, ctxColor, dateOfLocal } from '../../lib/helpers'
 import type { CalendarEvent } from '../../lib/types'
 
-const PROXY = 'https://ltgdpbmnvpjwwqkirbxw.supabase.co/functions/v1/calendar-proxy'
 const DAY_START = 8
 const DAY_END = 20
+
+// "Actualizado hace X min". Verde por defecto; naranja > 10 min.
+function fmtAgo(ms: number): string {
+  const sec = Math.floor((Date.now() - ms) / 1000)
+  if (sec < 30) return 'hace segundos'
+  if (sec < 60) return `hace ${sec}s`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `hace ${min} min`
+  const h = Math.floor(min / 60)
+  return `hace ${h}h`
+}
 
 function fmtTime(d: Date) { return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) }
 function dayLabel(iso: string) { return new Date(iso + 'T00:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'short' }) }
@@ -20,18 +30,42 @@ export function CalendarView() {
   const tasks = useStore(s => s.tasks)
   const loadAll = useStore(s => s.loadAll)
   const openDetail = useStore(s => s.openDetail)
+  const refreshCalendar = useStore(s => s.refreshCalendar)
+  const calendarSyncing = useStore(s => s.calendarSyncing)
+  const calendarLastSync = useStore(s => s.calendarLastSync)
 
   const [view, setView] = useState<'week' | 'day'>('week')
   const [anchor, setAnchor] = useState(todayISO())
-  const [syncing, setSyncing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [evTitle, setEvTitle] = useState('')
   const [evDate, setEvDate] = useState(todayISO())
   const [evStart, setEvStart] = useState('09:00')
   const [evEnd, setEvEnd] = useState('10:00')
   const [evCtx, setEvCtx] = useState('banco')
+  // Tick para refrescar el indicador "hace X min" sin esperar a una re-render
+  // de otra fuente.
+  const [, setTick] = useState(0)
 
   const days = view === 'day' ? [anchor] : Array.from({ length: 7 }, (_, i) => addDaysISO(mondayOf(anchor), i))
+
+  // Al entrar al CalendarView o cambiar de rango, si pasaron > 5 min refrescamos
+  // automáticamente con el rango visible para que el proxy traiga eventos nuevos.
+  useEffect(() => {
+    const last = calendarLastSync
+    const STALE_MS = 5 * 60 * 1000
+    const stale = !last || (Date.now() - last) > STALE_MS
+    if (!stale) return
+    const from = new Date(days[0] + 'T00:00:00').toISOString()
+    const to = new Date(addDaysISO(days[days.length - 1], 1) + 'T00:00:00').toISOString()
+    refreshCalendar({ from, to, silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor, view])
+
+  // Tick cada 30s para que el "hace X min" se vea fresco.
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 30_000)
+    return () => clearInterval(t)
+  }, [])
 
   // Comparamos por fecha LOCAL del evento (starts_at puede venir como UTC con
   // "Z"; slice(0,10) devolveria la fecha UTC y rompe en zonas UTC-X de tarde).
@@ -62,15 +96,9 @@ export function CalendarView() {
   }
 
   async function sync() {
-    setSyncing(true)
-    try {
-      const from = new Date(days[0] + 'T00:00:00').toISOString()
-      const to = new Date(addDaysISO(days[days.length - 1], 1) + 'T00:00:00').toISOString()
-      const r = await fetch(PROXY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from, to }) })
-      const d = await r.json()
-      await loadAll()
-      alert(d.connected ? `✓ Sincronizados ${d.synced} eventos de Google Calendar.` : (d.note || 'Google Calendar aún no está conectado.'))
-    } catch { alert('Error al sincronizar.') } finally { setSyncing(false) }
+    const from = new Date(days[0] + 'T00:00:00').toISOString()
+    const to = new Date(addDaysISO(days[days.length - 1], 1) + 'T00:00:00').toISOString()
+    await refreshCalendar({ from, to })
   }
 
   async function createEvent() {
@@ -93,6 +121,19 @@ export function CalendarView() {
         <div>
           <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#7c3aed' }}>Calendario</h1>
           <p className="text-gray-500 text-[13px]">Agenda + tareas con fecha · reuniones de Google Calendar</p>
+          {(() => {
+            if (!calendarLastSync) {
+              return <p className="text-[11px] text-gray-400 mt-0.5">Sin sincronizar aún</p>
+            }
+            const ageMs = Date.now() - calendarLastSync
+            const stale = ageMs > 10 * 60 * 1000
+            return (
+              <p className={`text-[11px] mt-0.5 ${stale ? 'text-warn font-medium' : 'text-gray-400'}`}>
+                {stale ? '⚠ ' : '✓ '}Actualizado {fmtAgo(calendarLastSync)}
+                {calendarSyncing && <span className="ml-1.5 text-claude">· sincronizando…</span>}
+              </p>
+            )
+          })()}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5">
@@ -103,9 +144,9 @@ export function CalendarView() {
               </button>
             ))}
           </div>
-          <button onClick={sync} disabled={syncing}
+          <button onClick={sync} disabled={calendarSyncing}
             className="text-xs bg-bg3 border border-black/7 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-bg4 cursor-pointer disabled:opacity-40">
-            {syncing ? 'Sincronizando…' : '↻ Google'}
+            {calendarSyncing ? 'Sincronizando…' : '↻ Google'}
           </button>
           <button onClick={() => setCreating(c => !c)}
             className="text-xs bg-claude text-white px-3 py-1.5 rounded-lg hover:bg-purple-700 cursor-pointer">+ Evento</button>
