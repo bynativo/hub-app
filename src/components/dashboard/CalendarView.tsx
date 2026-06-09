@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { todayISO, addDaysISO, ctxColor, dateOfLocal } from '../../lib/helpers'
-import type { CalendarEvent } from '../../lib/types'
+import { todayISO, addDaysISO, ctxColor, dateOfLocal, splitTitle } from '../../lib/helpers'
+import type { CalendarEvent, Task } from '../../lib/types'
 
 const DAY_START = 8
 const DAY_END = 20
@@ -25,6 +25,50 @@ function mondayOf(iso: string): string {
   return addDaysISO(iso, -((dow + 6) % 7))
 }
 
+// Tarjeta de contenido sin fecha de publicación.
+function NoPubDateCard({ task, onAssigned }: { task: Task; onAssigned: () => void }) {
+  const [assigning, setAssigning] = useState(false)
+  const [date, setDate] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { prefix, name } = splitTitle(task.title)
+
+  async function assign() {
+    if (!date) return
+    setAssigning(true)
+    await supabase.from('tasks').update({ publish_date: date, publish_date_pending: false }).eq('id', task.id)
+    setAssigning(false)
+    onAssigned()
+  }
+
+  return (
+    <div className="bg-bg2 border border-black/7 rounded-lg p-3 flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium leading-snug">
+          {prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{prefix} |</span>}
+          {name}
+        </div>
+        {task.due_date && <div className="text-[11px] text-gray-500 mt-0.5">Entrega: {task.due_date.slice(5).replace('-', '/')}</div>}
+        <span className="inline-block mt-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">Pendiente de fecha</span>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {!date ? (
+          <button
+            onClick={() => { inputRef.current?.showPicker?.(); inputRef.current?.focus() }}
+            className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">
+            Asignar fecha
+          </button>
+        ) : (
+          <button onClick={assign} disabled={assigning}
+            className="text-[11px] text-white bg-claude px-2.5 py-1 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40">
+            {assigning ? '…' : `✓ ${date.slice(5).replace('-', '/')}`}
+          </button>
+        )}
+        <input ref={inputRef} type="date" value={date} onChange={e => setDate(e.target.value)} className="opacity-0 w-0 h-0 absolute pointer-events-none" />
+      </div>
+    </div>
+  )
+}
+
 export function CalendarView() {
   const events = useStore(s => s.calendarEvents)
   const tasks = useStore(s => s.tasks)
@@ -42,6 +86,14 @@ export function CalendarView() {
   const [evStart, setEvStart] = useState('09:00')
   const [evEnd, setEvEnd] = useState('10:00')
   const [evCtx, setEvCtx] = useState('banco')
+  const [noPubCollapsed, setNoPubCollapsed] = useState(false)
+
+  // Tareas de contenido/influencer sin fecha de publicación (activas, no archivadas)
+  const noPubDate = tasks.filter(t =>
+    !t.done && !t.archived_at && !t.es_recordatorio &&
+    (t.task_type === 'contenido' || t.es_influencer) &&
+    !t.publish_date
+  )
   // Tick para refrescar el indicador "hace X min" sin esperar a una re-render
   // de otra fuente.
   const [, setTick] = useState(0)
@@ -171,6 +223,27 @@ export function CalendarView() {
             <option value="banco">Banco</option><option value="agencia">Agencia</option><option value="personal">Personal</option>
           </select>
           <button onClick={createEvent} disabled={!evTitle.trim()} className="text-xs bg-claude text-white px-3 py-1.5 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40">Crear</button>
+        </div>
+      )}
+
+      {/* Sección: contenidos sin fecha de publicación */}
+      {noPubDate.length > 0 && (
+        <div className="mb-5 border border-warn/25 bg-warn/5 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setNoPubCollapsed(c => !c)}
+            className="w-full flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-warn/10 transition-colors">
+            <span className="text-[12px] font-mono text-warn tracking-wider uppercase">
+              📋 Sin fecha de publicación · {noPubDate.length} contenido{noPubDate.length !== 1 ? 's' : ''}
+            </span>
+            <span className="text-[10px] text-warn">{noPubCollapsed ? '▶' : '▼'}</span>
+          </button>
+          {!noPubCollapsed && (
+            <div className="px-3 pb-3 flex flex-col gap-2">
+              {noPubDate.map(t => (
+                <NoPubDateCard key={t.id} task={t} onAssigned={() => loadAll()} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,10 +1,49 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { ctxLabel } from '../../lib/helpers'
+import { ctxLabel, splitTitle } from '../../lib/helpers'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { exportPresentationPDF } from '../../lib/pdfExport'
-import type { Presentation } from '../../lib/types'
+import type { Presentation, Task } from '../../lib/types'
+
+function NoPubCard({ task, onAssigned }: { task: Task; onAssigned: () => void }) {
+  const [date, setDate] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { prefix, name } = splitTitle(task.title)
+  async function assign() {
+    if (!date) return
+    setSaving(true)
+    await supabase.from('tasks').update({ publish_date: date, publish_date_pending: false }).eq('id', task.id)
+    setSaving(false); onAssigned()
+  }
+  return (
+    <div className="bg-bg2 border border-black/7 rounded-lg p-3 flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] leading-snug">
+          {prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{prefix} |</span>}
+          {name}
+        </div>
+        {task.due_date && <div className="text-[11px] text-gray-500 mt-0.5">Entrega: {task.due_date.slice(5).replace('-', '/')}</div>}
+        <span className="inline-block mt-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/10 text-warn">Pendiente de fecha</span>
+      </div>
+      <div className="shrink-0 flex items-center gap-1.5">
+        {!date ? (
+          <button onClick={() => { inputRef.current?.showPicker?.(); inputRef.current?.focus() }}
+            className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">
+            Asignar fecha
+          </button>
+        ) : (
+          <button onClick={assign} disabled={saving}
+            className="text-[11px] text-white bg-claude px-2.5 py-1 rounded-md cursor-pointer hover:bg-purple-700 disabled:opacity-40">
+            {saving ? '…' : `✓ ${date.slice(5).replace('-', '/')}`}
+          </button>
+        )}
+        <input ref={inputRef} type="date" value={date} onChange={e => setDate(e.target.value)} className="opacity-0 w-0 h-0 absolute pointer-events-none" />
+      </div>
+    </div>
+  )
+}
 
 function slugify(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -14,8 +53,18 @@ function slugify(s: string): string {
 export function PresentationsView({ context, onOpen }: { context?: string; onOpen: (id: number) => void }) {
   const presentations = useStore(s => s.presentations)
   const clients = useStore(s => s.clients)
+  const tasks = useStore(s => s.tasks)
   const loadAll = useStore(s => s.loadAll)
   const [newOpen, setNewOpen] = useState<{ context: string; clientId: number | null } | null>(null)
+  const [noPubCollapsed, setNoPubCollapsed] = useState(false)
+
+  // Tareas de contenido sin fecha de publicación para el contexto actual
+  const noPubDate = tasks.filter(t =>
+    !t.done && !t.archived_at && !t.es_recordatorio &&
+    (t.task_type === 'contenido' || !!t.es_influencer) &&
+    !t.publish_date &&
+    (!context || t.context === context)
+  )
   const [menuFor, setMenuFor] = useState<number | null>(null)
   const [renaming, setRenaming] = useState<{ id: number; title: string } | null>(null)
   const [deleting, setDeleting] = useState<Presentation | null>(null)
@@ -169,6 +218,21 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
           </div>
         </div>
 
+        {/* Sin fecha de publicación — agencia */}
+        {noPubDate.length > 0 && (
+          <div className="mb-5 border border-warn/25 bg-warn/5 rounded-xl overflow-hidden">
+            <button onClick={() => setNoPubCollapsed(c => !c)} className="w-full flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-warn/10 transition-colors">
+              <span className="text-[12px] font-mono text-warn tracking-wider uppercase">📋 Sin fecha de publicación · {noPubDate.length} contenido{noPubDate.length !== 1 ? 's' : ''}</span>
+              <span className="text-[10px] text-warn">{noPubCollapsed ? '▶' : '▼'}</span>
+            </button>
+            {!noPubCollapsed && (
+              <div className="px-3 pb-3 flex flex-col gap-2">
+                {noPubDate.map(t => <NoPubCard key={t.id} task={t} onAssigned={loadAll} />)}
+              </div>
+            )}
+          </div>
+        )}
+
         {folders.map(f => (
           <div key={f.key} className="mb-6">
             <div className="flex items-center justify-between mb-2">
@@ -208,6 +272,21 @@ export function PresentationsView({ context, onOpen }: { context?: string; onOpe
           </button>
         </div>
       </div>
+
+      {/* Sin fecha de publicación — banco/general */}
+      {noPubDate.length > 0 && (
+        <div className="mb-5 border border-warn/25 bg-warn/5 rounded-xl overflow-hidden">
+          <button onClick={() => setNoPubCollapsed(c => !c)} className="w-full flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-warn/10 transition-colors">
+            <span className="text-[12px] font-mono text-warn tracking-wider uppercase">📋 Sin fecha de publicación · {noPubDate.length} contenido{noPubDate.length !== 1 ? 's' : ''}</span>
+            <span className="text-[10px] text-warn">{noPubCollapsed ? '▶' : '▼'}</span>
+          </button>
+          {!noPubCollapsed && (
+            <div className="px-3 pb-3 flex flex-col gap-2">
+              {noPubDate.map(t => <NoPubCard key={t.id} task={t} onAssigned={loadAll} />)}
+            </div>
+          )}
+        </div>
+      )}
 
       {list.length
         ? <div className={gridCls}>{list.map(renderCard)}</div>
