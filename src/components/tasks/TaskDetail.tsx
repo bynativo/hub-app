@@ -323,6 +323,7 @@ function CreatePerfilesMiniModal({
 
 export function TaskDetail() {
   const tasks = useStore(s => s.tasks)
+  const calendarEvents = useStore(s => s.calendarEvents)
   const contacts = useStore(s => s.contacts)
   const presentations = useStore(s => s.presentations)
   const projects = useStore(s => s.projects)
@@ -375,6 +376,12 @@ export function TaskDetail() {
   const [showContext, setShowContext] = useState(false)
   const [suggestedHours, setSuggestedHours] = useState<number | null>(null)
   const [suggesting, setSuggesting] = useState(false)
+  // Nuevas fechas de planificación y delegación
+  const [workDate, setWorkDate] = useState('')
+  const [delegationDate, setDelegationDate] = useState('')
+  const [delegationReturnDate, setDelegationReturnDate] = useState('')
+  const [suggestingWorkDate, setSuggestingWorkDate] = useState(false)
+  const [suggestedWorkDate, setSuggestedWorkDate] = useState<{ date: string; reason: string } | null>(null)
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
@@ -432,6 +439,10 @@ export function TaskDetail() {
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
     setSuggestedHours(null)
+    setWorkDate((task as any).work_date || '')
+    setDelegationDate((task as any).delegation_date || '')
+    setDelegationReturnDate((task as any).delegation_return_date || '')
+    setSuggestedWorkDate(null)
     setDirty(false)
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). Pegá texto, una captura o dictá: puedo actualizar fecha, prioridad, el contexto o crear subtareas (con tu aprobación).` }])
     setPendingAction(null); setChatImages([])
@@ -589,6 +600,9 @@ export function TaskDetail() {
       recordatorio_at: isReminder && recordatorioAt ? new Date(recordatorioAt).toISOString() : null,
       notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
       estimated_hours: estHours,
+      work_date: workDate || null,
+      delegation_date: delegationDate || null,
+      delegation_return_date: delegationReturnDate || null,
     }, 'Edición de tarea')
     setSavingInfo(false); setDirty(false)
   }
@@ -669,6 +683,66 @@ ${avg ? `Referencia: el promedio de tareas similares de este contexto es ${avg.t
     } finally {
       setSuggesting(false)
     }
+  }
+
+  async function suggestWorkDate() {
+    if (!task) return
+    setSuggestingWorkDate(true)
+    try {
+      const today = new Date()
+      const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7)
+      const toISO = (d: Date) => d.toISOString().slice(0, 10)
+      // Eventos del calendario en la próxima semana para conocer disponibilidad
+      const events = calendarEvents.filter(e => {
+        const d = e.starts_at?.slice(0, 10)
+        return d >= toISO(today) && d <= toISO(nextWeek)
+      })
+      const eventSummary = events.length
+        ? events.slice(0, 10).map(e => `- ${e.starts_at.slice(0, 10)} ${e.starts_at.slice(11, 16)}: ${e.title}`).join('\n')
+        : '(sin eventos registrados)'
+      const activeTasks = tasks.filter(t => !t.done && !t.archived_at && !t.es_recordatorio && t.id !== task.id)
+      const tasksSummary = activeTasks.slice(0, 8).map(t => `- ${t.title} (entrega: ${t.due_date || 'sin fecha'}, estimado: ${t.estimated_hours ? `${t.estimated_hours}h` : '?'})`).join('\n')
+      const prompt = `Hoy es ${toISO(today)}. Sugerí el mejor día para trabajar en esta tarea ANTES de su fecha de entrega.
+Tarea: "${title}"
+Entrega: ${dueDate || 'sin fecha'}
+Estimado: ${estHours ? `${estHours}h` : 'desconocido'}
+
+Agenda de la próxima semana:
+${eventSummary}
+
+Otras tareas activas:
+${tasksSummary}
+
+Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (máx 60 chars)"}`
+      const reply = await callClaudeProxy([{ role: 'user', content: prompt }], 'Sos un asistente de planificación. Devolvés SOLO JSON.')
+      const cleaned = reply.replace(/```json|```/g, '').trim()
+      const obj = JSON.parse(cleaned)
+      if (obj.fecha) setSuggestedWorkDate({ date: obj.fecha, reason: obj.razon || '' })
+    } catch {
+      alert('No se pudo sugerir la fecha (proxy de Claude).')
+    } finally {
+      setSuggestingWorkDate(false)
+    }
+  }
+
+  // Crea recordatorio automático para fecha de devolución delegada.
+  async function createDelegationReturnReminder(returnDate: string) {
+    if (!task || !returnDate) return
+    await supabase.from('tasks').insert({
+      title: `Hoy vence la devolución de ${stripPrefix(task.title)} — ¿ya lo tenés?`,
+      context: task.context,
+      client_id: task.client_id,
+      parent_task_id: task.id,
+      priority: 'alta',
+      origin: 'propia',
+      status: 'Recordatorio',
+      es_recordatorio: true,
+      recordatorio_at: new Date(`${returnDate}T09:00:00`).toISOString(),
+      tipo_recordatorio: 'seguimiento',
+      done: false,
+      cats: [], plan: [], meeting_agenda: [],
+    })
+    await loadAll()
   }
 
   // ---- Checklist ----
@@ -1290,6 +1364,70 @@ Reglas del bloque:
                   <option value="reunion">🤝 Reunión</option>
                 </select>
               </div>
+            </div>
+
+            {/* Fechas de planificación y delegación */}
+            <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-3">
+              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">📅 Planificación y delegación</div>
+
+              {/* Fecha de trabajo */}
+              <div>
+                <label className={labelCls}>Fecha de trabajo — cuándo trabajás esta tarea</label>
+                <input type="date" value={workDate} onChange={e => { setInfo(setWorkDate, e.target.value); setSuggestedWorkDate(null) }} className={fieldCls} />
+                <div className="mt-1.5">
+                  {suggestedWorkDate == null ? (
+                    <button onClick={suggestWorkDate} disabled={suggestingWorkDate}
+                      className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 disabled:opacity-40">
+                      {suggestingWorkDate ? 'Pensando…' : '✦ Sugerir con Claude'}
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 text-[11px] bg-claude/7 border border-claude/20 text-claude px-2.5 py-1 rounded-md flex-wrap">
+                      <span>Te sugiero trabajar esto el <span className="font-semibold">{suggestedWorkDate.date.slice(5).replace('-', '/')}</span>{suggestedWorkDate.reason ? ` — ${suggestedWorkDate.reason}` : ''}</span>
+                      <button onClick={() => { setInfo(setWorkDate, suggestedWorkDate.date); setSuggestedWorkDate(null) }}
+                        className="text-success hover:opacity-70 cursor-pointer" title="Aceptar">✓</button>
+                      <button onClick={() => setSuggestedWorkDate(null)} className="text-gray-400 hover:text-danger cursor-pointer" title="Descartar">✕</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Fecha de delegación — solo si hay alguien asignado */}
+              {delegatedTo && (
+                <div>
+                  <label className={labelCls}>Fecha de delegación — cuándo le pasás la tarea a {delegatedTo}</label>
+                  <input type="date" value={delegationDate} onChange={e => setInfo(setDelegationDate, e.target.value)} className={fieldCls} />
+                </div>
+              )}
+
+              {/* Fecha de devolución — solo si hay delegación */}
+              {delegatedTo && (
+                <div>
+                  <label className={labelCls}>Fecha de devolución — cuándo necesitás que te devuelvan lo delegado</label>
+                  <input type="date" value={delegationReturnDate}
+                    onChange={e => {
+                      const v = e.target.value
+                      setInfo(setDelegationReturnDate, v)
+                      // Validar: devolución debe ser ≥24h antes de due_date
+                      if (v && dueDate && v >= dueDate) {
+                        alert(`⚠ La fecha de devolución debe ser al menos 1 día antes de la entrega (${dueDate}).`)
+                      }
+                    }}
+                    className={fieldCls} />
+                  {delegationReturnDate && dueDate && delegationReturnDate >= dueDate && (
+                    <div className="text-[11px] text-danger mt-1">⚠ Debe ser al menos 1 día antes de la entrega ({dueDate})</div>
+                  )}
+                  {delegationReturnDate && !(delegationReturnDate >= dueDate) && (
+                    <button
+                      onClick={async () => {
+                        await saveInfo()
+                        await createDelegationReturnReminder(delegationReturnDate)
+                      }}
+                      className="mt-1.5 text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">
+                      🔔 Crear recordatorio de seguimiento
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
