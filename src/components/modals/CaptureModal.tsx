@@ -4,7 +4,7 @@ import { useStore } from '../../lib/store'
 import { callClaude } from '../../lib/claude'
 import { QuickClientModal } from './QuickClientModal'
 import { QuickProjectModal } from './QuickProjectModal'
-import { fmtHoras, todayISO, taskPrefix, buildTitle, stripPrefix, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
+import { fmtHoras, todayISO, taskPrefix, buildTitle, buildCampaignTitle, stripPrefix, deliveryWarning, recordingWarning, vaAGrilla } from '../../lib/helpers'
 import { TiposChecklist, type TipoConCantidad } from '../tasks/TiposChecklist'
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { PUB_TYPES, FORMATOS } from '../../lib/constants'
@@ -617,6 +617,7 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   template?: { title?: string; context?: string; priority?: string; origin?: string; notes?: string | null; estimated_hours?: number | null; task_type?: string }
 }) {
   const loadAll = useStore(s => s.loadAll)
+  const showToast = useStore(s => s.showToast)
   const clients = useStore(s => s.clients)
   const projects = useStore(s => s.projects)
   const tasks = useStore(s => s.tasks)
@@ -671,6 +672,10 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [reminderType, setReminderType] = useState('general')
   const [correoCtx, setCorreoCtx] = useState('')
   const [desc, setDesc] = useState(template?.notes ?? '')
+  // Campaña
+  const [esCampana, setEsCampana] = useState(false)
+  const [campanaFechaInicio, setCampanaFechaInicio] = useState('')
+  const [campanaFechaFin, setCampanaFechaFin] = useState('')
   const [saving, setSaving] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
@@ -718,7 +723,9 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       resolvedProjectId = Number(projectId)
     }
 
-    const builtTitle = buildTitle(titlePrefix, title.trim())
+    const builtTitle = esCampana
+      ? buildCampaignTitle(titlePrefix, title.trim())
+      : buildTitle(titlePrefix, title.trim())
     const { data: inserted, error } = await supabase.from('tasks').insert({
       title: builtTitle,
       context,
@@ -761,10 +768,28 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       // correo_contexto se usa como "Asunto del correo" para responder_correo y
       // como "A quién / contexto" para enviar_correo.
       correo_contexto: (reminder && (reminderType === 'responder_correo' || reminderType === 'enviar_correo')) ? (correoCtx.trim() || null) : null,
+      es_campana: esCampana ? true : null,
+      campana_fecha_inicio: (esCampana && campanaFechaInicio) ? campanaFechaInicio : null,
+      campana_fecha_fin: (esCampana && campanaFechaFin) ? campanaFechaFin : null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     }).select('id').single()
     if (error || !inserted) { alert('Error: ' + (error?.message || 'no data')); setSaving(false); return }
+    // Campaña: crear presentación vinculada automáticamente
+    if (!reminder && esCampana) {
+      const slug = `campana-${inserted.id}-${Date.now()}`
+      await supabase.from('presentations').insert({
+        slug,
+        title: builtTitle,
+        context,
+        client_id: context === 'agencia' ? clientId : null,
+        project_id: resolvedProjectId,
+        tipo: 'campaña',
+        kv_color: '#7c3aed',
+        share_enabled: false,
+      })
+      showToast('✓ Campaña creada con presentación vinculada', { durationMs: 3000 })
+    }
     // Solicitar influencers: crear brief (recordatorio enviar_correo) + N subtareas Perfil X.
     if (!reminder && isSolicitud && briefDate) {
       await supabase.from('tasks').insert({
@@ -1512,6 +1537,39 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                   ))}
                 </div>
               </div>
+
+              {/* Toggle "Es campaña" — solo para tipo independiente o proyecto, no recordatorios ni solicitud */}
+              {!isReminder && (tipo === 'independiente' || tipo === 'proyecto') && (
+                <div className="mb-3 p-3 bg-bg3 rounded-lg border border-black/7 flex flex-col gap-2.5">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <button type="button" onClick={() => setEsCampana(v => !v)}
+                      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${esCampana ? 'bg-claude' : 'bg-bg4'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${esCampana ? 'left-5.5' : 'left-0.5'}`} />
+                    </button>
+                    <div>
+                      <div className="text-[13px]">🎯 Es campaña</div>
+                      <div className="text-[11px] text-gray-400">Nomenclatura automática + fechas de evento + presentación vinculada</div>
+                    </div>
+                  </label>
+                  {esCampana && (
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div>
+                        <label className={labelCls}>Inicio del evento</label>
+                        <input type="date" value={campanaFechaInicio} onChange={e => setCampanaFechaInicio(e.target.value)} className={fieldCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Fin del evento</label>
+                        <input type="date" value={campanaFechaFin} onChange={e => setCampanaFechaFin(e.target.value)} className={fieldCls} />
+                      </div>
+                      {title.trim() && (
+                        <div className="col-span-2 text-[10px] text-gray-400">
+                          Se guardará como: <span className="font-mono text-claude">{buildCampaignTitle(titlePrefix, title.trim())}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {tipo === 'subtarea' && (
                 <div className="mb-3">

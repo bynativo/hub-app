@@ -141,6 +141,12 @@ export function buildTitle(prefix: string, cleanName: string): string {
   return prefix ? `${prefix} | ${c}` : c
 }
 
+// Construye el título de una campaña: "PREFIJO | Campaña: [nombre]"
+export function buildCampaignTitle(prefix: string, nombre: string): string {
+  const n = nombre.trim()
+  return prefix ? `${prefix} | Campaña: ${n}` : `Campaña: ${n}`
+}
+
 // Separa un título guardado en { prefix, name } para mostrarlos con estilos distintos.
 export function splitTitle(title: string): { prefix: string; name: string } {
   let m = title.match(/^\s*INF\s*\|\s*([A-Z0-9]{2,6})\s*\|\s*(.*)$/is)

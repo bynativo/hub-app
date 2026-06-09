@@ -144,6 +144,16 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
               <Tag bg="rgba(124,58,237,0.10)" color="#7c3aed">🎬 Solicitud influencers</Tag>
             )}
 
+            {task.es_campana && (
+              <Tag bg="rgba(220,38,38,0.10)" color="#dc2626">🎯 Campaña</Tag>
+            )}
+            {task.es_campana && task.campana_fecha_inicio && (
+              <Tag bg="rgba(220,38,38,0.07)" color="#dc2626">
+                Evento: {task.campana_fecha_inicio.slice(5).replace('-', '/')}
+                {task.campana_fecha_fin ? ` → ${task.campana_fecha_fin.slice(5).replace('-', '/')}` : ''}
+              </Tag>
+            )}
+
             {/* "📅 En grilla" — contenido (incluido influencer colab/solo_contenido)
                 que va al calendario RRSS. Útil para distinguir piezas de grilla
                 de las que viven solo en cuenta del influencer. */}

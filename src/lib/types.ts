@@ -96,6 +96,16 @@ export interface Task {
   influencer_name: string | null
   influencer_handle: string | null
   influencer_agency: string | null
+  // Campaña
+  es_campana: boolean | null
+  campana_fecha_inicio: string | null
+  campana_fecha_fin: string | null
+  // Planificación y delegación
+  work_date: string | null
+  delegation_date: string | null
+  delegation_return_date: string | null
+  // Contenido sin fecha
+  publish_date_pending: boolean | null
   // Para perfiles de "Solicitar influencers": array de tipos con cantidad.
   // Reemplaza al tipo_publicacion scalar (que queda como fallback/compat).
   influencer_tipos: { tipo: string; cantidad: number }[] | null
