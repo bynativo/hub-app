@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
-import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, thisWeekRange, nextWeekRange, nextMonthRange, isShownAsTopLevel, effectiveDate, dateOfLocal } from '../../lib/helpers'
+import { supabase } from '../../lib/supabase'
+import { callClaudeProxy } from '../../lib/claude'
+import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, thisWeekRange, nextWeekRange, nextMonthRange, isShownAsTopLevel, effectiveDate, dateOfLocal, splitTitle } from '../../lib/helpers'
 import { KANBAN_GROUPS, isWaitingState } from '../../lib/constants'
 import { TaskList } from '../tasks/TaskList'
 import { WaitingTaskCard } from '../tasks/WaitingTaskCard'
@@ -10,14 +12,232 @@ import { RecurrentInstanceCard } from '../tasks/RecurrentInstanceCard'
 import { FilterPills, GENERAL_PILLS, CONTEXT_PILLS, matchesGeneralType, generalIncludesRecurrentes, matchesContext, loadFilters, saveFilters, type GeneralType, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task, Recurrente } from '../../lib/types'
 
-type ViewMode = 'fecha' | 'estado' | 'kanban'
+type ViewMode = 'fecha' | 'estado' | 'kanban' | 'planificacion'
 const STORAGE_KEY = 'mis_tareas_view_mode'
 function loadMode(): ViewMode {
   try {
     const v = localStorage.getItem(STORAGE_KEY)
-    if (v === 'fecha' || v === 'estado' || v === 'kanban') return v
+    if (v === 'fecha' || v === 'estado' || v === 'kanban' || v === 'planificacion') return v
   } catch { /* ignore */ }
   return 'fecha'
+}
+
+// ─── Vista de Planificación ──────────────────────────────────────────────────
+type PlanBlock = { taskId: number; title: string; date: string; hours: number; reason: string }
+
+function PlanningView() {
+  const tasks = useStore(s => s.tasks)
+  const calendarEvents = useStore(s => s.calendarEvents)
+  const updateTask = useStore(s => s.updateTask)
+  const [planning, setPlanning] = useState(false)
+  const [blocks, setBlocks] = useState<PlanBlock[]>([])
+  const [planned, setPlanned] = useState(false)
+  const [approving, setApproving] = useState<Set<number>>(new Set())
+
+  const today = todayISO()
+  const nextWeekEnd = addDaysISO(today, 7)
+
+  // Tareas activas con estimado, ordenadas por urgencia
+  const activeTasks = tasks
+    .filter(t => !t.done && !t.archived_at && !t.es_recordatorio && t.due_date)
+    .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
+
+  // Eventos de la semana para mostrar disponibilidad
+  const weekEvents = calendarEvents.filter(e => {
+    const d = e.starts_at?.slice(0, 10)
+    return d >= today && d <= nextWeekEnd
+  })
+
+  // Horas libres por día (8–20h menos reuniones)
+  function freeHoursForDay(iso: string): number {
+    const dayEvs = weekEvents.filter(e => dateOfLocal(e.starts_at) === iso && !e.all_day && e.ends_at)
+    const busy = dayEvs.reduce((s, e) => s + (new Date(e.ends_at!).getTime() - new Date(e.starts_at).getTime()) / 3600000, 0)
+    return Math.max(0, 12 - busy) // 12h disponibles en la jornada (8–20)
+  }
+
+  const days = Array.from({ length: 7 }, (_, i) => addDaysISO(today, i))
+
+  async function planWeek() {
+    setPlanning(true)
+    try {
+      const calSummary = days.map(d => {
+        const evs = weekEvents.filter(e => dateOfLocal(e.starts_at) === d)
+        const evList = evs.map(e => `  ${e.starts_at.slice(11, 16)} ${e.title}`).join('\n') || '  sin reuniones'
+        const free = freeHoursForDay(d)
+        return `${d} (${free.toFixed(1)}h libres):\n${evList}`
+      }).join('\n')
+
+      const tasksSummary = activeTasks.slice(0, 12).map(t => {
+        const { name } = splitTitle(t.title)
+        return `- [id:${t.id}] "${name}" entrega:${t.due_date} est:${t.estimated_hours ? t.estimated_hours + 'h' : '?'}`
+      }).join('\n')
+
+      const prompt = `Hoy es ${today}. Creá un plan de trabajo para la semana.
+
+Agenda:
+${calSummary}
+
+Tareas activas con fecha de entrega:
+${tasksSummary}
+
+Para cada tarea, asigná el día más adecuado para trabajarla (antes de su entrega, en un bloque libre). Priorizá las más urgentes. No asignes más horas de las disponibles por día.
+
+Respondé SOLO JSON:
+{"bloques":[{"taskId":number,"fecha":"YYYY-MM-DD","horas":number,"razon":"texto corto"}]}`
+
+      const reply = await callClaudeProxy(
+        [{ role: 'user', content: prompt }],
+        'Sos un asistente de planificación. Devolvés SOLO JSON.',
+      )
+      const cleaned = reply.replace(/```json|```/g, '').trim()
+      const obj = JSON.parse(cleaned)
+      const rawBlocks: { taskId: number; fecha: string; horas: number; razon: string }[] = obj.bloques || []
+      const enriched: PlanBlock[] = rawBlocks.map(b => {
+        const t = tasks.find(x => x.id === b.taskId)
+        const { name } = splitTitle(t?.title || '')
+        return { taskId: b.taskId, title: name || `Tarea ${b.taskId}`, date: b.fecha, hours: b.horas, reason: b.razon }
+      })
+      setBlocks(enriched)
+      setPlanned(true)
+    } catch {
+      alert('No se pudo generar el plan. Revisá la conexión con Claude.')
+    } finally {
+      setPlanning(false)
+    }
+  }
+
+  async function approveBlock(b: PlanBlock) {
+    setApproving(prev => new Set([...prev, b.taskId]))
+    await updateTask(b.taskId, { work_date: b.date } as any)
+    setApproving(prev => { const s = new Set(prev); s.delete(b.taskId); return s })
+    setBlocks(prev => prev.filter(x => x.taskId !== b.taskId))
+  }
+
+  function rejectBlock(taskId: number) {
+    setBlocks(prev => prev.filter(b => b.taskId !== taskId))
+  }
+
+  // Bloques groupados por día
+  const byDay: Record<string, PlanBlock[]> = {}
+  for (const b of blocks) {
+    (byDay[b.date] ||= []).push(b)
+  }
+  const planDays = Object.keys(byDay).sort()
+
+  return (
+    <div className="max-w-[900px]">
+      {/* Disponibilidad de la semana */}
+      <div className="mb-5">
+        <SectionHeader icon="📅" label="Disponibilidad esta semana" />
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+          {days.map(d => {
+            const evs = weekEvents.filter(e => dateOfLocal(e.starts_at) === d)
+            const free = freeHoursForDay(d)
+            const isToday = d === today
+            return (
+              <div key={d} className={`bg-bg2 border rounded-lg p-2.5 ${isToday ? 'border-claude/30' : 'border-black/7'}`}>
+                <div className={`text-[11px] font-medium capitalize mb-1 ${isToday ? 'text-claude' : 'text-gray-600'}`}>
+                  {new Date(d + 'T00:00:00').toLocaleDateString('es', { weekday: 'short', day: 'numeric' })}
+                </div>
+                <div className="text-[11px] text-gray-500 mb-1.5">
+                  <span className={`font-medium ${free >= 4 ? 'text-success' : free >= 2 ? 'text-warn' : 'text-danger'}`}>{free.toFixed(1)}h</span> libres
+                </div>
+                {evs.slice(0, 3).map(e => (
+                  <div key={e.id} className="text-[10px] text-gray-400 leading-tight truncate">
+                    {e.all_day ? 'todo el día' : e.starts_at.slice(11, 16)} {e.title}
+                  </div>
+                ))}
+                {evs.length > 3 && <div className="text-[10px] text-gray-400">+{evs.length - 3} más</div>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Tareas activas con estimado */}
+      <div className="mb-5">
+        <SectionHeader icon="⏱" label="Tareas activas con estimado" />
+        <div className="flex flex-col gap-1.5">
+          {activeTasks.filter(t => t.estimated_hours).slice(0, 10).map(t => {
+            const { prefix, name } = splitTitle(t.title)
+            return (
+              <div key={t.id} className="bg-bg2 border border-black/7 rounded-lg px-3 py-2 flex items-center gap-3">
+                <span className="text-[11px] font-mono text-gray-400 w-[64px] shrink-0">{t.due_date?.slice(5).replace('-', '/') || '—'}</span>
+                <span className="flex-1 text-[13px] truncate">
+                  {prefix && <span className="font-mono text-[11px] text-gray-400 mr-1">{prefix} |</span>}
+                  {name}
+                </span>
+                <span className="text-[11px] font-mono text-claude bg-claude/7 border border-claude/15 px-2 py-0.5 rounded-md shrink-0">⏱ {fmtHoras(t.estimated_hours!)}</span>
+                {(t as any).work_date && (
+                  <span className="text-[10px] font-mono text-success bg-success/7 border border-success/20 px-1.5 py-0.5 rounded shrink-0">
+                    📋 {(t as any).work_date.slice(5).replace('-', '/')}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+          {activeTasks.filter(t => !t.estimated_hours).length > 0 && (
+            <div className="text-[11px] text-gray-400 pl-1 mt-1">
+              {activeTasks.filter(t => !t.estimated_hours).length} tarea{activeTasks.filter(t => !t.estimated_hours).length !== 1 ? 's' : ''} sin estimado (no entran al plan).
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Botón planificar */}
+      <div className="mb-5">
+        <button onClick={planWeek} disabled={planning || activeTasks.length === 0}
+          className="flex items-center gap-2 text-sm bg-claude text-white px-5 py-2.5 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed font-medium">
+          {planning ? '⏳ Planificando con Claude…' : '✦ Planificar semana con Claude'}
+        </button>
+        {activeTasks.length === 0 && <div className="text-[11px] text-gray-400 mt-1">Sin tareas activas para planificar.</div>}
+      </div>
+
+      {/* Plan sugerido */}
+      {planned && blocks.length === 0 && (
+        <div className="text-[13px] text-success bg-success/7 border border-success/20 rounded-lg px-4 py-3">
+          ✓ Todas las tareas del plan fueron aprobadas y tienen fecha de trabajo asignada.
+        </div>
+      )}
+
+      {planDays.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Plan sugerido — aprobá, mové o rechazá cada bloque</div>
+          {planDays.map(d => (
+            <div key={d}>
+              <div className="text-[12px] font-medium text-gray-600 mb-2 capitalize">
+                {new Date(d + 'T00:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}
+                <span className="ml-2 text-[10px] font-mono text-gray-400">({freeHoursForDay(d).toFixed(1)}h libres)</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {byDay[d].map(b => (
+                  <div key={b.taskId} className="bg-bg2 border border-claude/20 rounded-lg px-3 py-2.5 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium truncate">{b.title}</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{b.reason} · {fmtHoras(b.hours)}</div>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => approveBlock(b)}
+                        disabled={approving.has(b.taskId)}
+                        className="text-[11px] text-white bg-success px-3 py-1 rounded-md cursor-pointer hover:opacity-80 disabled:opacity-40">
+                        {approving.has(b.taskId) ? '…' : '✓ Aprobar'}
+                      </button>
+                      <button
+                        onClick={() => rejectBlock(b.taskId)}
+                        className="text-[11px] text-gray-500 bg-bg3 border border-black/7 px-3 py-1 rounded-md cursor-pointer hover:bg-danger/10 hover:text-danger">
+                        ✕ Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const PRIO_ORDER: Record<string, number> = { alta: 0, media: 1, baja: 2 }
@@ -261,6 +481,7 @@ export function Dashboard() {
               { v: 'fecha', l: 'Por fecha' },
               { v: 'estado', l: 'Por estado' },
               { v: 'kanban', l: 'Kanban' },
+              { v: 'planificacion', l: '📊 Planificación' },
             ] as { v: ViewMode; l: string }[]).map(o => (
               <button key={o.v} onClick={() => setMode(o.v)}
                 className={`text-xs px-3 py-1 rounded-md transition-all cursor-pointer ${
@@ -275,7 +496,9 @@ export function Dashboard() {
         <FilterPills value={ctxFilters} onChange={setCtxFilters} pills={CONTEXT_PILLS} allLabel="Todos" />
       </div>
 
-      {mode === 'kanban' ? (
+      {mode === 'planificacion' ? (
+        <PlanningView />
+      ) : mode === 'kanban' ? (
         <KanbanBoard items={allByStatus} />
       ) : mode === 'estado' ? (
         <div className="max-w-[900px]">
