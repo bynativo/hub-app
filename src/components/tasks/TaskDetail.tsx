@@ -1630,6 +1630,46 @@ Reglas del bloque:
                   <div className="text-[11px] text-gray-400">Habilita el tab Slide para vincular o crear una presentación</div>
                 </div>
               </div>
+
+              {/* Responsable de cierre — solo Felipe puede cerrar por defecto */}
+              <div>
+                <label className={labelCls}>Responsable de cierre</label>
+                <div className="flex gap-1.5 mb-1.5">
+                  {[
+                    { v: 'felipe', label: 'Felipe', sub: 'Por defecto' },
+                    { v: 'jani', label: 'Jani', sub: 'CM' },
+                    { v: 'otro', label: 'Otro', sub: 'Especificar' },
+                  ].map(o => {
+                    const active = task.closer_role === o.v || (!task.closer_role && o.v === 'felipe')
+                    return (
+                      <button key={o.v} type="button"
+                        onClick={async () => {
+                          await updateTask(task.id, { closer_role: o.v, closer_name: o.v !== 'otro' ? null : task.closer_name })
+                        }}
+                        className={`flex-1 flex flex-col items-center py-1.5 px-2 border rounded-lg cursor-pointer transition-all ${
+                          active ? 'border-claude/30 bg-claude/7 text-claude' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
+                        }`}>
+                        <span className="text-[12px] font-medium">{o.label}</span>
+                        <span className="text-[10px] font-mono opacity-60">{o.sub}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {task.closer_role === 'otro' && (
+                  <input
+                    key={task.id + '-closer'}
+                    defaultValue={task.closer_name || ''}
+                    onBlur={async e => { await updateTask(task.id, { closer_name: e.target.value.trim() || null }) }}
+                    placeholder="Nombre del responsable"
+                    className={fieldCls}
+                  />
+                )}
+                {task.closer_role && task.closer_role !== 'felipe' && (
+                  <div className="text-[11px] text-orange-500 mt-1">
+                    Solo {task.closer_role === 'jani' ? 'Jani' : (task.closer_name || 'la persona asignada')} puede cerrar esta tarea.
+                  </div>
+                )}
+              </div>
             </div>
 
             <AttachmentsZone ref={attachmentsRef} taskId={task.id} />
