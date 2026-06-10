@@ -118,6 +118,9 @@ export interface Task {
   closer_role: string | null   // 'felipe' | 'jani' | 'otro'
   closer_name: string | null
   current_stage: string | null
+  // Instancias de recurrentes
+  es_recurrente_instance: boolean | null
+  recurrente_id: number | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }
@@ -320,5 +323,13 @@ export interface Recurrente {
   created_at: string
   description: string | null
   last_executed_at: string | null
+  // Nuevos campos para instancias automáticas
+  estimated_hours: number | null
+  anticipation_days: number | null
+  delegate_to: string | null
+  delegate_role: string | null
+  delegate_return_days: number | null
+  campana_id: number | null
+  last_instance_date: string | null
   clients?: { name: string } | null
 }

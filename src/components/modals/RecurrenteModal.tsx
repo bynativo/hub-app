@@ -5,6 +5,29 @@ import type { Recurrente } from '../../lib/types'
 
 const DAYS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes']
 
+const HOURS_OPTIONS = [
+  { v: 0.5, label: '30min' },
+  { v: 1, label: '1h' },
+  { v: 1.5, label: '1.5h' },
+  { v: 2, label: '2h' },
+  { v: 3, label: '3h' },
+  { v: 4, label: '4h' },
+  { v: 6, label: '6h' },
+  { v: 8, label: '8h' },
+]
+
+const ANTICIPATION_OPTIONS = [
+  { v: 1, label: '1 día antes' },
+  { v: 2, label: '2 días antes' },
+  { v: 3, label: '3 días antes' },
+  { v: 7, label: '1 semana antes' },
+  { v: 14, label: '2 semanas antes' },
+  { v: 30, label: '1 mes antes' },
+]
+
+const BANCO_ROLES = ['Gonza', 'Jani', 'Palta', 'Pauli', 'Otro']
+const AGENCIA_ROLES = ['Gonza', 'Jani', 'Palta', 'Pauli', 'Otro']
+
 export function RecurrenteModal({ onClose, preselectContext, preselectClientId, preselectProjectId, recurrente }: {
   onClose: () => void
   preselectContext?: string
@@ -15,25 +38,46 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
   const isEdit = !!recurrente
   const loadAll = useStore(s => s.loadAll)
   const clients = useStore(s => s.clients)
+  const tasks = useStore(s => s.tasks)
   const [title, setTitle] = useState(recurrente?.title ?? '')
   const [context, setContext] = useState(recurrente?.context ?? preselectContext ?? 'banco')
   const [clientId, setClientId] = useState<number | null>(recurrente?.client_id ?? preselectClientId ?? null)
-  // project_id no es editable en este modal; viene preseleccionado (al crear desde la
-  // vista del proyecto) o se conserva al editar.
   const projectId = recurrente?.project_id ?? preselectProjectId ?? null
   const agClients = clients.filter(c => c.context === 'agencia')
   const [freq, setFreq] = useState(recurrente?.freq ?? 'mensual')
-  // El día de la semana (semanal) se guarda en day_of_month, igual que en la vista.
   const [dayOfMonth, setDayOfMonth] = useState(recurrente && recurrente.freq !== 'semanal' ? recurrente.day_of_month : '1')
   const [weekday, setWeekday] = useState(recurrente && recurrente.freq === 'semanal' ? recurrente.day_of_month : 'lunes')
   const [notes, setNotes] = useState(recurrente?.description ?? '')
+
+  // Nuevos campos
+  const [estimatedHours, setEstimatedHours] = useState<number>(recurrente?.estimated_hours ?? 1)
+  const [anticipationDays, setAnticipationDays] = useState<number>(recurrente?.anticipation_days ?? 3)
+  const [delegaActive, setDelegaActive] = useState<boolean>(!!(recurrente?.delegate_to || recurrente?.delegate_role))
+  const [delegateRole, setDelegateRole] = useState<string>(recurrente?.delegate_role ?? '')
+  const [delegateTo, setDelegateTo] = useState<string>(recurrente?.delegate_to ?? '')
+  const [delegateReturnDays, setDelegateReturnDays] = useState<number>(recurrente?.delegate_return_days ?? 3)
+  const [campanaId, setCampanaId] = useState<number | null>(recurrente?.campana_id ?? null)
+
   const [saving, setSaving] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Campañas disponibles del mismo contexto
+  const campanas = tasks.filter(t => t.es_campana && t.context === context && !t.done && !t.archived_at)
+
+  // Roles de delegación según contexto
+  const delegaRoles = context === 'banco' ? BANCO_ROLES : context === 'agencia' ? AGENCIA_ROLES : []
+  const delegaPersonal = context === 'personal'
+
   async function handleSave() {
     if (!title.trim()) return
     setSaving(true)
+
+    const finalDelegateTo = delegaActive
+      ? (delegaPersonal ? delegateTo : (delegateRole === 'Otro' ? delegateTo : delegateRole))
+      : null
+    const finalDelegateRole = delegaActive && !delegaPersonal ? delegateRole : null
+
     const row = {
       title: title.trim(),
       context,
@@ -42,10 +86,16 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
       freq,
       day_of_month: freq === 'semanal' ? weekday : dayOfMonth,
       description: notes.trim() || null,
+      estimated_hours: estimatedHours,
+      anticipation_days: anticipationDays,
+      delegate_to: finalDelegateTo,
+      delegate_role: finalDelegateRole,
+      delegate_return_days: delegaActive ? delegateReturnDays : null,
+      campana_id: campanaId,
     }
     const { error } = isEdit
       ? await supabase.from('recurrentes').update(row).eq('id', recurrente!.id)
-      : await supabase.from('recurrentes').insert({ ...row, priority: 'media', active: true, cats: [], time_minutes: 60 })
+      : await supabase.from('recurrentes').insert({ ...row, priority: 'media', active: true, cats: [], time_minutes: Math.round(estimatedHours * 60) })
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
     await loadAll()
     onClose()
@@ -65,6 +115,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
       <div className="bg-bg2 border border-black/7 rounded-t-2xl md:rounded-2xl p-5 md:p-6 w-full md:w-[520px] md:max-w-[96vw] md:mb-10 shadow-lg pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <div className="font-serif text-xl font-light mb-4">{isEdit ? 'Editar recurrente' : 'Nueva recurrente'}</div>
 
+        {/* Título */}
         <div className="mb-3">
           <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Titulo *</label>
           <input
@@ -76,10 +127,11 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
           />
         </div>
 
+        {/* Contexto + Frecuencia */}
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Contexto</label>
-            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null) }} className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+            <select value={context} onChange={e => { setContext(e.target.value); setClientId(null); setCampanaId(null) }} className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
               <option value="banco">Banco Falabella</option>
               <option value="agencia">Agencia</option>
               <option value="personal">Personal</option>
@@ -95,6 +147,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
           </div>
         </div>
 
+        {/* Cliente (solo agencia) */}
         {context === 'agencia' && (
           <div className="mb-3">
             <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Cliente</label>
@@ -106,6 +159,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
           </div>
         )}
 
+        {/* Día de la semana (semanal) */}
         {freq === 'semanal' && (
           <div className="mb-3">
             <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Dia de la semana</label>
@@ -127,6 +181,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
           </div>
         )}
 
+        {/* Día del mes (mensual) */}
         {freq === 'mensual' && (
           <div className="mb-3">
             <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Dia del mes</label>
@@ -138,6 +193,104 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
           </div>
         )}
 
+        {/* Estimado de horas + Anticipación */}
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Estimado de horas</label>
+            <select value={estimatedHours} onChange={e => setEstimatedHours(Number(e.target.value))}
+              className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+              {HOURS_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Crear con anticipacion</label>
+            <select value={anticipationDays} onChange={e => setAnticipationDays(Number(e.target.value))}
+              className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+              {ANTICIPATION_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* ¿Se delega? */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">¿Se delega?</label>
+            <button
+              onClick={() => setDelegaActive(x => !x)}
+              className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${delegaActive ? 'bg-claude' : 'bg-gray-200'}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${delegaActive ? 'left-[22px]' : 'left-0.5'}`} />
+            </button>
+          </div>
+          {delegaActive && (
+            <div className="bg-bg3 border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
+              {delegaPersonal ? (
+                <div>
+                  <label className="text-[10px] font-mono text-gray-400 uppercase mb-1 block">A quién</label>
+                  <input
+                    value={delegateTo}
+                    onChange={e => setDelegateTo(e.target.value)}
+                    placeholder="Nombre de la persona"
+                    className="w-full bg-bg2 border border-black/7 rounded-lg px-3 py-1.5 text-[13px] outline-none"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="text-[10px] font-mono text-gray-400 uppercase mb-1 block">A quién</label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {delegaRoles.map(r => (
+                      <button
+                        key={r}
+                        onClick={() => { setDelegateRole(r); if (r !== 'Otro') setDelegateTo(r) }}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition-all ${
+                          delegateRole === r ? 'bg-claude/10 border-claude/25 text-claude font-medium' : 'bg-bg2 border-black/7 text-gray-500 hover:bg-bg4'
+                        }`}
+                      >{r}</button>
+                    ))}
+                  </div>
+                  {delegateRole === 'Otro' && (
+                    <input
+                      value={delegateTo}
+                      onChange={e => setDelegateTo(e.target.value)}
+                      placeholder="Nombre o rol"
+                      className="mt-2 w-full bg-bg2 border border-black/7 rounded-lg px-3 py-1.5 text-[13px] outline-none"
+                    />
+                  )}
+                </div>
+              )}
+              <div>
+                <label className="text-[10px] font-mono text-gray-400 uppercase mb-1 block">
+                  Días para devolver (antes del vencimiento)
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[1, 2, 3, 5, 7].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setDelegateReturnDays(d)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition-all ${
+                        delegateReturnDays === d ? 'bg-claude/10 border-claude/25 text-claude font-medium' : 'bg-bg2 border-black/7 text-gray-500 hover:bg-bg4'
+                      }`}
+                    >{d}d antes</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Campaña vinculada (opcional) */}
+        {campanas.length > 0 && (
+          <div className="mb-3">
+            <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Campaña vinculada (opcional)</label>
+            <select value={campanaId ?? ''} onChange={e => setCampanaId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full bg-bg3 border border-black/7 rounded-lg px-3 py-2 text-[13px] outline-none cursor-pointer">
+              <option value="">Sin campaña</option>
+              {campanas.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Descripción */}
         <div className="mb-4">
           <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Descripcion (opcional)</label>
           <textarea
