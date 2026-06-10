@@ -114,8 +114,24 @@ export interface Task {
   influencer_nombre: string | null
   influencer_agencia: string | null
   tipo_publicacion: string | null
+  // Responsable de cierre y etapa actual de contenido
+  closer_role: string | null   // 'felipe' | 'jani' | 'otro'
+  closer_name: string | null
+  current_stage: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
+}
+
+export interface TaskDelegation {
+  id: number
+  task_id: number
+  delegated_to: string
+  stage: string
+  return_date: string | null
+  note: string | null
+  created_task_id: number | null
+  created_at: string
+  completed_at: string | null
 }
 
 export interface Subtask {

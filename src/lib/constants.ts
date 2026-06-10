@@ -168,3 +168,40 @@ export const PROD_STATUS: Record<string, string[]> = {
 }
 
 export const CM_STATUS = ['Pendiente de contenido', 'Listo para programar', 'Programado', 'Publicado']
+
+// Roles de equipo para delegación
+export const BANCO_ROLES: { v: string; label: string; subtitle: string }[] = [
+  { v: 'gonza', label: 'Gonza', subtitle: 'Coordinador contenidos' },
+  { v: 'jani', label: 'Jani', subtitle: 'CM' },
+  { v: 'palta', label: 'Palta', subtitle: 'Productora' },
+  { v: 'pauli', label: 'Pauli', subtitle: 'Social media' },
+  { v: 'otro', label: 'Otro', subtitle: 'Texto libre' },
+]
+
+export const AGENCIA_ROLES: { v: string; label: string; subtitle: string }[] = [
+  { v: 'diseno', label: 'Diseño', subtitle: 'Diseñador/a' },
+  { v: 'copy', label: 'Copy', subtitle: 'Redactor/a' },
+  { v: 'cuenta', label: 'Cuenta', subtitle: 'Ejecutivo/a de cuenta' },
+  { v: 'produccion', label: 'Producción', subtitle: 'Audiovisual' },
+  { v: 'otro', label: 'Otro', subtitle: 'Texto libre' },
+]
+
+// Etapas de delegación
+export const DELEGATION_STAGES: { v: string; label: string; taskPrefix: string; reviewPrefix: string }[] = [
+  { v: 'bajar_idea', label: 'Bajar idea', taskPrefix: 'Bajar idea', reviewPrefix: 'Revisar idea' },
+  { v: 'produccion', label: 'Producción del contenido', taskPrefix: 'Producir', reviewPrefix: 'Revisar contenido final' },
+  { v: 'aprobacion_interna', label: 'Aprobación interna', taskPrefix: 'Aprobar', reviewPrefix: 'Revisar aprobación' },
+  { v: 'publicacion', label: 'Publicación', taskPrefix: 'Publicar', reviewPrefix: 'Confirmar publicación' },
+  { v: 'reporte', label: 'Reporte / métricas', taskPrefix: 'Reportar', reviewPrefix: 'Revisar reporte' },
+  { v: 'otro', label: 'Otro', taskPrefix: 'Revisar', reviewPrefix: 'Revisar' },
+]
+
+// Etapas del flujo de contenido (badge en tarjeta)
+export const CONTENT_STAGES: { v: string; label: string; emoji: string }[] = [
+  { v: 'bajando_idea', label: 'Bajando idea', emoji: '💡' },
+  { v: 'en_produccion', label: 'En producción', emoji: '🎬' },
+  { v: 'en_revision_interna', label: 'En revisión interna', emoji: '👁' },
+  { v: 'en_aprobacion_externa', label: 'En aprobación externa', emoji: '✅' },
+  { v: 'para_publicar', label: 'Para publicar', emoji: '📅' },
+  { v: 'en_reporte', label: 'En reporte', emoji: '📊' },
+]

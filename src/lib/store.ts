@@ -257,6 +257,55 @@ export const useStore = create<AppState>((set, get) => ({
       await supabase.from('tasks').update({ done: false }).eq('id', id)
       set({ tasks: get().tasks.map(t => t.id === id ? { ...t, done: false } : t) })
     })
+
+    // Si es una tarea creada por delegación, marcar la delegación como completada y
+    // crear automáticamente una tarea de revisión para el responsable de cierre.
+    if (prev.parent_task_id) {
+      const { data: delegation } = await supabase
+        .from('task_delegations')
+        .select('task_id, stage, return_date')
+        .eq('created_task_id', id)
+        .maybeSingle()
+      if (delegation) {
+        await supabase.from('task_delegations')
+          .update({ completed_at: new Date().toISOString() })
+          .eq('created_task_id', id)
+        const parentTask = get().tasks.find(t => t.id === delegation.task_id)
+        if (parentTask && !parentTask.done) {
+          const reviewPrefixes: Record<string, string> = {
+            bajar_idea: 'Revisar idea',
+            produccion: 'Revisar contenido final',
+            aprobacion_interna: 'Revisar aprobación',
+            publicacion: 'Confirmar publicación',
+            reporte: 'Revisar reporte',
+            otro: 'Revisar',
+          }
+          const reviewPrefix = reviewPrefixes[delegation.stage] || 'Revisar'
+          const cleanTitle = parentTask.title.includes(' | ')
+            ? parentTask.title.split(' | ').slice(1).join(' | ').trim()
+            : parentTask.title
+          const reviewTitle = `${reviewPrefix}: ${cleanTitle}`
+          await supabase.from('tasks').insert({
+            title: reviewTitle,
+            context: parentTask.context,
+            client_id: parentTask.client_id,
+            project_id: parentTask.project_id,
+            parent_task_id: parentTask.id,
+            priority: 'alta',
+            origin: 'propia',
+            status: 'Inbox',
+            due_date: delegation.return_date,
+            task_type: 'independiente',
+            done: false,
+            cats: [],
+            plan: [],
+            meeting_agenda: [],
+          })
+          await get().loadAll()
+          get().showToast(`✓ Revisión creada: "${reviewTitle}"`, { durationMs: 4000 })
+        }
+      }
+    }
   },
 
   updateTaskStatus: async (id, status) => {

@@ -2,16 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
-import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS } from '../../lib/constants'
+import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES } from '../../lib/constants'
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
+import { DelegationModal, type DelegationFormData } from '../modals/DelegationModal'
 import { AttachmentsZone, type AttachmentsZoneHandle } from './AttachmentsZone'
 import { TaskItem } from './TaskItem'
 import { ReminderRow } from './ReminderRow'
-import type { Checklist, Task } from '../../lib/types'
+import type { Checklist, Task, TaskDelegation } from '../../lib/types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Tab = 'info' | 'subtareas' | 'checklist' | 'chat' | 'email' | 'slide'
@@ -385,6 +386,11 @@ export function TaskDetail() {
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
+  // Delegación
+  const [delegationModalOpen, setDelegationModalOpen] = useState(false)
+  const [delegations, setDelegations] = useState<TaskDelegation[]>([])
+  const [confirmClose, setConfirmClose] = useState<{ closerName: string } | null>(null)
+
   // Subtask add: usa el CaptureModal completo con parent_task_id precargado
   const [subModalOpen, setSubModalOpen] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -447,6 +453,7 @@ export function TaskDetail() {
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). Pegá texto, una captura o dictá: puedo actualizar fecha, prioridad, el contexto o crear subtareas (con tu aprobación).` }])
     setPendingAction(null); setChatImages([])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
+    supabase.from('task_delegations').select('*').eq('task_id', task.id).order('created_at').then(({ data }) => setDelegations(data || []))
     setAssignPresId('')
   }, [currentTaskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -743,6 +750,65 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
       cats: [], plan: [], meeting_agenda: [],
     })
     await loadAll()
+  }
+
+  // Guarda la delegación: crea registro en task_delegations, opcionalmente crea
+  // tarea vinculada, actualiza status a "Delegado" y los campos de delegación.
+  async function handleDelegationConfirm(data: DelegationFormData) {
+    if (!task) return
+    const { delegatedTo, stage, returnDate, note, createTask: doCreateTask } = data
+
+    let createdTaskId: number | null = null
+    if (doCreateTask) {
+      const stageData = DELEGATION_STAGES.find(s => s.v === stage)
+      const linkedTitle = buildTitle(titlePrefix, `${stageData?.taskPrefix || 'Revisar'}: ${stripPrefix(task.title)}`)
+      const { data: newTask } = await supabase.from('tasks').insert({
+        title: linkedTitle,
+        context: task.context,
+        client_id: task.client_id,
+        project_id: task.project_id,
+        parent_task_id: task.id,
+        priority: 'alta',
+        origin: 'propia',
+        status: 'Inbox',
+        due_date: returnDate,
+        task_type: 'independiente',
+        notes: note || null,
+        done: false,
+        cats: [], plan: [], meeting_agenda: [],
+      }).select('id').single()
+      createdTaskId = newTask?.id ?? null
+    }
+
+    const { error } = await supabase.from('task_delegations').insert({
+      task_id: task.id,
+      delegated_to: delegatedTo,
+      stage,
+      return_date: returnDate,
+      note: note || null,
+      created_task_id: createdTaskId,
+    })
+    if (error) throw error
+
+    await updateTaskStatus(task.id, 'Delegado')
+    await updateTask(task.id, {
+      delegated_to: delegatedTo,
+      delegation_date: todayISO(),
+      delegation_return_date: returnDate,
+    })
+
+    setDelegatedTo(delegatedTo)
+    setDelegationDate(todayISO())
+    setDelegationReturnDate(returnDate)
+    setDelegationModalOpen(false)
+
+    const { data: dList } = await supabase
+      .from('task_delegations').select('*')
+      .eq('task_id', task.id).order('created_at')
+    setDelegations(dList || [])
+
+    await loadAll()
+    showToast(`✓ Delegado a ${delegatedTo}`, { durationMs: 3000 })
   }
 
   // ---- Checklist ----
@@ -1169,7 +1235,18 @@ Reglas del bloque:
               <label className={labelCls}>Estado</label>
               <div className="flex gap-1.5 flex-wrap">
                 {ctxStates.map(s => (
-                  <button key={s} onClick={() => updateTaskStatus(task.id, s)}
+                  <button key={s} onClick={() => {
+                    if (s === 'Delegado') { setDelegationModalOpen(true); return }
+                    if (s === 'Cerrado') {
+                      const cr = task.closer_role
+                      if (cr && cr !== 'felipe') {
+                        const cn = cr === 'jani' ? 'Jani' : (task.closer_name || 'la persona asignada')
+                        setConfirmClose({ closerName: cn })
+                        return
+                      }
+                    }
+                    updateTaskStatus(task.id, s)
+                  }}
                     className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
                       s === task.status ? 'font-semibold' : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
                     }`}
@@ -1429,6 +1506,44 @@ Reglas del bloque:
                 </div>
               )}
             </div>
+
+            {/* Historial de delegaciones */}
+            {delegations.length > 0 && (
+              <div className="border border-black/7 rounded-lg p-3">
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2.5">↗ Historial de delegaciones</div>
+                <div className="flex flex-col gap-2">
+                  {delegations.map((d, i) => (
+                    <div key={d.id} className="flex items-start gap-2.5">
+                      <div className="flex flex-col items-center shrink-0 pt-0.5">
+                        <div className={`w-2 h-2 rounded-full shrink-0 ${d.completed_at ? 'bg-success' : 'bg-orange-400'}`} />
+                        {i < delegations.length - 1 && <div className="w-px bg-black/10 mt-1 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
+                          <span className="font-medium text-gray-700">{d.delegated_to}</span>
+                          <span className="text-gray-400">·</span>
+                          <span className="text-gray-500">{DELEGATION_STAGES.find(s => s.v === d.stage)?.label || d.stage}</span>
+                          {d.return_date && (
+                            <>
+                              <span className="text-gray-400">·</span>
+                              <span className="text-gray-400 font-mono">devuelve {d.return_date.slice(5).replace('-', '/')}</span>
+                            </>
+                          )}
+                          {d.completed_at && (
+                            <span className="text-[10px] bg-success/10 text-success px-1.5 py-0.5 rounded font-mono">✓ devuelta</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">
+                          {new Date(d.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                          {d.note && <> · <span className="italic">"{d.note}"</span></>}
+                          {d.created_task_id && <span className="ml-1.5 text-claude font-mono">· tarea creada</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className={labelCls}>Descripción</label>
@@ -1797,6 +1912,31 @@ Reglas del bloque:
               <button onClick={() => setConfirmDel(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
               <button onClick={deleteTask} disabled={deleting} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer disabled:opacity-40">
                 {deleting ? 'Eliminando…' : 'Eliminar permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {delegationModalOpen && (
+        <DelegationModal
+          task={task}
+          onClose={() => setDelegationModalOpen(false)}
+          onConfirm={handleDelegationConfirm}
+        />
+      )}
+
+      {confirmClose && (
+        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmClose(null) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[400px] max-w-[94vw] shadow-lg">
+            <div className="font-serif text-lg font-light mb-1">Responsable de cierre</div>
+            <p className="text-[13px] text-gray-500 mb-4">
+              Esta tarea está configurada para ser cerrada por <span className="font-medium text-gray-700">{confirmClose.closerName}</span>. ¿Cerrarla de todas formas?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmClose(null)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
+              <button onClick={async () => { setConfirmClose(null); await updateTaskStatus(task.id, 'Cerrado') }} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer">
+                Sí, cerrar igual
               </button>
             </div>
           </div>
