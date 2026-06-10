@@ -23,6 +23,7 @@ import { FollowupModal } from './components/modals/FollowupModal'
 import { SearchModal } from './components/modals/SearchModal'
 import { RecurrenteModal } from './components/modals/RecurrenteModal'
 import { SubtaskConvertModal } from './components/modals/SubtaskConvertModal'
+import { DuplicarTareaModal } from './components/modals/DuplicarTareaModal'
 import { Toast } from './components/layout/Toast'
 import { PWAUpdatePrompt } from './components/pwa/PWAUpdatePrompt'
 import { InstallBanner } from './components/pwa/InstallBanner'
@@ -229,6 +230,7 @@ export default function App() {
       )}
 
       <SubtaskConvertModal />
+      <DuplicarTareaModal />
       <Toast />
       <PWAUpdatePrompt />
       <InstallBanner />

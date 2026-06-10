@@ -19,7 +19,9 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
   onFocus: (id: number) => void
 }) {
   const openDetail = useStore(s => s.openDetail)
+  const openDuplicateTask = useStore(s => s.openDuplicateTask)
   const clients = useStore(s => s.clients)
+  const [showCardMenu, setShowCardMenu] = useState(false)
   const prioColor = task.priority === 'alta' ? '#dc2626' : task.priority === 'media' ? '#d97706' : '#16a34a'
   const doneSubs = subs.filter(s => s.done).length
   const parts = splitTitle(task.title)
@@ -45,6 +47,24 @@ function KanbanCard({ task, subs, focused, onDragStart, onFocus }: {
             }`}
           >⤢</button>
         )}
+        <div className="relative shrink-0">
+          <button
+            onClick={e => { e.stopPropagation(); setShowCardMenu(m => !m) }}
+            className="text-[11px] text-gray-300 hover:text-gray-500 cursor-pointer px-0.5 leading-none"
+            title="Opciones"
+          >⋯</button>
+          {showCardMenu && (
+            <>
+              <div className="fixed inset-0 z-[5]" onClick={() => setShowCardMenu(false)} />
+              <div className="absolute right-0 top-5 bg-bg2 border border-black/7 rounded-lg shadow-lg py-1 z-10 w-32">
+                <button
+                  onClick={e => { e.stopPropagation(); openDuplicateTask(task.id); setShowCardMenu(false) }}
+                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer"
+                >📋 Duplicar</button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-1 flex-wrap pl-[13px]">
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: prioColor + '14', color: prioColor }}>

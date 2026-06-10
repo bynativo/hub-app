@@ -30,8 +30,10 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
   const allTasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
   const openSubtaskConvert = useStore(s => s.openSubtaskConvert)
+  const openDuplicateTask = useStore(s => s.openDuplicateTask)
   const [expanded, setExpanded] = useState(false)
   const [isDragTarget, setIsDragTarget] = useState(false)
+  const [showItemMenu, setShowItemMenu] = useState(false)
   const clientB = clientBadge(task.client_id, clients)
   const due = fmtDue(task.due_date)
   const overdue = overdueLabel(task.due_date)
@@ -275,12 +277,28 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
           </div>
         </div>
 
-        <div
-          onClick={(e) => { e.stopPropagation(); openDetail(task.id) }}
-          className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-[5px] cursor-pointer hover:bg-claude hover:text-white transition-colors shrink-0"
-          title="Abrir detalle"
-        >
-          →
+        <div className="relative shrink-0 flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowItemMenu(m => !m) }}
+            className="text-[11px] text-gray-400 hover:text-gray-600 cursor-pointer px-1 leading-none"
+            title="Opciones"
+          >⋯</button>
+          {showItemMenu && (
+            <>
+              <div className="fixed inset-0 z-[5]" onClick={() => setShowItemMenu(false)} />
+              <div className="absolute right-6 top-0 bg-bg2 border border-black/7 rounded-lg shadow-lg py-1 z-10 w-32">
+                <button
+                  onClick={(e) => { e.stopPropagation(); openDuplicateTask(task.id); setShowItemMenu(false) }}
+                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer"
+                >📋 Duplicar</button>
+              </div>
+            </>
+          )}
+          <div
+            onClick={(e) => { e.stopPropagation(); openDetail(task.id) }}
+            className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-[5px] cursor-pointer hover:bg-claude hover:text-white transition-colors"
+            title="Abrir detalle"
+          >→</div>
         </div>
       </div>
 

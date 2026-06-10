@@ -78,6 +78,7 @@ interface AppState {
   recurrentEditId: number | null
   recurrentCreate: { context?: string; clientId?: number | null; projectId?: number | null } | null
   subtaskConvert: { dragId: number; targetId: number } | null
+  duplicateTask: { taskId: number } | null
   history: HistoryEntry[]
   toast: ToastState | null
 
@@ -109,6 +110,8 @@ interface AppState {
   closeRecurrentCreate: () => void
   openSubtaskConvert: (dragId: number, targetId: number) => void
   closeSubtaskConvert: () => void
+  openDuplicateTask: (taskId: number) => void
+  closeDuplicateTask: () => void
   // Undo + toasts
   recordHistory: (description: string, undo: () => Promise<void>) => void
   undoLast: () => Promise<void>
@@ -153,6 +156,7 @@ export const useStore = create<AppState>((set, get) => ({
   recurrentEditId: null,
   recurrentCreate: null,
   subtaskConvert: null,
+  duplicateTask: null,
   history: [],
   toast: null,
 
@@ -359,6 +363,8 @@ export const useStore = create<AppState>((set, get) => ({
   closeRecurrentCreate: () => set({ recurrentCreate: null }),
   openSubtaskConvert: (dragId, targetId) => set({ subtaskConvert: { dragId, targetId } }),
   closeSubtaskConvert: () => set({ subtaskConvert: null }),
+  openDuplicateTask: (taskId) => set({ duplicateTask: { taskId } }),
+  closeDuplicateTask: () => set({ duplicateTask: null }),
 
   openFollowup: (id) => set({ pendingFollowupTaskId: id }),
   closeFollowup: () => set({ pendingFollowupTaskId: null }),

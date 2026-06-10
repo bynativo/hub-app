@@ -341,6 +341,7 @@ export function TaskDetail() {
   const showToast = useStore(s => s.showToast)
   const recurrentes = useStore(s => s.recurrentes)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
+  const openDuplicateTask = useStore(s => s.openDuplicateTask)
 
   const task = tasks.find(t => t.id === currentTaskId)
   const [tab, setTab] = useState<Tab>('info')
@@ -1146,6 +1147,8 @@ Reglas del bloque:
             <>
               <div className="fixed inset-0 z-[5]" onClick={() => setShowMenu(false)} />
               <div className="absolute right-0 top-7 bg-bg2 border border-black/7 rounded-lg shadow-lg py-1 z-10 w-44">
+                <button onClick={() => { setShowMenu(false); openDuplicateTask(task!.id) }}
+                  className="w-full text-left px-3 py-1.5 text-[13px] hover:bg-bg3 cursor-pointer">📋 Duplicar tarea</button>
                 <button onClick={() => { setShowMenu(false); setConfirmDel(true) }}
                   className="w-full text-left px-3 py-1.5 text-[13px] text-danger hover:bg-danger/10 cursor-pointer">🗑 Eliminar tarea</button>
               </div>

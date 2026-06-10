@@ -61,6 +61,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
   const [saving, setSaving] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
 
   // Campañas disponibles del mismo contexto
   const campanas = tasks.filter(t => t.es_campana && t.context === context && !t.done && !t.archived_at)
@@ -93,7 +94,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
       delegate_return_days: delegaActive ? delegateReturnDays : null,
       campana_id: campanaId,
     }
-    const { error } = isEdit
+    const { error } = (isEdit && !isDuplicating)
       ? await supabase.from('recurrentes').update(row).eq('id', recurrente!.id)
       : await supabase.from('recurrentes').insert({ ...row, priority: 'media', active: true, cats: [], time_minutes: Math.round(estimatedHours * 60) })
     if (error) { alert('Error: ' + error.message); setSaving(false); return }
@@ -113,7 +114,9 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
   return (
     <div className="fixed inset-0 bg-black/40 z-[300] flex items-end md:items-start justify-center md:pt-8 overflow-y-auto backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-bg2 border border-black/7 rounded-t-2xl md:rounded-2xl p-5 md:p-6 w-full md:w-[520px] md:max-w-[96vw] md:mb-10 shadow-lg pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        <div className="font-serif text-xl font-light mb-4">{isEdit ? 'Editar recurrente' : 'Nueva recurrente'}</div>
+        <div className="font-serif text-xl font-light mb-4">
+          {isDuplicating ? 'Duplicar como nueva recurrente' : isEdit ? 'Editar recurrente' : 'Nueva recurrente'}
+        </div>
 
         {/* Título */}
         <div className="mb-3">
@@ -303,11 +306,17 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
         </div>
 
         <div className="flex gap-2 justify-between items-center">
-          {isEdit ? (
-            <button onClick={() => setConfirmDel(true)}
-              className="text-xs text-danger bg-danger/7 border border-danger/25 px-4 py-2 rounded-lg hover:bg-danger/15 transition-colors cursor-pointer">
-              🗑 Eliminar recurrente
-            </button>
+          {isEdit && !isDuplicating ? (
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDel(true)}
+                className="text-xs text-danger bg-danger/7 border border-danger/25 px-4 py-2 rounded-lg hover:bg-danger/15 transition-colors cursor-pointer">
+                🗑 Eliminar recurrente
+              </button>
+              <button
+                onClick={() => { setTitle(t => t + ' — copia'); setIsDuplicating(true) }}
+                className="text-xs bg-bg3 border border-black/7 text-gray-600 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer"
+              >📋 Duplicar</button>
+            </div>
           ) : <span />}
           <div className="flex gap-2">
             <button onClick={onClose} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
@@ -318,7 +327,7 @@ export function RecurrenteModal({ onClose, preselectContext, preselectClientId, 
               disabled={!title.trim() || saving}
               className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {saving ? 'Guardando...' : isEdit ? 'Guardar cambios' : 'Crear recurrente'}
+              {saving ? 'Guardando...' : (isDuplicating ? 'Crear recurrente' : isEdit ? 'Guardar cambios' : 'Crear recurrente')}
             </button>
           </div>
         </div>
