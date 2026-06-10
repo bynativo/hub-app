@@ -107,7 +107,7 @@ Reconstrucción completa en 11 componentes (rama `redesign`). Detalle por compon
 - [ ] Login con Supabase Auth (magic link o Google OAuth)
 - [ ] Roles: admin (yo), viewer (cliente ve solo su presentacion), editor (equipo agencia)
 - [ ] RLS policies basadas en `auth.uid()` en lugar de anon key abierta
-- [ ] Compartir presentacion con link restringido (solo lectura, sin navegacion al hub)
+- [x] Compartir presentacion con link restringido (solo lectura, sin navegacion al hub) — `/presentation/:id` + `/approve/:token` vía `PublicView` (sesion 17)
 
 ### Plataforma banco separada
 - [ ] Vista dedicada Banco Falabella con flujo Outlook (copia manual → cortafuegos corporativo)
@@ -132,7 +132,7 @@ Reconstrucción completa en 11 componentes (rama `redesign`). Detalle por compon
 - [ ] Crear/editar proyectos y presentaciones desde la UI
 - [ ] Crear/editar slides desde modal
 - [ ] Flujo completo: idea aprobada → asignar a grilla con deteccion de conflictos
-- [ ] Export de grilla (PDF / compartir link)
+- [ ] Export de grilla (PDF / compartir link) — presentaciones ya exportan PDF (sesion 17); falta para la grilla en sí
 
 ---
 
@@ -248,10 +248,35 @@ Las credenciales de Supabase estan hardcodeadas en `src/lib/supabase.ts` (anon k
 - **Kanban por contexto (`STATUS_COLUMNS`)** — las vistas de tareas de cada contexto usan columnas = estados del contexto (1 estado por columna). `KanbanBoard` acepta prop `columns`; sin ella usa las 4 universales (`KANBAN_GROUPS`) del dashboard.
 - **Google Calendar via OAuth refresh token** — `calendar-proxy` usa secrets `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN` (no service account) y mintea un access token por llamada. El índice de `calendar_events.google_id` debe ser único NORMAL (no parcial) para que el upsert `on_conflict=google_id` funcione. Para sincronizar: botón "↻ Google" en la vista Calendario.
 - **Buscador Cmd+K (`SearchModal`)** — busca sobre el store (tareas incl. archivadas, proyectos, presentaciones) + query a `attachments`; se abre con `openSearch()` del store.
+- **Visor público sin login (`/presentation/:id`, `/presentation/:id/slide/:slideId`, `/approve/:token`)** — `main.tsx` rutea esas paths a `PublicView` (read-only); el resto va a la app normal. Requiere `vercel.json` con rewrite SPA (todo menos `/api` → `index.html`) para que el deep link no caiga en 404 al recargar.
+- **Canva `window.open` antes de `await`** — los browsers bloquean popups que abren después de un await porque pierden el gesto de usuario. En `addSlide('canva')`, `window.open` va ANTES del `insert`; si el insert falla, se cierra la pestaña recién abierta.
+- **PDF export con import dinámico de `jspdf`** — `exportPresentationPDF` hace `import('jspdf')` dentro de la función para que jsPDF quede en un chunk aparte y no engorde el bundle inicial (la mayoría de sesiones nunca exporta).
+- **Columnas canónicas de influencer en `tasks`** — `tasks.es_influencer`, `tipo_publicacion`, `influencer_nombre`, `influencer_agencia`, `content_format` (las viejas `content_pub_type`/`influencer_name`/`influencer_agency` quedaron como legacy). Capturar/TaskDetail escriben las nuevas y leen con fallback a las viejas; en slides convive `content_pub_type`/`influencer_name`/`influencer_handle` (ya estaban) y se propaga `content_format → slide.formato`.
+- **Slides: orden mixto fecha + manual** — `slides.posicion_manual` (nullable). El orden de cada presentación es `posicion_manual` ASC (drag&drop) → `fecha_publicacion` ASC → `position` ASC. "Restaurar orden por fecha" hace UPDATE `posicion_manual = null` para volver al automático.
 
 ---
 
 ## Changelog
+
+### 2026-05-28 — Sesion 17: Presentaciones (links públicos, PDF, drag&drop, Canva, importar PDF/PPT, slides texto + IA), Capturar (toggles separados, crear proyecto rápido), Atrasadas, agencia por cliente, archivos en tarea, migración a columnas canónicas de influencer
+
+Migraciones aplicadas: `slides.approval_token` (default `gen_random_uuid()`), `slides.es_slide_libre`, `slides.canva_design_id`, `slides.canva_preview_url`, `slides.posicion_manual`; `tasks.es_influencer`, `tasks.tipo_publicacion`, `tasks.influencer_nombre`, `tasks.influencer_agencia`, `tasks.content_format` (columnas canónicas del módulo influencers — las viejas quedan como legacy con fallback en el front).
+
+- **Bugs presentaciones (commit 91fc8f0):** rutas SPA en `vercel.json` + `PublicView` para `/presentation/:id`, `/presentation/:id/slide/:slideId` y `/approve/:token` (read-only, sin login, con Aprobar/Pedir cambios que escribe en `slides.aprobaciones`/`is_aprobada`). Links del editor corregidos al formato real. Quitada sección duplicada "Plataformas y tipo". Menú "⋯" en cada tarjeta (Editar título / Eliminar presentación — con confirmación que borra slides y desvincula `tasks.presentation_id`).
+- **Archivos en la tarea (`TaskAttachments`):** sección "Archivos" en TaskDetail. Subir/listar/descargar/eliminar adjuntos desde Supabase Storage (bucket `attachments`); el row va a la tabla `attachments` con `es_contexto=false` (los de contexto siguen siendo el otro flag).
+- **Importar PDF/PPT como presentación:** en PresentationsView, opción "Importar PDF/PPT" sube el archivo a Storage, crea la presentación y un slide por página/diapositiva con `media_url` y previsualización.
+- **Previsualización inteligente del contenido:** dentro de la slide, el bloque "Contenido" detecta el tipo (imagen, video, PDF, link de Canva/Drive/YouTube) y muestra el preview adecuado en lugar del link crudo.
+- **Slides de texto en Canva (`es_slide_libre`):** "+ Canva" crea una slide marcada como libre, abre Canva (Instagram Story) en pestaña nueva y queda lista para pegar el design ID después.
+- **"✦ Mejorar con Claude" y "✦ Extraer Insight":** dos botones en la idea de la slide. Mejorar reescribe la idea con Claude (proxy). Extraer Insight genera un campo `insight` a partir de la idea (también con Claude).
+- **Slides: drag&drop + eliminar + restaurar orden por fecha:** el filmstrip reordena por drag (UPDATE `posicion_manual`), botón eliminar por slide, y "Restaurar orden por fecha" que setea `posicion_manual = null` y vuelve al orden por `fecha_publicacion`.
+- **Migración a columnas canónicas de influencer:** Capturar/TaskDetail escriben en `tasks.es_influencer`, `tipo_publicacion`, `influencer_nombre`, `influencer_agencia`, `content_format` (leyendo legacy con fallback). Selector de Formato en el bloque de contenido en ambos. `createSlideFromTask` propaga las nuevas columnas + `content_format → slide.formato`.
+- **Dashboard: sección "🚨 Atrasadas" antes de Hoy** (tareas activas con `due_date < hoy`, orden ASC), con badge rojo de atraso en cada card de TaskItem.
+- **Agencia: asignar cliente desde TaskDetail + agrupar por cliente:** selector "Cliente" en el detalle (cuando contexto=agencia). En el modo Lista de Agencia (sin filtro), las tareas se agrupan primero por cliente/marca y dentro por status.
+- **ContextView: sección "🚨 Atrasadas"** en banco/agencia/personal (excluida del agrupado por status y, en agencia, también del agrupado por cliente para no duplicar). El Kanban no cambia.
+- **Presentaciones: exportar PDF** (`exportPresentationPDF`, jsPDF con import dinámico): portada (título, subtítulo, fecha, n° de slides) + 1 página por slide (título, fechas, formato, redes, status, idea, insight, registro de aprobaciones). Menú "⋯" ordenado: Editar título → Exportar PDF → separador → Eliminar (rojo, último). Botón "📄 Exportar PDF" también en el header del filmstrip.
+- **Capturar: crear proyecto/campaña rápido (`QuickProjectModal`):** "+ Crear nuevo proyecto / campaña" en el select de Proyecto (tab Tarea directa y en cada SuggestionForm de Reunión/Notas + Micrófono). Mini-modal con Nombre, Contexto, Cliente (si agencia), toggle Ongoing/date picker. Al guardar, el id queda preseleccionado.
+- **Capturar: dos toggles separados "Es contenido" + "Es influencer":** reemplazan el toggle único anterior; activar influencer auto-activa contenido (toda tarea de influencer es contenido); apagar contenido apaga influencer. `PUB_TYPES` reducido a 3 (Colab en nuestra cuenta / Influencer nos entrega el video / Solo en su cuenta). Para contenido sin influencer, `tipo_publicacion='propia'` queda implícito. `createSlideFromTask` con `tipo_publicacion='colab_ig'` crea el slide con `formato='Colab'` y `colab_nombre = influencer_handle`.
+- **Fix UI presentaciones:** menú "⋯" se veía cortado por `overflow-hidden` de la tarjeta (quitado, con `rounded-t-xl` en el stripe de color). Botón "⋯" más visible (chip con bg+borde+sombra). Canva tab no abría → `window.open` ahora va ANTES del `await` del insert (gesto del usuario preservado).
 
 ### 2026-05-27 — Sesion 16: Recordatorios como pseudo-tareas + subtipo seguimiento de correo
 
