@@ -1387,6 +1387,31 @@ Reglas del bloque:
               </div>
             )}
 
+            {/* Etapa actual del flujo de contenido — guarda al instante */}
+            {isContent && (
+              <div>
+                <label className={labelCls}>Etapa actual</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {CONTENT_STAGES.map(s => {
+                    const active = task.current_stage === s.v
+                    return (
+                      <button key={s.v} type="button"
+                        onClick={async () => {
+                          await updateTask(task.id, { current_stage: active ? null : s.v })
+                        }}
+                        className={`flex items-center gap-1.5 px-2.5 py-2 border rounded-lg cursor-pointer transition-all text-left ${
+                          active ? 'border-claude/30 bg-claude/7 text-claude' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
+                        }`}>
+                        <span className="text-base leading-none">{s.emoji}</span>
+                        <span className="text-[11px] leading-tight">{s.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-1">Visible como badge en las tarjetas. Click para activar/desactivar.</div>
+              </div>
+            )}
+
             <div>
               <label className={labelCls}>Estimado de tiempo</label>
               <div className="flex gap-1.5 flex-wrap">

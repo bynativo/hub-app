@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
 import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge, vaAGrilla } from '../../lib/helpers'
-import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS } from '../../lib/constants'
+import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CONTENT_STAGES } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
 
@@ -160,6 +160,12 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
             {enGrilla && (
               <Tag bg="rgba(13,148,136,0.10)" color="#0d9488">📅 En grilla</Tag>
             )}
+
+            {/* Etapa actual del flujo de contenido */}
+            {task.task_type === 'contenido' && task.current_stage && (() => {
+              const cs = CONTENT_STAGES.find(s => s.v === task.current_stage)
+              return cs ? <Tag bg="rgba(124,58,237,0.08)" color="#7c3aed">{cs.emoji} {cs.label}</Tag> : null
+            })()}
 
             {/* Hija que aparece top-level por tener fecha distinta a la padre. */}
             {orphanDisplayParent && (
