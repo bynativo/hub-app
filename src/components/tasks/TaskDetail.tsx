@@ -3,7 +3,7 @@ import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO } from '../../lib/helpers'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO, isRRSSContent } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
@@ -1132,6 +1132,9 @@ Reglas del bloque:
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{ctxLabel(task.context)}</span>
             {task.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{task.clients.name}</span>}
+            {delegations.some(d => !d.completed_at) && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-100 text-orange-600">↗ Revisión pendiente</span>
+            )}
           </div>
         </div>
         <div className="relative flex items-center gap-1 shrink-0">
@@ -1256,6 +1259,33 @@ Reglas del bloque:
                 ))}
               </div>
             </div>
+
+            {/* Flujo banco RRSS/ADS — avisos contextuales */}
+            {task.context === 'banco' && isContent && (() => {
+              const isRRSS = isRRSSContent(task)
+              if (!isRRSS && task.delegated_to === 'Gonza') {
+                return (
+                  <div className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">
+                    ✓ Contenido no-RRSS delegado a Gonza — no requiere aprobación de Felipe.
+                  </div>
+                )
+              }
+              if (isRRSS && task.status === 'Pend. validación') {
+                return (
+                  <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                    ⚡ Contenido RRSS/ADS — requiere <span className="font-medium">aprobación de Felipe</span> (o Jani si Felipe delegó el cierre). Generá el link de aprobación desde el slide correspondiente.
+                  </div>
+                )
+              }
+              if (isRRSS) {
+                return (
+                  <div className="text-[11px] text-orange-600 bg-orange-50 border border-orange-200 rounded-md px-2.5 py-1.5">
+                    📱 RRSS/ADS — aprobación obligatoria de Felipe al pasar a Pend. validación.
+                  </div>
+                )
+              }
+              return null
+            })()}
 
             <div className="grid grid-cols-2 gap-3">
               <div>

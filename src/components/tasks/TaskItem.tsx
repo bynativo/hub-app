@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
-import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge, vaAGrilla } from '../../lib/helpers'
+import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge, vaAGrilla, isRRSSContent } from '../../lib/helpers'
 import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CONTENT_STAGES } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
@@ -166,6 +166,15 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
               const cs = CONTENT_STAGES.find(s => s.v === task.current_stage)
               return cs ? <Tag bg="rgba(124,58,237,0.08)" color="#7c3aed">{cs.emoji} {cs.label}</Tag> : null
             })()}
+
+            {/* Banco RRSS/ADS: badge de aprobación requerida en Pend. validación */}
+            {task.context === 'banco' && isRRSSContent(task) && task.status === 'Pend. validación' && (
+              <Tag bg="rgba(220,38,38,0.10)" color="#dc2626">⚡ Aprobación Felipe</Tag>
+            )}
+            {/* Contenido banco no-RRSS delegado a Gonza sin aprobación necesaria */}
+            {task.context === 'banco' && task.task_type === 'contenido' && !isRRSSContent(task) && task.delegated_to === 'Gonza' && task.status !== 'Cerrado' && (
+              <Tag bg="rgba(13,148,136,0.10)" color="#0d9488">Gonza gestiona</Tag>
+            )}
 
             {/* Hija que aparece top-level por tener fecha distinta a la padre. */}
             {orphanDisplayParent && (

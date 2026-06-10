@@ -309,3 +309,20 @@ export function deliveryWarning(due: string | null, publish: string | null): str
   const minDelivery = addDaysISO(publish, -1)
   return due > minDelivery ? minDelivery : null
 }
+
+// Detecta si una tarea de contenido es RRSS o ADS (requiere aprobación de Felipe).
+// Criterio: plataforma contiene ig/tiktok/facebook/x/linkedin o es pauta/ads.
+export function isRRSSContent(task: {
+  task_type?: string | null
+  content_platform?: string | null
+  content_pub_type?: string | null
+}): boolean {
+  if (task.task_type !== 'contenido') return false
+  const p = (task.content_platform || '').toLowerCase()
+  if (['ig', 'tiktok', 'facebook', 'x_', 'linkedin'].some(k => p.includes(k))) return true
+  // "x" solo como plataforma exacta para no coincidir con texto
+  if (p === 'x' || p.startsWith('x,') || p.includes(',x,') || p.endsWith(',x')) return true
+  const pt = (task.content_pub_type || '').toLowerCase()
+  if (pt.includes('pauta') || pt === 'anuncio_pauta') return true
+  return false
+}
