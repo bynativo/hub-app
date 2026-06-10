@@ -22,6 +22,7 @@ import { CaptureModal } from './components/modals/CaptureModal'
 import { FollowupModal } from './components/modals/FollowupModal'
 import { SearchModal } from './components/modals/SearchModal'
 import { RecurrenteModal } from './components/modals/RecurrenteModal'
+import { SubtaskConvertModal } from './components/modals/SubtaskConvertModal'
 import { Toast } from './components/layout/Toast'
 import { PWAUpdatePrompt } from './components/pwa/PWAUpdatePrompt'
 import { InstallBanner } from './components/pwa/InstallBanner'
@@ -227,6 +228,7 @@ export default function App() {
           preselectProjectId={recurrentCreate.projectId ?? null} />
       )}
 
+      <SubtaskConvertModal />
       <Toast />
       <PWAUpdatePrompt />
       <InstallBanner />

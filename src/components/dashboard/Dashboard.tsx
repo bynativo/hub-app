@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../lib/store'
-import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
 import { todayISO, tomorrowISO, addDaysISO, fmtHoras, ctxColor, nextRecurringDueDate, thisWeekRange, nextWeekRange, nextMonthRange, isShownAsTopLevel, effectiveDate, dateOfLocal, splitTitle } from '../../lib/helpers'
 import { KANBAN_GROUPS, isWaitingState } from '../../lib/constants'

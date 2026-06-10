@@ -77,6 +77,7 @@ interface AppState {
   searchOpen: boolean
   recurrentEditId: number | null
   recurrentCreate: { context?: string; clientId?: number | null; projectId?: number | null } | null
+  subtaskConvert: { dragId: number; targetId: number } | null
   history: HistoryEntry[]
   toast: ToastState | null
 
@@ -106,6 +107,8 @@ interface AppState {
   closeRecurrentEdit: () => void
   openRecurrentCreate: (opts?: { context?: string; clientId?: number | null; projectId?: number | null }) => void
   closeRecurrentCreate: () => void
+  openSubtaskConvert: (dragId: number, targetId: number) => void
+  closeSubtaskConvert: () => void
   // Undo + toasts
   recordHistory: (description: string, undo: () => Promise<void>) => void
   undoLast: () => Promise<void>
@@ -149,6 +152,7 @@ export const useStore = create<AppState>((set, get) => ({
   searchOpen: false,
   recurrentEditId: null,
   recurrentCreate: null,
+  subtaskConvert: null,
   history: [],
   toast: null,
 
@@ -353,6 +357,8 @@ export const useStore = create<AppState>((set, get) => ({
   closeRecurrentEdit: () => set({ recurrentEditId: null }),
   openRecurrentCreate: (opts) => set({ recurrentCreate: opts ?? {} }),
   closeRecurrentCreate: () => set({ recurrentCreate: null }),
+  openSubtaskConvert: (dragId, targetId) => set({ subtaskConvert: { dragId, targetId } }),
+  closeSubtaskConvert: () => set({ subtaskConvert: null }),
 
   openFollowup: (id) => set({ pendingFollowupTaskId: id }),
   closeFollowup: () => set({ pendingFollowupTaskId: null }),

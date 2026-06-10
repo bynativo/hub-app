@@ -338,6 +338,7 @@ export function TaskDetail() {
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
   const deleteTaskSoft = useStore(s => s.deleteTaskSoft)
+  const showToast = useStore(s => s.showToast)
   const recurrentes = useStore(s => s.recurrentes)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
 

@@ -5,6 +5,11 @@ import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CONTENT_STAGES } from '../../
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
 
+// Variable a nivel de módulo para compartir el ID arrastrado entre instancias.
+// Usamos módulo (no estado) para evitar re-renders en todos los TaskItem durante el drag.
+let _dndDragId: number | null = null
+let _dndDragContext: string | null = null
+
 function Tag({ children, bg, color }: { children: React.ReactNode; bg: string; color: string }) {
   return (
     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-medium" style={{ background: bg, color }}>
@@ -24,7 +29,9 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
   const { toggleTask, openDetail } = useStore()
   const allTasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
+  const openSubtaskConvert = useStore(s => s.openSubtaskConvert)
   const [expanded, setExpanded] = useState(false)
+  const [isDragTarget, setIsDragTarget] = useState(false)
   const clientB = clientBadge(task.client_id, clients)
   const due = fmtDue(task.due_date)
   const overdue = overdueLabel(task.due_date)
@@ -55,13 +62,61 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
     ? allTasks.find(p => p.id === task.parent_task_id)
     : null
 
+  // DnD: ¿este task puede ser drop target válido?
+  function canBeDropTarget(): boolean {
+    return !task.done && !!_dndDragId && _dndDragId !== task.id && _dndDragContext === task.context
+  }
+
   return (
     <div>
       <div
         onClick={() => hasChildren ? setExpanded(e => !e) : openDetail(task.id)}
-        className={`flex items-start gap-2.5 p-3 bg-bg2 border border-black/7 rounded-[10px] cursor-pointer transition-all shadow-sm hover:border-black/13 hover:shadow-md hover:-translate-y-px ${
-          task.done ? 'opacity-40' : ''
-        }`}
+        draggable={!task.done}
+        onDragStart={e => {
+          _dndDragId = task.id
+          _dndDragContext = task.context
+          e.dataTransfer.setData('text/task-id', String(task.id))
+          e.dataTransfer.effectAllowed = 'move'
+          // Un pequeño delay para que el ghost image se capture antes de aplicar opacity
+          setTimeout(() => {
+            const el = e.currentTarget as HTMLElement
+            el.style.opacity = '0.4'
+          }, 0)
+        }}
+        onDragEnd={e => {
+          _dndDragId = null
+          _dndDragContext = null
+          ;(e.currentTarget as HTMLElement).style.opacity = ''
+          setIsDragTarget(false)
+        }}
+        onDragOver={e => {
+          if (!canBeDropTarget()) return
+          e.preventDefault()
+          e.stopPropagation()
+          e.dataTransfer.dropEffect = 'move'
+          if (!isDragTarget) setIsDragTarget(true)
+        }}
+        onDragLeave={e => {
+          // Solo limpiar si el puntero salió del elemento (no de un hijo)
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsDragTarget(false)
+          }
+        }}
+        onDrop={e => {
+          e.preventDefault()
+          e.stopPropagation()
+          setIsDragTarget(false)
+          if (!canBeDropTarget()) return
+          const dragId = _dndDragId!
+          _dndDragId = null
+          _dndDragContext = null
+          openSubtaskConvert(dragId, task.id)
+        }}
+        className={`flex items-start gap-2.5 p-3 bg-bg2 rounded-[10px] cursor-pointer transition-all shadow-sm hover:-translate-y-px ${
+          isDragTarget
+            ? 'border-2 border-claude/50 shadow-md ring-2 ring-claude/10'
+            : 'border border-black/7 hover:border-black/13 hover:shadow-md'
+        } ${task.done ? 'opacity-40' : ''}`}
       >
         {hasChildren && (
           <button
