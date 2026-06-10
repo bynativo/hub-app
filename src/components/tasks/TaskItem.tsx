@@ -84,6 +84,13 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
 
         <div className="flex-1 min-w-0">
           <div className={`text-[13px] leading-snug font-medium ${task.done ? 'line-through text-gray-400' : ''}`}>
+            {task.es_recurrente_instance && (
+              <span
+                className="mr-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded font-medium align-middle"
+                style={{ background: 'rgba(37,99,235,0.10)', color: '#2563eb' }}
+                title={`Generada automáticamente por recurrente`}
+              >🔄</span>
+            )}
             {isEmail && <span className="mr-1">✉️</span>}
             {isSolicitud && <span className="mr-1">🎬</span>}
             {isPerfil && <span className="mr-1">👤</span>}
@@ -99,6 +106,10 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
             >
               {STATUS_ICON[task.status || 'Inbox']} {task.status || 'Inbox'}
             </span>
+
+            {task.es_recurrente_instance && (
+              <Tag bg="rgba(37,99,235,0.08)" color="#2563eb">🔄 Recurrente</Tag>
+            )}
 
             <Tag bg={task.context === 'banco' ? 'rgba(37,99,235,0.07)' : task.context === 'agencia' ? 'rgba(13,148,136,0.07)' : 'rgba(217,119,6,0.07)'}
                  color={task.context === 'banco' ? '#2563eb' : task.context === 'agencia' ? '#0d9488' : '#d97706'}>

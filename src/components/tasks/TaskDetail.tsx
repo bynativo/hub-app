@@ -338,6 +338,8 @@ export function TaskDetail() {
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
   const deleteTaskSoft = useStore(s => s.deleteTaskSoft)
+  const recurrentes = useStore(s => s.recurrentes)
+  const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
 
   const task = tasks.find(t => t.id === currentTaskId)
   const [tab, setTab] = useState<Tab>('info')
@@ -1599,6 +1601,37 @@ Reglas del bloque:
                 </div>
               </div>
             )}
+
+            {/* Sección Origen — solo visible si es instancia de recurrente */}
+            {task.es_recurrente_instance && (() => {
+              const origen = task.recurrente_id ? recurrentes.find(r => r.id === task.recurrente_id) : null
+              return (
+                <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-3 flex items-start gap-2.5">
+                  <span className="text-base shrink-0">🔄</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-mono text-blue-600 tracking-wider uppercase mb-1">Origen</div>
+                    <div className="text-[13px] text-gray-700">
+                      Esta tarea fue generada automáticamente
+                      {origen ? (
+                        <> por la recurrente{' '}
+                          <button
+                            onClick={() => openRecurrentEdit(origen.id)}
+                            className="text-blue-600 hover:text-blue-700 underline cursor-pointer font-medium"
+                            title="Abrir y editar la recurrente"
+                          >{origen.title}</button>
+                        </>
+                      ) : ' por una recurrente'}.
+                    </div>
+                    {origen && (
+                      <div className="text-[11px] text-gray-500 mt-1">
+                        {origen.freq === 'diaria' ? 'Frecuencia: diaria' : origen.freq === 'semanal' ? `Frecuencia: semanal (${origen.day_of_month})` : `Frecuencia: mensual (día ${origen.day_of_month})`}
+                        {origen.estimated_hours ? ` · ${origen.estimated_hours}h estimadas` : ''}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             <div>
               <label className={labelCls}>Descripción</label>
