@@ -768,9 +768,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       // correo_contexto se usa como "Asunto del correo" para responder_correo y
       // como "A quién / contexto" para enviar_correo.
       correo_contexto: (reminder && (reminderType === 'responder_correo' || reminderType === 'enviar_correo')) ? (correoCtx.trim() || null) : null,
-      es_campana: esCampana ? true : null,
-      campana_fecha_inicio: (esCampana && campanaFechaInicio) ? campanaFechaInicio : null,
-      campana_fecha_fin: (esCampana && campanaFechaFin) ? campanaFechaFin : null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     }).select('id').single()

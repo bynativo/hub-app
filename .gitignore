@@ -27,3 +27,4 @@ test-results/
 _shot*.mjs
 _dnd.mjs
 _verify*.mjs
+.claude/
