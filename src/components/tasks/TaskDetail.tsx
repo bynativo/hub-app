@@ -1273,10 +1273,9 @@ Reglas del bloque:
                   <button key={s} onClick={() => {
                     if (s === 'Delegado') { setDelegationModalOpen(true); return }
                     if (s === 'Cerrado') {
-                      const cr = task.closer_role
-                      if (cr && cr !== 'felipe') {
-                        const cn = cr === 'jani' ? 'Jani' : (task.closer_name || 'la persona asignada')
-                        setConfirmClose({ closerName: cn })
+                      if (task.closer_member_id) {
+                        const cm = teamMembers.find(m => m.id === task.closer_member_id)
+                        setConfirmClose({ closerName: cm?.nombre ?? 'la persona asignada' })
                         return
                       }
                     }
