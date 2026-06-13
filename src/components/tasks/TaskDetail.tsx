@@ -46,12 +46,14 @@ function parseAction(text: string): { json: any; clean: string } | null {
 // recordatorio automático (vía syncChecklistReminder en TaskDetail) — el
 // reminder_task_id queda apuntando a la tarea recordatorio en checklists.
 function ChecklistRow({
-  item, onToggleDone, onUpdate, onDelete,
+  item, onToggleDone, onUpdate, onDelete, teamMembers, taskContext,
 }: {
   item: Checklist
   onToggleDone: () => void | Promise<void>
   onUpdate: (patch: Partial<Checklist>) => void | Promise<void>
   onDelete: () => void | Promise<void>
+  teamMembers: import('../../lib/types').TeamMember[]
+  taskContext: string
 }) {
   // Date + hora separados (mismo patrón que el reminder del CaptureModal).
   // dueDate (YYYY-MM-DD), dueTime (HH:MM), customTime (true = mostrar input manual).
@@ -67,6 +69,7 @@ function ChecklistRow({
   const [expanded, setExpanded] = useState(false)
   const [title, setTitle] = useState(item.title)
   const [responsable, setResponsable] = useState(item.responsable || '')
+  const [responsableMemberId, setResponsableMemberId] = useState<number | null>(item.responsable_member_id ?? null)
   const [dueDate, setDueDate] = useState(initial.date)
   const [dueTime, setDueTime] = useState(initial.time)
   const [customTime, setCustomTime] = useState(!!initial.time && !PRESETS.includes(initial.time))
@@ -82,14 +85,15 @@ function ChecklistRow({
   function applyAssignment() {
     onUpdate({
       responsable: responsable.trim() || null,
+      responsable_member_id: responsableMemberId,
       due_at: dueAt ? new Date(dueAt).toISOString() : null,
       title: title.trim(),
     })
     setExpanded(false)
   }
   function clearAssignment() {
-    setResponsable(''); setDueDate(''); setDueTime(''); setCustomTime(false)
-    onUpdate({ responsable: null, due_at: null })
+    setResponsable(''); setResponsableMemberId(null); setDueDate(''); setDueTime(''); setCustomTime(false)
+    onUpdate({ responsable: null, responsable_member_id: null, due_at: null })
   }
 
   const fld = 'w-full bg-bg2 border border-black/7 rounded-md px-2 py-1 text-[12px] outline-none focus:border-claude/20'
@@ -108,19 +112,24 @@ function ChecklistRow({
           placeholder="Escribí el item…"
           className={`flex-1 bg-transparent text-[13px] outline-none border-b border-transparent focus:border-black/13 ${item.done ? 'line-through text-gray-400' : ''}`} />
         {/* Chips de responsable / fecha — compactos, click expande */}
-        {item.responsable && (
-          <span onClick={() => setExpanded(true)}
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 cursor-pointer hover:bg-bg3" title={`Responsable: ${item.responsable}`}>
-            👤 {item.responsable}
-          </span>
-        )}
+        {(item.responsable_member_id || item.responsable) && (() => {
+          const name = item.responsable_member_id
+            ? (teamMembers.find(m => m.id === item.responsable_member_id)?.nombre ?? item.responsable)
+            : item.responsable
+          return (
+            <span onClick={() => setExpanded(true)}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500 cursor-pointer hover:bg-bg3" title={`Responsable: ${name}`}>
+              👤 {name}
+            </span>
+          )
+        })()}
         {hasAlarm && (
           <span onClick={() => setExpanded(true)}
             className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/10 text-claude cursor-pointer hover:bg-claude/15" title={`Recordatorio: ${dueLabel}`}>
             🔔 {dueLabel}
           </span>
         )}
-        {!item.responsable && !hasAlarm && (
+        {!(item.responsable_member_id || item.responsable) && !hasAlarm && (
           <button onClick={() => setExpanded(true)}
             className="text-[10px] text-gray-400 hover:text-claude opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity"
             title="Asignar responsable y fecha">+ asignar</button>
@@ -137,7 +146,22 @@ function ChecklistRow({
         <div className="border-t border-black/7 px-2.5 py-2 flex flex-col gap-2.5">
           <div>
             <label className={lbl}>Responsable</label>
-            <input value={responsable} onChange={e => setResponsable(e.target.value)} placeholder="Nombre" className={fld} />
+            <select
+              value={responsableMemberId ?? ''}
+              onChange={e => {
+                const id = e.target.value ? Number(e.target.value) : null
+                const member = id ? teamMembers.find(m => m.id === id) : null
+                setResponsableMemberId(id)
+                setResponsable(member?.nombre ?? '')
+              }}
+              className={fld}
+            >
+              <option value="">Sin asignar</option>
+              {teamMembers
+                .filter(m => m.contextos.includes(taskContext))
+                .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
+              }
+            </select>
           </div>
           <div>
             <label className={lbl}>Fecha del recordatorio</label>
@@ -325,7 +349,7 @@ function CreatePerfilesMiniModal({
 export function TaskDetail() {
   const tasks = useStore(s => s.tasks)
   const calendarEvents = useStore(s => s.calendarEvents)
-  const contacts = useStore(s => s.contacts)
+
   const presentations = useStore(s => s.presentations)
   const projects = useStore(s => s.projects)
   const clients = useStore(s => s.clients)
@@ -342,6 +366,7 @@ export function TaskDetail() {
   const recurrentes = useStore(s => s.recurrentes)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
   const openDuplicateTask = useStore(s => s.openDuplicateTask)
+  const teamMembers = useStore(s => s.teamMembers)
 
   const task = tasks.find(t => t.id === currentTaskId)
   const [tab, setTab] = useState<Tab>('info')
@@ -375,6 +400,7 @@ export function TaskDetail() {
   const [contentFormat, setContentFormat] = useState('')
   const [notes, setNotes] = useState('')
   const [delegatedTo, setDelegatedTo] = useState('')
+  const [delegatedToMemberId, setDelegatedToMemberId] = useState<number | null>(null)
   const [origin, setOrigin] = useState('propia')
   const [estHours, setEstHours] = useState<number | null>(null)
   const [contextReadme, setContextReadme] = useState('')
@@ -445,7 +471,7 @@ export function TaskDetail() {
     setInfAgency(task.influencer_agencia || task.influencer_agency || '')
     setContentFormat(task.content_format || '')
     setRecordatorioAt(toLocalDT(task.recordatorio_at))
-    setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setOrigin(task.origin || 'propia')
+    setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setDelegatedToMemberId(task.delegated_to_member_id ?? null); setOrigin(task.origin || 'propia')
     setEstHours(task.estimated_hours)
     setContextReadme(task.context_readme || ''); setShowContext(false)
     setSuggestedHours(null)
@@ -609,7 +635,7 @@ export function TaskDetail() {
       content_format: isContent ? (contentFormat || null) : null,
       es_recordatorio: isReminder,
       recordatorio_at: isReminder && recordatorioAt ? new Date(recordatorioAt).toISOString() : null,
-      notes: notes.trim() || null, delegated_to: delegatedTo || null, origin,
+      notes: notes.trim() || null, delegated_to: delegatedTo || null, delegated_to_member_id: delegatedToMemberId, origin,
       estimated_hours: estHours,
       work_date: workDate || null,
       delegation_date: delegationDate || null,
@@ -1486,11 +1512,21 @@ Reglas del bloque:
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Delegado a</label>
-                <select value={delegatedTo} onChange={e => setInfo(setDelegatedTo, e.target.value)} className={fieldCls}>
+                <select
+                  value={delegatedToMemberId ?? ''}
+                  onChange={e => {
+                    const id = e.target.value ? Number(e.target.value) : null
+                    const member = id ? teamMembers.find(m => m.id === id) : null
+                    setDelegatedToMemberId(id)
+                    setInfo(setDelegatedTo, member?.nombre ?? '')
+                  }}
+                  className={fieldCls}
+                >
                   <option value="">Nadie</option>
-                  {/* Solo el equipo del mismo contexto que la tarea (banco no aparece en agencia y viceversa) */}
-                  {contacts.filter(c => c.context === task.context).map(c => <option key={c.id} value={c.name}>{c.name}{c.role ? ` · ${c.role}` : ''}</option>)}
-                  {delegatedTo && !contacts.some(c => c.name === delegatedTo) && <option value={delegatedTo}>{delegatedTo}</option>}
+                  {teamMembers
+                    .filter(m => m.contextos.includes(task.context))
+                    .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
+                  }
                 </select>
               </div>
               <div>
@@ -1723,44 +1759,31 @@ Reglas del bloque:
                 </div>
               </div>
 
-              {/* Responsable de cierre — solo Felipe puede cerrar por defecto */}
+              {/* Responsable de cierre */}
               <div>
                 <label className={labelCls}>Responsable de cierre</label>
-                <div className="flex gap-1.5 mb-1.5">
-                  {[
-                    { v: 'felipe', label: 'Felipe', sub: 'Por defecto' },
-                    { v: 'jani', label: 'Jani', sub: 'CM' },
-                    { v: 'otro', label: 'Otro', sub: 'Especificar' },
-                  ].map(o => {
-                    const active = task.closer_role === o.v || (!task.closer_role && o.v === 'felipe')
-                    return (
-                      <button key={o.v} type="button"
-                        onClick={async () => {
-                          await updateTask(task.id, { closer_role: o.v, closer_name: o.v !== 'otro' ? null : task.closer_name })
-                        }}
-                        className={`flex-1 flex flex-col items-center py-1.5 px-2 border rounded-lg cursor-pointer transition-all ${
-                          active ? 'border-claude/30 bg-claude/7 text-claude' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
-                        }`}>
-                        <span className="text-[12px] font-medium">{o.label}</span>
-                        <span className="text-[10px] font-mono opacity-60">{o.sub}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                {task.closer_role === 'otro' && (
-                  <input
-                    key={task.id + '-closer'}
-                    defaultValue={task.closer_name || ''}
-                    onBlur={async e => { await updateTask(task.id, { closer_name: e.target.value.trim() || null }) }}
-                    placeholder="Nombre del responsable"
-                    className={fieldCls}
-                  />
-                )}
-                {task.closer_role && task.closer_role !== 'felipe' && (
-                  <div className="text-[11px] text-orange-500 mt-1">
-                    Solo {task.closer_role === 'jani' ? 'Jani' : (task.closer_name || 'la persona asignada')} puede cerrar esta tarea.
-                  </div>
-                )}
+                <select
+                  value={task.closer_member_id ?? ''}
+                  onChange={async e => {
+                    const id = e.target.value ? Number(e.target.value) : null
+                    await updateTask(task.id, { closer_member_id: id })
+                  }}
+                  className={fieldCls}
+                >
+                  <option value="">Cualquiera (sin restricción)</option>
+                  {teamMembers
+                    .filter(m => m.contextos.includes(task.context))
+                    .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
+                  }
+                </select>
+                {task.closer_member_id && (() => {
+                  const cm = teamMembers.find(m => m.id === task.closer_member_id)
+                  return cm ? (
+                    <div className="text-[11px] text-orange-500 mt-1">
+                      Solo {cm.nombre} puede cerrar esta tarea.
+                    </div>
+                  ) : null
+                })()}
               </div>
             </div>
 
@@ -1828,6 +1851,8 @@ Reglas del bloque:
                     }}
                     onUpdate={patch => updateChecklistFull(c.id, patch)}
                     onDelete={() => deleteChecklistItem(c.id)}
+                    teamMembers={teamMembers}
+                    taskContext={task.context}
                   />
                 ))}
               </div>

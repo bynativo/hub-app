@@ -115,9 +115,12 @@ export interface Task {
   influencer_agencia: string | null
   tipo_publicacion: string | null
   // Responsable de cierre y etapa actual de contenido
-  closer_role: string | null   // 'felipe' | 'jani' | 'otro'
-  closer_name: string | null
+  closer_role: string | null   // legacy
+  closer_name: string | null   // legacy
+  closer_member_id: number | null
   current_stage: string | null
+  // Delegación nueva (member_id)
+  delegated_to_member_id: number | null
   // Instancias de recurrentes
   es_recurrente_instance: boolean | null
   recurrente_id: number | null
@@ -160,7 +163,8 @@ export interface Checklist {
   created_at: string
   // Responsable + fecha de recordatorio. Si due_at está seteado, se crea
   // automáticamente una tarea recordatorio vinculada via reminder_task_id.
-  responsable: string | null
+  responsable: string | null         // legacy
+  responsable_member_id: number | null
   due_at: string | null
   reminder_task_id: number | null
 }
@@ -174,6 +178,22 @@ export interface Contact {
   origin: string | null
   email: string | null
   phone: string | null
+  created_at: string
+}
+
+export interface TeamMember {
+  id: number
+  nombre: string
+  aliases: string[] | null
+  email: string | null
+  phone: string | null
+  avatar_url: string | null
+  color: string | null
+  contextos: string[]
+  rol: string | null
+  cargo: string | null
+  activo: boolean
+  notes: string | null
   created_at: string
 }
 
