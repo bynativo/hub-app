@@ -280,7 +280,7 @@ export const useStore = create<AppState>((set, get) => ({
         .maybeSingle()
       if (delegation) {
         await supabase.from('task_delegations')
-          .update({ completed_at: new Date().toISOString() })
+          .update({ returned_at: new Date().toISOString() })
           .eq('created_task_id', id)
         const parentTask = get().tasks.find(t => t.id === delegation.task_id)
         if (parentTask && !parentTask.done) {
