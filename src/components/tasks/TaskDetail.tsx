@@ -790,8 +790,12 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
 
     let createdTaskId: number | null = null
     if (doCreateTask) {
-      const stageData = DELEGATION_STAGES.find(s => s.v === stage)
-      const linkedTitle = buildTitle(titlePrefix, `${stageData?.taskPrefix || 'Revisar'}: ${stripPrefix(task.title)}`)
+      const stagePrefixes: Record<string, string> = {
+        espero_devolucion: 'Revisar',
+        queda_a_cargo: 'Gestionar',
+        publicacion: 'Publicar',
+      }
+      const linkedTitle = buildTitle(titlePrefix, `${stagePrefixes[stage] || 'Revisar'}: ${stripPrefix(task.title)}`)
       const { data: newTask } = await supabase.from('tasks').insert({
         title: linkedTitle,
         context: task.context,
@@ -1618,7 +1622,11 @@ Reglas del bloque:
                         <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
                           <span className="font-medium text-gray-700">{d.delegated_to}</span>
                           <span className="text-gray-400">·</span>
-                          <span className="text-gray-500">{DELEGATION_STAGES.find(s => s.v === d.stage)?.label || d.stage}</span>
+                          <span className="text-gray-500">{{
+                            espero_devolucion: 'Espero devolución',
+                            queda_a_cargo: 'Queda a cargo',
+                            publicacion: 'Publicación',
+                          }[d.stage as string] || (DELEGATION_STAGES.find(s => s.v === d.stage)?.label ?? d.stage)}</span>
                           {d.return_date && (
                             <>
                               <span className="text-gray-400">·</span>

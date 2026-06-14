@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { BANCO_ROLES, AGENCIA_ROLES, DELEGATION_STAGES } from '../../lib/constants'
+import { BANCO_ROLES, AGENCIA_ROLES } from '../../lib/constants'
 import type { Task } from '../../lib/types'
-import { stripPrefix } from '../../lib/helpers'
+import { stripPrefix, fmtDue } from '../../lib/helpers'
+import { STATUS_COLOR } from '../../lib/constants'
 
 export interface DelegationFormData {
   delegatedTo: string
@@ -9,6 +10,33 @@ export interface DelegationFormData {
   returnDate: string
   note: string
   createTask: boolean
+}
+
+// Tres tipos de delegación
+const DELEGATION_TYPES = [
+  {
+    v: 'espero_devolucion',
+    label: 'Espero devolución',
+    sub: 'Me lo devuelve para revisar',
+    needsDate: true,
+  },
+  {
+    v: 'queda_a_cargo',
+    label: 'Queda a cargo',
+    sub: 'No vuelve a mí',
+    needsDate: false,
+  },
+  {
+    v: 'publicacion',
+    label: 'Publicación',
+    sub: 'Publica el contenido directamente',
+    needsDate: false,
+  },
+]
+
+function fmtDate(d: string | null) {
+  if (!d) return null
+  return d.slice(5).replace('-', '/')
 }
 
 export function DelegationModal({
@@ -39,12 +67,13 @@ export function DelegationModal({
     ? customName.trim()
     : (roles.find(r => r.v === selectedRole)?.label ?? customName.trim())
 
-  const stageData = DELEGATION_STAGES.find(s => s.v === stage)
   const cleanTitle = stripPrefix(task.title)
-  const linkedTaskTitle = stageData ? `${stageData.taskPrefix}: ${cleanTitle}` : ''
-
   const dueDate = task.due_date
-  const returnDateInvalid = !!(returnDate && dueDate && returnDate >= dueDate)
+  const selectedType = DELEGATION_TYPES.find(t => t.v === stage)
+  const needsDate = selectedType?.needsDate ?? false
+
+  // Validación: return_date debe ser ESTRICTAMENTE ANTERIOR a due_date
+  const returnDateInvalid = needsDate && !!(returnDate && dueDate && returnDate >= dueDate)
 
   const minDate = (() => {
     const d = new Date()
@@ -54,12 +83,23 @@ export function DelegationModal({
 
   async function handleConfirm() {
     if (!resolvedName) { setError('Seleccioná a quién delegás'); return }
-    if (!stage) { setError('Seleccioná la etapa'); return }
-    if (returnDateInvalid) { setError('La fecha de devolución debe ser antes de la entrega'); return }
+    if (!stage) { setError('Seleccioná el tipo de delegación'); return }
+    if (needsDate && !returnDate) { setError('Ingresá la fecha de devolución'); return }
+    if (returnDateInvalid) {
+      const dueFmt = fmtDate(dueDate) || dueDate!
+      setError(`La devolución debe ser antes de la entrega (${dueFmt})`)
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      await onConfirm({ delegatedTo: resolvedName, stage, returnDate, note: note.trim(), createTask })
+      await onConfirm({
+        delegatedTo: resolvedName,
+        stage,
+        returnDate: needsDate ? returnDate : '',
+        note: note.trim(),
+        createTask,
+      })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
       setSaving(false)
@@ -68,18 +108,49 @@ export function DelegationModal({
 
   const lbl = 'text-[10px] font-mono text-gray-400 tracking-wider uppercase block mb-1'
   const fld = 'w-full bg-bg2 border border-black/7 rounded-md px-2.5 py-1.5 text-[13px] outline-none focus:border-claude/20'
+  const stColor = STATUS_COLOR[task.status || 'Inbox'] || '#6b7280'
 
   return (
     <div
       className="fixed inset-0 z-[340] flex items-start justify-center pt-10 bg-black/40 backdrop-blur-sm overflow-y-auto"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[540px] max-w-[94vw] shadow-lg mb-10">
-        <div className="font-serif text-lg font-light mb-0.5">Delegar tarea</div>
-        <p className="text-[12px] text-gray-500 mb-4">
-          Completá los datos antes de pasar al estado{' '}
-          <span className="font-medium text-orange-600">Delegado</span>.
-        </p>
+      <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[520px] max-w-[94vw] shadow-lg mb-10">
+        <div className="font-serif text-lg font-light mb-3">Delegar tarea</div>
+
+        {/* Panel de info de la tarea — C */}
+        <div className="bg-bg3 border border-black/7 rounded-lg px-3 py-2.5 mb-4 flex flex-col gap-1">
+          <div className="text-[13px] font-medium text-gray-800 leading-snug">{cleanTitle}</div>
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{ background: stColor + '16', color: stColor }}
+            >
+              {task.status || 'Inbox'}
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">
+              {task.context === 'banco' ? 'Banco' : task.context === 'agencia' ? 'Agencia' : 'Personal'}
+            </span>
+            {task.priority && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">
+                {task.priority === 'alta' ? '🔴 Alta' : task.priority === 'media' ? '🟡 Media' : '🟢 Baja'}
+              </span>
+            )}
+            {dueDate && (() => {
+              const due = fmtDue(dueDate)
+              return (
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${due?.urgent ? 'bg-red-50 text-red-600' : 'bg-bg4 text-gray-500'}`}>
+                  📅 Entrega {fmtDate(dueDate)}
+                </span>
+              )
+            })()}
+            {task.requested_at && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">
+                📨 Pedido {fmtDate(task.requested_at)}
+              </span>
+            )}
+          </div>
+        </div>
 
         <div className="flex flex-col gap-4">
           {/* A quién delegás */}
@@ -114,73 +185,52 @@ export function DelegationModal({
             )}
           </div>
 
-          {/* Etapa */}
+          {/* Tipo de delegación — B */}
           <div>
-            <label className={lbl}>Para qué etapa</label>
-            <div className="flex flex-col gap-1">
-              {DELEGATION_STAGES.map(s => (
-                <label
-                  key={s.v}
-                  className={`flex items-center gap-3 px-3 py-2 border rounded-lg cursor-pointer transition-all ${
-                    stage === s.v ? 'border-claude/30 bg-claude/7' : 'border-black/7 bg-bg3 hover:bg-bg4'
+            <label className={lbl}>Tipo de delegación</label>
+            <div className="flex flex-col gap-1.5">
+              {DELEGATION_TYPES.map(t => (
+                <button
+                  key={t.v}
+                  type="button"
+                  onClick={() => { setStage(t.v); if (!t.needsDate) setReturnDate('') }}
+                  className={`flex items-center gap-3 px-3 py-2.5 border rounded-lg cursor-pointer transition-all text-left ${
+                    stage === t.v ? 'border-claude/30 bg-claude/7' : 'border-black/7 bg-bg3 hover:bg-bg4'
                   }`}
                 >
                   <div className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                    stage === s.v ? 'border-claude bg-claude' : 'border-gray-300'
+                    stage === t.v ? 'border-claude bg-claude' : 'border-gray-300'
                   }`}>
-                    {stage === s.v && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    {stage === t.v && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
-                  <span className={`text-[13px] ${stage === s.v ? 'text-claude font-medium' : 'text-gray-600'}`}>
-                    {s.label}
-                  </span>
-                  <input type="radio" className="sr-only" name="stage" value={s.v} onChange={() => setStage(s.v)} />
-                </label>
+                  <div>
+                    <div className={`text-[13px] font-medium ${stage === t.v ? 'text-claude' : 'text-gray-700'}`}>{t.label}</div>
+                    <div className="text-[11px] text-gray-400">{t.sub}</div>
+                  </div>
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Preview título de tarea a crear */}
-          {createTask && linkedTaskTitle && resolvedName && (
-            <div className="bg-bg3 border border-black/7 rounded-md px-3 py-2">
-              <div className={lbl}>Tarea que se creará para {resolvedName}</div>
-              <div className="text-[13px] text-gray-700 font-medium">{linkedTaskTitle}</div>
-              {returnDate && (
-                <div className="text-[11px] text-gray-400 mt-1">
-                  Vence: {returnDate.slice(5).replace('-', '/')}
-                </div>
-              )}
+          {/* Fecha de devolución — solo para "Espero devolución" */}
+          {needsDate && (
+            <div>
+              <label className={lbl}>Fecha de devolución *</label>
+              <input
+                type="date"
+                value={returnDate}
+                min={minDate}
+                onChange={e => setReturnDate(e.target.value)}
+                className={fld + (returnDateInvalid ? ' border-danger/50' : '')}
+              />
+              {returnDateInvalid
+                ? <div className="text-[11px] text-danger mt-1">⚠ La devolución debe ser antes de la entrega ({fmtDate(dueDate)})</div>
+                : dueDate && returnDate
+                  ? <div className="text-[11px] text-gray-400 mt-1">Tu entrega es el {fmtDate(dueDate)} — tenés margen para revisar</div>
+                  : null
+              }
             </div>
           )}
-
-          {/* Fecha de devolución */}
-          <div>
-            <label className={lbl}>Fecha de devolución</label>
-            <input
-              type="date"
-              value={returnDate}
-              min={minDate}
-              onChange={e => setReturnDate(e.target.value)}
-              className={fld + (returnDateInvalid ? ' border-danger/50' : '')}
-            />
-            {returnDateInvalid
-              ? <div className="text-[11px] text-danger mt-1">⚠ Debe ser al menos 1 día antes de la entrega ({dueDate})</div>
-              : dueDate && returnDate
-                ? <div className="text-[11px] text-gray-400 mt-1">Tu entrega es el {dueDate.slice(5).replace('-', '/')} — tenés margen para revisar</div>
-                : null
-            }
-          </div>
-
-          {/* Nota */}
-          <div>
-            <label className={lbl}>Nota para el receptor (opcional)</label>
-            <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              rows={2}
-              placeholder="Instrucciones, contexto adicional…"
-              className={fld + ' resize-none'}
-            />
-          </div>
 
           {/* Toggle crear tarea */}
           <div className="flex items-center gap-3 p-3 bg-bg3 rounded-lg border border-black/7">
@@ -195,10 +245,22 @@ export function DelegationModal({
               <div className="text-[13px]">Crear tarea para el receptor</div>
               <div className="text-[11px] text-gray-400">
                 {createTask
-                  ? `"${linkedTaskTitle || '…'}" — vence en la fecha de devolución`
+                  ? `"${selectedType?.label || '…'}: ${cleanTitle}" ${needsDate && returnDate ? `— vence ${fmtDate(returnDate)}` : ''}`
                   : 'Solo registra la delegación, sin tarea nueva'}
               </div>
             </div>
+          </div>
+
+          {/* Nota */}
+          <div>
+            <label className={lbl}>Nota para el receptor (opcional)</label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={2}
+              placeholder="Instrucciones, contexto adicional…"
+              className={fld + ' resize-none'}
+            />
           </div>
 
           {error && (
