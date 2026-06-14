@@ -483,7 +483,7 @@ export function TaskDetail() {
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). Pegá texto, una captura o dictá: puedo actualizar fecha, prioridad, el contexto o crear subtareas (con tu aprobación).` }])
     setPendingAction(null); setChatImages([])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
-    supabase.from('task_delegations').select('*').eq('task_id', task.id).order('created_at').then(({ data }) => setDelegations(data || []))
+    supabase.from('task_delegations').select('*').eq('task_id', task.id).order('delegated_at').then(({ data }) => setDelegations(data || []))
     setAssignPresId('')
   }, [currentTaskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
