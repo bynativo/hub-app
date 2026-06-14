@@ -55,7 +55,6 @@ export function DelegationModal({
   async function handleConfirm() {
     if (!resolvedName) { setError('Seleccioná a quién delegás'); return }
     if (!stage) { setError('Seleccioná la etapa'); return }
-    if (!returnDate) { setError('Ingresá la fecha de devolución'); return }
     if (returnDateInvalid) { setError('La fecha de devolución debe ser antes de la entrega'); return }
     setSaving(true)
     setError('')

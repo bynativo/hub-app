@@ -801,7 +801,7 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
         priority: 'alta',
         origin: 'propia',
         status: 'Inbox',
-        due_date: returnDate,
+        due_date: returnDate || null,
         task_type: 'independiente',
         notes: note || null,
         done: false,
@@ -814,8 +814,8 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
       task_id: task.id,
       delegated_to: delegatedTo,
       stage,
-      return_date: returnDate,
-      note: note || null,
+      return_date: returnDate || null,
+      notes: note || null,
       created_task_id: createdTaskId,
     })
     if (error) throw error
@@ -824,17 +824,17 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
     await updateTask(task.id, {
       delegated_to: delegatedTo,
       delegation_date: todayISO(),
-      delegation_return_date: returnDate,
+      delegation_return_date: returnDate || null,
     })
 
     setDelegatedTo(delegatedTo)
     setDelegationDate(todayISO())
-    setDelegationReturnDate(returnDate)
+    setDelegationReturnDate(returnDate || '')
     setDelegationModalOpen(false)
 
     const { data: dList } = await supabase
       .from('task_delegations').select('*')
-      .eq('task_id', task.id).order('created_at')
+      .eq('task_id', task.id).order('delegated_at')
     setDelegations(dList || [])
 
     await loadAll()
