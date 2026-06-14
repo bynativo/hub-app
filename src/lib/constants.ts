@@ -51,7 +51,8 @@ export const STATUS_COLUMNS: Record<string, string[]> = {
 export const KANBAN_GROUPS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'porhacer', label: 'Por hacer', statuses: ['Inbox'] },
   { key: 'encurso', label: 'En curso', statuses: ['Trabajando', 'En ejecución', 'Revisión interna', 'Propuesta'] },
-  { key: 'esperando', label: 'Esperando', statuses: ['Delegado', 'Pend. validación', 'En revisión cliente', 'Bloqueado'] },
+  { key: 'delegado', label: 'Delegado', statuses: ['Delegado'] },
+  { key: 'esperando', label: 'Esperando', statuses: ['Pend. validación', 'En revisión cliente', 'Bloqueado'] },
   { key: 'cerrado', label: 'Cerrado', statuses: ['Cerrado', 'Entregado', 'Descartado'] },
 ]
 
