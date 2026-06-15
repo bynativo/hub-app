@@ -72,8 +72,8 @@ export async function exportPresentationPDF(pres: Presentation): Promise<void> {
 
     // Status
     const status: string[] = []
-    if (s.status_prod) status.push(`Producción: ${s.status_prod}`)
-    if (s.status_cm) status.push(`CM: ${s.status_cm}`)
+    if (s.fase || s.status_prod) status.push(`Fase: ${s.fase || s.status_prod}`)
+    if (s.etapa || s.status_cm) status.push(`Etapa: ${s.etapa || s.status_cm}`)
     if (s.is_aprobada) status.push('Aprobada')
     if (status.length) {
       doc.setFontSize(10); doc.setTextColor(90)

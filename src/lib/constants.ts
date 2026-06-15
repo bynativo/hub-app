@@ -170,6 +170,16 @@ export const PROD_STATUS: Record<string, string[]> = {
 
 export const CM_STATUS = ['Pendiente de contenido', 'Listo para programar', 'Programado', 'Publicado']
 
+export const FASES = ['creativo', 'produccion', 'publicacion'] as const
+export type Fase = typeof FASES[number]
+
+// Etapas por fase — solo contenido. Las de influencer se agregan cuando se active ese flujo.
+export const ETAPAS_POR_FASE: Record<string, string[]> = {
+  creativo:    ['ideacion', 'guion', 'feedback interno', 'feedback contraparte', 'aprobado'],
+  produccion:  ['preproduccion', 'grabacion', 'edicion', 'feedback contenido', 'ajustes', 'entregado a CM'],
+  publicacion: ['pendiente de contenido', 'listo para programar', 'programado', 'publicado', 'patrocinado'],
+}
+
 // Roles de equipo para delegación
 export const BANCO_ROLES: { v: string; label: string; subtitle: string }[] = [
   { v: 'gonza', label: 'Gonza', subtitle: 'Coordinador contenidos' },

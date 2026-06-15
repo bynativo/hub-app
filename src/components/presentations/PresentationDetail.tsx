@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
-import { PLAT_META, PROD_STATUS, CM_STATUS, REDES, FORMATOS, PUB_TYPES } from '../../lib/constants'
+import { PLAT_META, REDES, FORMATOS, PUB_TYPES, FASES, ETAPAS_POR_FASE } from '../../lib/constants'
 import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning, pubTypeBadge } from '../../lib/helpers'
 import { callClaudeProxy } from '../../lib/claude'
 import { exportPresentationPDF } from '../../lib/pdfExport'
@@ -20,6 +20,33 @@ const CM_CSS: Record<string, string> = {
   'Listo para programar': 'bg-purple-600/10 text-purple-600 border-purple-600/20',
   Programado: 'bg-blue-600/10 text-blue-600 border-blue-600/20',
   Publicado: 'bg-green-700/15 text-green-700 border-green-700/30',
+}
+
+const FASE_CSS: Record<string, string> = {
+  creativo:    'bg-purple-600/10 text-purple-600 border-purple-600/20',
+  produccion:  'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  publicacion: 'bg-green-700/15 text-green-700 border-green-700/30',
+}
+const ETAPA_CSS: Record<string, string> = {
+  // creativo
+  ideacion:              'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  guion:                 'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  'feedback interno':    'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  'feedback contraparte':'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  aprobado:              'bg-green-700/15 text-green-700 border-green-700/30',
+  // produccion
+  preproduccion:         'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  grabacion:             'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  edicion:               'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  'feedback contenido':  'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  ajustes:               'bg-amber-600/10 text-amber-600 border-amber-600/20',
+  'entregado a CM':      'bg-green-700/15 text-green-700 border-green-700/30',
+  // publicacion
+  'pendiente de contenido': 'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  'listo para programar':   'bg-purple-600/10 text-purple-600 border-purple-600/20',
+  programado:               'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  publicado:                'bg-green-700/15 text-green-700 border-green-700/30',
+  patrocinado:              'bg-green-700/15 text-green-700 border-green-700/30',
 }
 
 function isImageUrl(u?: string | null) {
@@ -331,7 +358,6 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
   const entry = entries.length ? entries[Math.min(activeIdx, entries.length - 1)] : undefined
   const slide = entry?.kind === 'slide' ? entry.slide : undefined
 
-  const prodOpts = PROD_STATUS[pres.context] || PROD_STATUS.banco
 
   // --- Reglas de fechas (11b) ---
   const pub = slide?.fecha_publicacion || ''
@@ -464,9 +490,14 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                 <div className="flex gap-1 flex-wrap">
                   {e.kind === 'slide' ? (
                     <>
-                      <span className={`text-[9px] font-mono px-1.5 py-px rounded ${PROD_CSS[e.slide.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
-                        {e.slide.status_prod || 'Pendiente'}
+                      <span className={`text-[9px] font-mono px-1.5 py-px rounded ${FASE_CSS[e.slide.fase || ''] || PROD_CSS[e.slide.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
+                        {e.slide.fase || e.slide.status_prod || 'Pendiente'}
                       </span>
+                      {(e.slide.etapa || e.slide.status_cm) && (
+                        <span className={`text-[9px] font-mono px-1.5 py-px rounded ${ETAPA_CSS[e.slide.etapa || ''] || CM_CSS[e.slide.status_cm || ''] || CM_CSS['Pendiente de contenido']}`}>
+                          {e.slide.etapa || e.slide.status_cm}
+                        </span>
+                      )}
                       {e.slide.tipo_contenido && (
                         <span className="text-[9px] font-mono px-1.5 py-px rounded bg-bg4 text-gray-400">{e.slide.tipo_contenido.toUpperCase()}</span>
                       )}
@@ -594,13 +625,17 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
                         {pubTypeBadge(slide.content_pub_type)!.label}{slide.influencer_handle ? ` · ${slide.influencer_handle}` : ''}
                       </span>
                     )}
-                    <span className={`text-[11px] font-mono px-2.5 py-0.5 rounded-full border font-medium ${PROD_CSS[slide.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
-                      🎬 {slide.status_prod || 'Pendiente'}
+                    <span className={`text-[11px] font-mono px-2.5 py-0.5 rounded-full border font-medium ${FASE_CSS[slide.fase || ''] || PROD_CSS[slide.status_prod || 'Pendiente'] || PROD_CSS.Pendiente}`}>
+                      🎬 {slide.fase || slide.status_prod || 'Pendiente'}
                     </span>
-                    <span className="text-gray-400 text-xs">·</span>
-                    <span className={`text-[11px] font-mono px-2.5 py-0.5 rounded-full border font-medium ${CM_CSS[slide.status_cm || 'Pendiente de contenido'] || CM_CSS['Pendiente de contenido']}`}>
-                      📅 {slide.status_cm || 'Pendiente de contenido'}
-                    </span>
+                    {(slide.etapa || slide.status_cm) && (
+                      <>
+                        <span className="text-gray-400 text-xs">·</span>
+                        <span className={`text-[11px] font-mono px-2.5 py-0.5 rounded-full border font-medium ${ETAPA_CSS[slide.etapa || ''] || CM_CSS[slide.status_cm || 'Pendiente de contenido'] || CM_CSS['Pendiente de contenido']}`}>
+                          📅 {slide.etapa || slide.status_cm}
+                        </span>
+                      </>
+                    )}
                     {slide.equipo && (
                       <>
                         <span className="text-gray-400 text-xs">·</span>
@@ -869,27 +904,35 @@ export function PresentationDetail({ presId, onClose }: { presId: number; onClos
               <div className="p-3.5 border-b border-black/7">
                 <div className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-2.5">Estados</div>
                 <div className="mb-2">
-                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">🎬 Produccion</span>
+                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">⬡ Fase</span>
                   <select
-                    value={slide.status_prod || 'Pendiente'}
-                    onChange={e => updateStatus(slide.id, 'status_prod', e.target.value)}
+                    value={slide.fase || ''}
+                    onChange={async e => {
+                      const newFase = e.target.value
+                      await supabase.from('slides').update({ fase: newFase || null, etapa: null }).eq('id', slide.id)
+                      setSlides(prev => prev.map(s => s.id === slide.id ? { ...s, fase: newFase || null, etapa: null } : s))
+                    }}
                     className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none cursor-pointer"
                     style={{ borderColor: kv + '40' }}
                   >
-                    {prodOpts.map(st => <option key={st}>{st}</option>)}
+                    <option value="">— sin fase —</option>
+                    {FASES.map(f => <option key={f}>{f}</option>)}
                   </select>
                 </div>
-                <div>
-                  <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">📅 CM / Calendario RRSS</span>
-                  <select
-                    value={slide.status_cm || 'Pendiente de contenido'}
-                    onChange={e => updateStatus(slide.id, 'status_cm', e.target.value)}
-                    className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none cursor-pointer"
-                    style={{ borderColor: 'rgba(124,58,237,0.3)' }}
-                  >
-                    {CM_STATUS.map(st => <option key={st}>{st}</option>)}
-                  </select>
-                </div>
+                {slide.fase && (
+                  <div>
+                    <span className="text-[10px] font-mono text-gray-400 uppercase block mb-1">→ Etapa</span>
+                    <select
+                      value={slide.etapa || ''}
+                      onChange={e => updateStatus(slide.id, 'etapa', e.target.value || null as unknown as string)}
+                      className="w-full bg-bg3 border border-black/7 rounded-lg px-2.5 py-1.5 text-xs outline-none cursor-pointer"
+                      style={{ borderColor: kv + '40' }}
+                    >
+                      <option value="">— sin etapa —</option>
+                      {(ETAPAS_POR_FASE[slide.fase] || []).map(et => <option key={et}>{et}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="p-3.5 border-b border-black/7">

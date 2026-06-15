@@ -194,8 +194,8 @@ export function GrillaView({ context = 'banco' }: { context?: string }) {
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className="text-[10px] font-mono">{s.status_prod || '—'}</span>
-                        <span className="text-[10px] font-mono text-purple-600">{s.status_cm || '—'}</span>
+                        <span className="text-[10px] font-mono">{s.fase || s.status_prod || '—'}</span>
+                        <span className="text-[10px] font-mono text-purple-600">{s.etapa || s.status_cm || '—'}</span>
                         <span className="text-[10px] font-mono text-gray-400">{s.equipo || ''}</span>
                       </div>
                     </div>

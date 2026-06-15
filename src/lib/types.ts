@@ -260,6 +260,9 @@ export interface Slide {
   updated_at: string
   status_prod: string
   status_cm: string
+  fase: string | null
+  etapa: string | null
+  clase_pieza: string | null
   plataformas: string[]
   tipo_pieza: string
   is_aprobada: boolean
