@@ -6,7 +6,7 @@ import { STATUS_COLOR } from '../../lib/constants'
 
 export interface DelegationFormData {
   delegatedTo: string
-  stage: string
+  tipo: string        // tipo UI: 'espero_devolucion' | 'queda_a_cargo' | 'publicacion'
   returnDate: string
   note: string
   createTask: boolean
@@ -95,7 +95,7 @@ export function DelegationModal({
     try {
       await onConfirm({
         delegatedTo: resolvedName,
-        stage,
+        tipo: stage,
         returnDate: needsDate ? returnDate : '',
         note: note.trim(),
         createTask,

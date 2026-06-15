@@ -787,7 +787,7 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
   // tarea vinculada, actualiza status a "Delegado" y los campos de delegación.
   async function handleDelegationConfirm(data: DelegationFormData) {
     if (!task) return
-    const { delegatedTo, stage, returnDate, note, createTask: doCreateTask } = data
+    const { delegatedTo, tipo, returnDate, note, createTask: doCreateTask } = data
 
     let createdTaskId: number | null = null
     if (doCreateTask) {
@@ -796,7 +796,7 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
         queda_a_cargo: 'Gestionar',
         publicacion: 'Publicar',
       }
-      const linkedTitle = buildTitle(titlePrefix, `${stagePrefixes[stage] || 'Revisar'}: ${stripPrefix(task.title)}`)
+      const linkedTitle = buildTitle(titlePrefix, `${stagePrefixes[tipo] || 'Revisar'}: ${stripPrefix(task.title)}`)
       const { data: newTask } = await supabase.from('tasks').insert({
         title: linkedTitle,
         context: task.context,
@@ -818,7 +818,7 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
     const { data: delegationRecord, error } = await supabase.from('task_delegations').insert({
       task_id: task.id,
       delegated_to: delegatedTo,
-      stage,
+      stage: 'delegacion',
       return_date: returnDate || null,
       notes: note || null,
       created_task_id: createdTaskId,
