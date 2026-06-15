@@ -261,8 +261,36 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   closeCapture: () => set({ captureOpen: false, captureContext: null, captureClientId: null, captureProjectId: null, captureReminder: false }),
 
-  enviarParaValidacion: async (_id) => {
-    // Part 3: Momento 1 — tarea del receptor pasa a "Enviada", padre a revisión
+  enviarParaValidacion: async (id) => {
+    const task = get().tasks.find(t => t.id === id)
+    if (!task || !task.es_delegada) return
+
+    // Buscar el registro de delegación original donde esta tarea es la creada
+    const { data: delegation } = await supabase
+      .from('task_delegations')
+      .select('task_id')
+      .eq('created_task_id', id)
+      .maybeSingle()
+    if (!delegation) return
+
+    // 1. Tarea del receptor → 'Enviada' (no done)
+    await get().updateTaskStatus(id, 'Enviada')
+
+    // 2. Tarea original del que delegó → vuelve a Inbox para revisión
+    const parentTask = get().tasks.find(t => t.id === delegation.task_id)
+    if (parentTask && !parentTask.done) {
+      await get().updateTaskStatus(delegation.task_id, 'Inbox')
+    }
+
+    // 3. Movimiento de devolución en task_delegations
+    await supabase.from('task_delegations').insert({
+      task_id: delegation.task_id,
+      stage: 'devolucion',
+      delegated_at: new Date().toISOString(),
+      notes: 'Enviada para validación por el receptor',
+    })
+
+    get().showToast('↑ Enviada para validación', { durationMs: 3000 })
   },
 
   toggleTask: async (id) => {
