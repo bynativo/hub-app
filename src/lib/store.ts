@@ -304,8 +304,34 @@ export const useStore = create<AppState>((set, get) => ({
       set({ tasks: get().tasks.map(t => t.id === id ? { ...t, done: false } : t) })
     })
 
-    // Si es una tarea creada por delegación, marcar la delegación como completada y
-    // crear automáticamente una tarea de revisión para el responsable de cierre.
+    // Momento 2: soy el delegador marcando done mi tarea original.
+    // Si hay una tarea del receptor en 'Enviada', la cierro automáticamente.
+    {
+      const { data: outDelegation } = await supabase
+        .from('task_delegations')
+        .select('created_task_id')
+        .eq('task_id', id)
+        .not('created_task_id', 'is', null)
+        .order('delegated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (outDelegation?.created_task_id) {
+        const receiverTask = get().tasks.find(t => t.id === outDelegation.created_task_id)
+        if (receiverTask && receiverTask.status === 'Enviada') {
+          await supabase.from('tasks').update({ done: true }).eq('id', outDelegation.created_task_id)
+          set({ tasks: get().tasks.map(t => t.id === outDelegation.created_task_id ? { ...t, done: true } : t) })
+          await supabase.from('task_delegations').insert({
+            task_id: id,
+            stage: 'cierre',
+            delegated_at: new Date().toISOString(),
+            notes: 'Delegación cerrada al validar la tarea original',
+          })
+        }
+      }
+    }
+
+    // Legacy: si esta tarea FUE CREADA por delegación (antes del campo es_delegada),
+    // registrar cierre y crear tarea de revisión para el padre.
     if (prev.parent_task_id) {
       const { data: delegation } = await supabase
         .from('task_delegations')
