@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
-import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES } from '../../lib/constants'
+import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES, CLOSING_STATES } from '../../lib/constants'
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO, isRRSSContent } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
@@ -366,6 +366,7 @@ export function TaskDetail() {
   const recurrentes = useStore(s => s.recurrentes)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
   const openDuplicateTask = useStore(s => s.openDuplicateTask)
+  const enviarParaValidacion = useStore(s => s.enviarParaValidacion)
   const teamMembers = useStore(s => s.teamMembers)
 
   const task = tasks.find(t => t.id === currentTaskId)
@@ -814,15 +815,22 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
       createdTaskId = newTask?.id ?? null
     }
 
-    const { error } = await supabase.from('task_delegations').insert({
+    const { data: delegationRecord, error } = await supabase.from('task_delegations').insert({
       task_id: task.id,
       delegated_to: delegatedTo,
       stage,
       return_date: returnDate || null,
       notes: note || null,
       created_task_id: createdTaskId,
-    })
+    }).select('id').single()
     if (error) throw error
+
+    if (createdTaskId && delegationRecord?.id) {
+      await supabase.from('tasks').update({
+        es_delegada: true,
+        origen_delegacion_id: delegationRecord.id,
+      }).eq('id', createdTaskId)
+    }
 
     await updateTaskStatus(task.id, 'Delegado')
     await updateTask(task.id, {
@@ -1273,7 +1281,7 @@ Reglas del bloque:
             <div>
               <label className={labelCls}>Estado</label>
               <div className="flex gap-1.5 flex-wrap">
-                {ctxStates.map(s => (
+                {(task.es_delegada ? ctxStates.filter(s => !CLOSING_STATES.includes(s)) : ctxStates).map(s => (
                   <button key={s} onClick={() => {
                     if (s === 'Delegado') { setDelegationModalOpen(true); return }
                     if (s === 'Cerrado') {
@@ -1293,6 +1301,14 @@ Reglas del bloque:
                   </button>
                 ))}
               </div>
+              {task.es_delegada && (
+                <button
+                  onClick={() => enviarParaValidacion(task.id)}
+                  className="mt-2 text-[12px] bg-teal-50 border border-teal-200 text-teal-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors"
+                >
+                  ↑ Enviar para validación
+                </button>
+              )}
             </div>
 
             {/* Flujo banco RRSS/ADS — avisos contextuales */}
@@ -1963,10 +1979,19 @@ Reglas del bloque:
               <div className="text-center py-5 text-gray-400 text-[13px]">Aún no hay borrador. Pegá el email y redactá la respuesta.</div>
             )}
 
-            <button onClick={async () => { await updateTask(task.id, { done: true }); closeDetail() }}
-              className="self-start text-xs bg-success/10 border border-success/30 text-success px-4 py-2 rounded-lg cursor-pointer hover:bg-success/18 transition-colors">
-              ✓ Marcar respondido (cierra la tarea)
-            </button>
+            {task.es_delegada ? (
+              <button
+                onClick={() => enviarParaValidacion(task.id)}
+                className="self-start text-xs bg-teal-50 border border-teal-200 text-teal-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors"
+              >
+                ↑ Enviar para validación
+              </button>
+            ) : (
+              <button onClick={async () => { await updateTask(task.id, { done: true }); closeDetail() }}
+                className="self-start text-xs bg-success/10 border border-success/30 text-success px-4 py-2 rounded-lg cursor-pointer hover:bg-success/18 transition-colors">
+                ✓ Marcar respondido (cierra la tarea)
+              </button>
+            )}
           </div>
         )}
 

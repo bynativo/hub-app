@@ -27,6 +27,7 @@ function indentColor(level: number): string {
 
 export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
   const { toggleTask, openDetail } = useStore()
+  const enviarParaValidacion = useStore(s => s.enviarParaValidacion)
   const allTasks = useStore(s => s.tasks)
   const clients = useStore(s => s.clients)
   const openSubtaskConvert = useStore(s => s.openSubtaskConvert)
@@ -130,14 +131,24 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
           </button>
         )}
 
-        <div
-          onClick={(e) => { e.stopPropagation(); toggleTask(task.id) }}
-          className={`w-4 h-4 rounded-[5px] border-[1.5px] shrink-0 mt-0.5 flex items-center justify-center text-[10px] cursor-pointer transition-all ${
-            task.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'
-          }`}
-        >
-          {task.done && '✓'}
-        </div>
+        {task.es_delegada && !task.done ? (
+          <div
+            onClick={(e) => { e.stopPropagation(); enviarParaValidacion(task.id) }}
+            className="w-4 h-4 rounded-[5px] border-[1.5px] border-teal-300 text-teal-600 shrink-0 mt-0.5 flex items-center justify-center text-[9px] cursor-pointer transition-all hover:bg-teal-50"
+            title="Enviar para validación"
+          >
+            ↑
+          </div>
+        ) : (
+          <div
+            onClick={(e) => { e.stopPropagation(); toggleTask(task.id) }}
+            className={`w-4 h-4 rounded-[5px] border-[1.5px] shrink-0 mt-0.5 flex items-center justify-center text-[10px] cursor-pointer transition-all ${
+              task.done ? 'bg-success border-success text-white' : 'border-black/13 hover:border-success'
+            }`}
+          >
+            {task.done && '✓'}
+          </div>
+        )}
 
         <div className="flex-1 min-w-0">
           <div className={`text-[13px] leading-snug font-medium ${task.done ? 'line-through text-gray-400' : ''}`}>

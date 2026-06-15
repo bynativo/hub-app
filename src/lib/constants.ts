@@ -28,9 +28,9 @@ export const ESTADOS_FLOW: Record<string, string[]> = {
 
 // Estados de pausa por contexto (fuera del flujo lineal)
 export const ESTADOS_PAUSA: Record<string, string[]> = {
-  banco: ['Delegado', 'Bloqueado'],
-  agencia: ['Delegado', 'Bloqueado'],
-  personal: ['En pausa', 'Delegado'],
+  banco: ['Delegado', 'Bloqueado', 'Enviada'],
+  agencia: ['Delegado', 'Bloqueado', 'Enviada'],
+  personal: ['En pausa', 'Delegado', 'Enviada'],
 }
 
 // Todos los estados seleccionables por contexto (flujo + pausa)
@@ -42,9 +42,9 @@ export const ESTADOS: Record<string, string[]> = {
 
 // Columnas del Kanban por contexto (vistas de tareas de cada contexto)
 export const STATUS_COLUMNS: Record<string, string[]> = {
-  banco: ['Inbox', 'Trabajando', 'Pend. validación', 'Delegado', 'Bloqueado', 'Cerrado'],
-  agencia: ['Inbox', 'Propuesta', 'En ejecución', 'Revisión interna', 'En revisión cliente', 'Delegado', 'Bloqueado', 'Cerrado'],
-  personal: ['Inbox', 'Trabajando', 'En pausa', 'Delegado', 'Cerrado'],
+  banco: ['Inbox', 'Trabajando', 'Pend. validación', 'Delegado', 'Bloqueado', 'Enviada', 'Cerrado'],
+  agencia: ['Inbox', 'Propuesta', 'En ejecución', 'Revisión interna', 'En revisión cliente', 'Delegado', 'Bloqueado', 'Enviada', 'Cerrado'],
+  personal: ['Inbox', 'Trabajando', 'En pausa', 'Delegado', 'Enviada', 'Cerrado'],
 }
 
 // 4 columnas universales del Kanban del dashboard
@@ -82,7 +82,7 @@ export const STATUS_ICON: Record<string, string> = {
   Propuesta: '◎', 'En ejecución': '▶', 'Revisión interna': '◐',
   'En revisión cliente': '⌛', Delegado: '→', Bloqueado: '✕',
   'En pausa': '‖', Entregado: '✓', Descartado: '✕', Planificando: '◈',
-  Recordatorio: '🔔',
+  Recordatorio: '🔔', Enviada: '↑',
 }
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -90,7 +90,7 @@ export const STATUS_COLOR: Record<string, string> = {
   Propuesta: '#7c3aed', 'En ejecución': '#2563eb', 'Revisión interna': '#7c3aed',
   'En revisión cliente': '#d97706', Delegado: '#d97706', Bloqueado: '#dc2626',
   'En pausa': '#6b7280', Entregado: '#16a34a', Descartado: '#9ca3af', Planificando: '#7c3aed',
-  Recordatorio: '#d97706',
+  Recordatorio: '#d97706', Enviada: '#0d9488',
 }
 
 export const PLAT_META: Record<string, { label: string; css: string; color: string }> = {

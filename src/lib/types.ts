@@ -124,6 +124,9 @@ export interface Task {
   // Instancias de recurrentes
   es_recurrente_instance: boolean | null
   recurrente_id: number | null
+  // Delegación recibida
+  es_delegada: boolean | null
+  origen_delegacion_id: number | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }

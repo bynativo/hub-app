@@ -99,6 +99,7 @@ interface AppState {
   openCapture: (opts?: { context?: string; clientId?: number | null; projectId?: number | null; reminder?: boolean }) => void
   closeCapture: () => void
   toggleTask: (id: number) => Promise<void>
+  enviarParaValidacion: (id: number) => Promise<void>
   updateTaskStatus: (id: number, status: string) => Promise<void>
   updateTask: (id: number, patch: Partial<Task>, undoDesc?: string) => Promise<void>
   openFollowup: (id: number) => void
@@ -260,9 +261,14 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   closeCapture: () => set({ captureOpen: false, captureContext: null, captureClientId: null, captureProjectId: null, captureReminder: false }),
 
+  enviarParaValidacion: async (_id) => {
+    // Part 3: Momento 1 — tarea del receptor pasa a "Enviada", padre a revisión
+  },
+
   toggleTask: async (id) => {
     const prev = get().tasks.find(t => t.id === id)
     if (!prev || prev.done) return
+    if (prev.es_delegada) return  // receptor no puede marcar done; usar enviarParaValidacion
     await supabase.from('tasks').update({ done: true }).eq('id', id)
     set({ tasks: get().tasks.map(t => t.id === id ? { ...t, done: true } : t) })
     get().recordHistory(`Tarea marcada como hecha: "${prev.title}"`, async () => {
@@ -327,6 +333,7 @@ export const useStore = create<AppState>((set, get) => ({
   updateTaskStatus: async (id, status) => {
     const prev = get().tasks.find(t => t.id === id)
     if (!prev || prev.status === status) return
+    if (prev.es_delegada && CLOSING_STATES.includes(status)) return  // receptor no puede cerrar
     const oldStatus = prev.status
     const oldArchivedAt = prev.archived_at
     // Al pasar a un estado de cierre se archiva; al reabrir se desarchiva.
