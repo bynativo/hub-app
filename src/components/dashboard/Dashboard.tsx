@@ -309,9 +309,7 @@ export function Dashboard() {
   // Tareas contenedoras (agrupaciones no ejecutables): se excluyen de Mis tareas.
   // Las subtareas ejecutables siguen apareciendo con badge "↳ Parte de [padre]".
   const esContenedora = (t: Task) =>
-    t.task_type === 'solicitud_influencers' ||
-    t.categoria === 'campana' || t.categoria === 'proyecto' ||
-    t.categoria === 'propuesta' || t.categoria === 'padre'
+    t.task_type === 'solicitud_influencers' || t.categoria === 'padre'
 
   const active = tasks.filter(t => !t.done && !t.archived_at
     && !esContenedora(t)

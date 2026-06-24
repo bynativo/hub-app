@@ -178,6 +178,23 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
         {!projects.length && <div className="text-center py-7 text-gray-400 text-[13px]">Sin {itemNoun} en este contexto</div>}
       </div>
 
+      {/* Agrupadores: tareas con categoria='padre' — contenedores chicos sin presentación formal */}
+      {(() => {
+        const padres = tasks.filter(t =>
+          t.categoria === 'padre' && !t.done && !t.archived_at &&
+          (!context || t.context === context)
+        )
+        if (!padres.length) return null
+        return (
+          <div className="mt-6">
+            <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2.5">Agrupadores</div>
+            <div className="flex flex-col gap-1">
+              {padres.map(t => <TaskItem key={t.id} task={t} />)}
+            </div>
+          </div>
+        )
+      })()}
+
       {selected && (
         <div className="mt-4 bg-bg2 border border-black/7 rounded-xl overflow-hidden shadow-md animate-fade-in">
           <div className="p-4 border-b border-black/7 flex items-start justify-between">
