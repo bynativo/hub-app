@@ -6,7 +6,7 @@ import { TaskItem } from './TaskItem'
 
 // Un proyecto se muestra como tarjeta padre expandible (igual que una tarea padre),
 // con ícono de carpeta y badge "Proyecto". Sus tareas vinculadas se anidan al expandir.
-function ProjectCard({ project, tasks }: { project: Project; tasks: Task[] }) {
+function ProjectCard({ project, tasks, hideChildren = false }: { project: Project; tasks: Task[]; hideChildren?: boolean }) {
   const openCapture = useStore(s => s.openCapture)
   const openProjectDetail = useStore(s => s.openProjectDetail)
   const [expanded, setExpanded] = useState(true)
@@ -49,14 +49,14 @@ function ProjectCard({ project, tasks }: { project: Project; tasks: Task[] }) {
 
       {expanded && (
         <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/20 pl-2.5">
-          {tasks.map(t => <TaskItem key={t.id} task={t} />)}
+          {tasks.map(t => <TaskItem key={t.id} task={t} hideChildren={hideChildren} />)}
         </div>
       )}
     </div>
   )
 }
 
-export function TaskList({ tasks, emptyText = 'Sin tareas', compactEmpty = false }: { tasks: Task[]; emptyText?: string; compactEmpty?: boolean }) {
+export function TaskList({ tasks, emptyText = 'Sin tareas', compactEmpty = false, hideChildren = false }: { tasks: Task[]; emptyText?: string; compactEmpty?: boolean; hideChildren?: boolean }) {
   const projects = useStore(s => s.projects)
   if (!tasks.length) {
     if (compactEmpty) {
@@ -70,13 +70,13 @@ export function TaskList({ tasks, emptyText = 'Sin tareas', compactEmpty = false
   return (
     <div className="flex flex-col gap-1">
       {tasks.map(t => {
-        if (!t.project_id) return <TaskItem key={t.id} task={t} />
+        if (!t.project_id) return <TaskItem key={t.id} task={t} hideChildren={hideChildren} />
         const project = projects.find(p => p.id === t.project_id)
-        if (!project) return <TaskItem key={t.id} task={t} />
+        if (!project) return <TaskItem key={t.id} task={t} hideChildren={hideChildren} />
         if (seen.has(t.project_id)) return null
         seen.add(t.project_id)
         const pts = tasks.filter(x => x.project_id === t.project_id)
-        return <ProjectCard key={`p${t.project_id}`} project={project} tasks={pts} />
+        return <ProjectCard key={`p${t.project_id}`} project={project} tasks={pts} hideChildren={hideChildren} />
       })}
     </div>
   )

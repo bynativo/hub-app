@@ -163,15 +163,11 @@ export function stripPrefix(title: string): string {
   return splitTitle(title).name
 }
 
-// Una tarea se renderiza como "top-level" en una sección si es raíz (sin padre)
-// O si es hija con due_date distinto al de su padre — en este último caso
-// aparece también en su sección temporal con un badge "parte de X".
-export function isShownAsTopLevel(t: { id: number; parent_task_id: number | null; due_date: string | null }, allTasks: { id: number; due_date: string | null }[]): boolean {
-  if (!t.parent_task_id) return true
-  const parent = allTasks.find(p => p.id === t.parent_task_id)
-  if (!parent) return true
-  if (t.due_date && t.due_date !== parent.due_date) return true
-  return false
+// Todas las tareas se muestran en la lista raíz: las subtareas aparecen con
+// badge "↳ Parte de [padre]" (ver orphanDisplayParent en TaskItem).
+// El despliegue jerárquico completo vive solo en la vista de Campañas/proyectos.
+export function isShownAsTopLevel(_t: { id: number; parent_task_id: number | null; due_date: string | null }, _allTasks: { id: number; due_date: string | null }[]): boolean {
+  return true
 }
 
 // Próxima fecha ISO (YYYY-MM-DD) en que una recurrente "toca". Calculada según

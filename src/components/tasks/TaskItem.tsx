@@ -25,7 +25,7 @@ function indentColor(level: number): string {
   return LEVEL_COLORS[(level) % LEVEL_COLORS.length]
 }
 
-export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
+export function TaskItem({ task, level = 0, hideChildren = false }: { task: Task; level?: number; hideChildren?: boolean }) {
   const { toggleTask, openDetail } = useStore()
   const enviarParaValidacion = useStore(s => s.enviarParaValidacion)
   const allTasks = useStore(s => s.tasks)
@@ -45,7 +45,7 @@ export function TaskItem({ task, level = 0 }: { task: Task; level?: number }) {
   const linked = allTasks.filter(t => t.parent_task_id === task.id && !t.done && !t.archived_at)
   const children = linked.filter(t => !t.es_recordatorio)
   const reminders = linked.filter(t => t.es_recordatorio)
-  const hasChildren = children.length > 0 || reminders.length > 0
+  const hasChildren = !hideChildren && (children.length > 0 || reminders.length > 0)
   const isEmail = task.task_type === 'responder_email'
   // Solicitud de influencers: tarea madre que coordina el pedido a la agencia.
   const isSolicitud = task.task_type === 'solicitud_influencers'

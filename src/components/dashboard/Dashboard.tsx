@@ -436,7 +436,7 @@ export function Dashboard() {
     const recs = items.filter(i => i.kind === 'recurrent') as Extract<DayItem, { kind: 'recurrent' }>[]
     return (
       <>
-        {ts.length > 0 && <TaskList tasks={ts} />}
+        {ts.length > 0 && <TaskList tasks={ts} hideChildren />}
         <RecurrentBlock items={recs.map(r => ({ rec: r.rec, date: r.date }))} />
       </>
     )
@@ -518,7 +518,7 @@ export function Dashboard() {
                   <span className="text-[11px] font-mono text-gray-500 tracking-wider uppercase">{grp.label}</span>
                   <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{items.length}</span>
                 </button>
-                {!collapsed && <TaskList tasks={items} />}
+                {!collapsed && <TaskList tasks={items} hideChildren />}
               </div>
             )
           })}
@@ -532,7 +532,7 @@ export function Dashboard() {
           {atrasadasDependeVos.length > 0 && (
             <>
               <SectionHeader icon="🔴" label="Atrasadas" sub={`${atrasadasDependeVos.length} tarea${atrasadasDependeVos.length === 1 ? '' : 's'} — requieren tu acción`} color="#dc2626" />
-              <TaskList tasks={atrasadasDependeVos} />
+              <TaskList tasks={atrasadasDependeVos} hideChildren />
             </>
           )}
 
@@ -555,7 +555,7 @@ export function Dashboard() {
                 icon="📌" label="Hoy"
                 sub={`${hoy.length + recHoy.length} tarea${(hoy.length + recHoy.length) === 1 ? '' : 's'}${horasHoy > 0 ? ` · ${fmtHoras(horasHoy)} estimadas` : ''}`}
               />
-              {hoy.length > 0 && <TaskList tasks={hoy} />}
+              {hoy.length > 0 && <TaskList tasks={hoy} hideChildren />}
               <RecurrentBlock items={recHoy} />
             </>
           )}
@@ -564,7 +564,7 @@ export function Dashboard() {
           {(manana.length > 0 || recManana.length > 0) && (
             <>
               <SectionHeader icon="🌅" label="Mañana" sub={`${manana.length + recManana.length} tarea${(manana.length + recManana.length) === 1 ? '' : 's'}`} />
-              {manana.length > 0 && <TaskList tasks={manana} />}
+              {manana.length > 0 && <TaskList tasks={manana} hideChildren />}
               <RecurrentBlock items={recManana} />
             </>
           )}
@@ -622,7 +622,7 @@ export function Dashboard() {
                 <span className="text-[11px] font-mono tracking-wider uppercase text-gray-500">📭 Sin fecha</span>
                 <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{sinFecha.length}</span>
               </button>
-              {!sinFechaCollapsed && <TaskList tasks={sinFecha} />}
+              {!sinFechaCollapsed && <TaskList tasks={sinFecha} hideChildren />}
             </div>
           )}
 
