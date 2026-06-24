@@ -127,6 +127,8 @@ export interface Task {
   // Delegación recibida
   es_delegada: boolean | null
   origen_delegacion_id: number | null
+  // Categoría de contenedor (campana / proyecto / propuesta / padre); null = tarea ejecutable normal
+  categoria: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }

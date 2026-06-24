@@ -306,17 +306,20 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Set base de tareas activas (top-level por defecto; las hijas se ven al
-  // expandir su padre). Excepción: hija con due_date distinto a la padre se
-  // muestra también en su sección con badge "Parte de …". La regla de mostrar/
-  // ocultar recordatorios queda centralizada en matchesGeneralType: sin filtro
-  // los excluye (van a Seguimiento); con pill "Recordatorios" los incluye.
+  // Tareas contenedoras (agrupaciones no ejecutables): se excluyen de Mis tareas.
+  // Las subtareas ejecutables siguen apareciendo con badge "↳ Parte de [padre]".
+  const esContenedora = (t: Task) =>
+    t.task_type === 'solicitud_influencers' ||
+    t.categoria === 'campana' || t.categoria === 'proyecto' ||
+    t.categoria === 'propuesta' || t.categoria === 'padre'
+
   const active = tasks.filter(t => !t.done && !t.archived_at
+    && !esContenedora(t)
     && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
-  // Base para Por estado / Kanban: incluye también archivadas para mostrar
-  // la columna Cerrado. Mismas reglas top-level.
+  // Base para Por estado / Kanban: misma exclusión de contenedoras.
   const allByStatus = tasks.filter(t => !t.done
+    && !esContenedora(t)
     && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
   const showRecurrentes = generalIncludesRecurrentes(typeFilters)
