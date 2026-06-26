@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
-import { ctxColor, ctxLabel, nextRecurringDueDate, fmtDue, todayISO } from '../../lib/helpers'
+import { ctxColor, ctxLabel, nextRecurringDueDate, fmtDue, todayISO, splitTitle } from '../../lib/helpers'
 import { STATUS_COLOR, TIPO_AGENCIA } from '../../lib/constants'
 import { NewProjectModal } from '../modals/NewProjectModal'
 import { ReminderRow } from '../tasks/ReminderRow'
@@ -18,6 +18,7 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const presentations = useStore(s => s.presentations)
   const openCapture = useStore(s => s.openCapture)
   const openProjectDetail = useStore(s => s.openProjectDetail)
+  const openDetail = useStore(s => s.openDetail)
   const openRecurrentCreate = useStore(s => s.openRecurrentCreate)
   const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
   const markRecurrentExecuted = useStore(s => s.markRecurrentExecuted)
@@ -25,6 +26,10 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [newOpen, setNewOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  function toggleItem(key: string) {
+    setExpandedIds(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
+  }
 
   // Formulario de edición del proyecto seleccionado
   const [name, setName] = useState('')
@@ -122,18 +127,37 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
   const labelCls = 'text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block'
 
   function getPct(projId: number) {
-    // Progreso solo cuenta tareas reales (no recordatorios) del proyecto.
     const all = tasks.filter(t => t.project_id === projId && !t.parent_task_id && !t.es_recordatorio)
     if (!all.length) return 0
     return Math.round(all.filter(t => t.done).length / all.length * 100)
   }
 
+  // Lista unificada: projects + tareas contenedoras (categoria='padre' o similar), ordenadas por fecha luego nombre.
+  const padres = tasks.filter(t =>
+    t.categoria != null && !t.done && !t.archived_at &&
+    (!context || t.context === context)
+  )
+  type ContainerItem = { kind: 'project'; p: typeof projects[0] } | { kind: 'padre'; t: Task }
+  const allItems: ContainerItem[] = [
+    ...projects.map(p => ({ kind: 'project' as const, p })),
+    ...padres.map(t => ({ kind: 'padre' as const, t })),
+  ].sort((a, b) => {
+    const da = (a.kind === 'project' ? a.p.due_date : a.t.due_date) ?? 'zzzz'
+    const db = (b.kind === 'project' ? b.p.due_date : b.t.due_date) ?? 'zzzz'
+    if (da !== db) return da.localeCompare(db)
+    const na = a.kind === 'project' ? a.p.name : splitTitle(a.t.title).name
+    const nb = b.kind === 'project' ? b.p.name : splitTitle(b.t.title).name
+    return na.localeCompare(nb)
+  })
+
   return (
     <div className="animate-fade-in p-5">
-      <div className="flex items-start justify-between mb-5">
+      <div className="flex items-start justify-between mb-1">
         <div>
           <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: accent }}>{pageTitle}</h1>
-          <p className="text-gray-500 text-[13px]">{context ? ctxLabel(context) : 'Todos los contextos'} · {projects.length} {itemNoun}</p>
+          <p className="text-gray-500 text-[13px]">
+            {context ? ctxLabel(context) : 'Todos los contextos'} · {projects.length} proyecto{projects.length !== 1 ? 's' : ''}{padres.length > 0 ? ` · ${padres.length} agrupador${padres.length !== 1 ? 'es' : ''}` : ''} · {allItems.length} total
+          </p>
         </div>
         <button onClick={() => setNewOpen(true)}
           className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer">
@@ -141,59 +165,99 @@ export function ProjectsView({ context, onOpenPres }: { context?: string; onOpen
         </button>
       </div>
 
-      <div className="grid gap-2.5">
-        {projects.map(p => {
-          const pct = getPct(p.id)
-          const all = tasks.filter(t => t.project_id === p.id && !t.parent_task_id)
-          const pend = all.filter(t => !t.done).length
-          const stColor = STATUS_COLOR[p.status || ''] || '#6b7280'
-          return (
-            <div key={p.id} onClick={() => openProjectDetail(p.id)}
-              className="bg-bg2 border border-black/7 rounded-xl p-4 cursor-pointer hover:shadow-md hover:-translate-y-px hover:border-black/13 transition-all shadow-sm">
-              <div className="flex items-center justify-between mb-1.5 gap-3">
-                <div className="text-[15px] font-medium">{p.name}</div>
-                <div className="flex items-center gap-2 w-32 shrink-0">
-                  <div className="flex-1 h-[5px] bg-bg4 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: ctxColor(p.context) }} />
+      <div className="flex flex-col gap-2 mt-5">
+        {allItems.map(item => {
+          if (item.kind === 'project') {
+            const p = item.p
+            const key = `p${p.id}`
+            const isExpanded = expandedIds.has(key)
+            const allT = tasks.filter(t => t.project_id === p.id && !t.parent_task_id && !t.es_recordatorio)
+            const doneT = allT.filter(t => t.done).length
+            const pct = allT.length ? Math.round(doneT / allT.length * 100) : 0
+            const pendT = allT.filter(t => !t.done && !t.archived_at)
+            const stColor = STATUS_COLOR[p.status || ''] || '#6b7280'
+            return (
+              <div key={key}>
+                <div className="bg-bg2 border border-black/7 rounded-xl p-4 shadow-sm hover:border-black/13 hover:shadow-md transition-all">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <button onClick={() => toggleItem(key)} className="text-[10px] text-gray-400 hover:text-claude shrink-0 w-3 cursor-pointer">{isExpanded ? '▼' : '▶'}</button>
+                    <span className="text-[14px] shrink-0">📁</span>
+                    <div className="flex-1 font-medium text-[15px] min-w-0 truncate">{p.name}</div>
+                    <div className="flex items-center gap-2 w-28 shrink-0">
+                      <div className="flex-1 h-[5px] bg-bg4 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: ctxColor(p.context) }} />
+                      </div>
+                      <span className="text-[10px] font-mono text-gray-400">{doneT}/{allT.length}</span>
+                    </div>
+                    <button onClick={() => openProjectDetail(p.id)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-[5px] cursor-pointer hover:bg-claude hover:text-white transition-colors shrink-0" title="Ver detalle / editar">→</button>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-400">{pct}%</span>
+                  {p.description && <div className="text-[12px] text-gray-500 mb-2 leading-snug pl-5">{p.description}</div>}
+                  <div className="flex gap-1.5 flex-wrap pl-5">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded capitalize" style={{ background: stColor + '14', color: stColor }}>{p.status || 'activo'}</span>
+                    {p.tipo_agencia && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {p.tipo_agencia}</span>}
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{pendT.length} pendientes</span>
+                    {p.clients
+                      ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{p.clients.name}</span>
+                      : p.es_interno && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">Interno</span>}
+                    {p.due_date
+                      ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {p.due_date.slice(5).replace('-', '/')}</span>
+                      : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Ongoing</span>}
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/20 pl-2.5">
+                    {pendT.length > 0
+                      ? pendT.map(t => <TaskItem key={t.id} task={t} />)
+                      : <div className="text-[12px] text-gray-400 italic py-1">Sin tareas pendientes</div>}
+                  </div>
+                )}
+              </div>
+            )
+          }
+          // padre
+          const t = item.t
+          const key = `t${t.id}`
+          const isExpanded = expandedIds.has(key)
+          const childTasks = tasks.filter(c => c.parent_task_id === t.id && !c.es_recordatorio)
+          const childDone = childTasks.filter(c => c.done).length
+          const pct = childTasks.length ? Math.round(childDone / childTasks.length * 100) : 0
+          const pendChildren = childTasks.filter(c => !c.done && !c.archived_at)
+          const { name: tName } = splitTitle(t.title)
+          return (
+            <div key={key}>
+              <div className="bg-bg2 border border-black/7 rounded-xl p-4 shadow-sm hover:border-black/13 hover:shadow-md transition-all">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <button onClick={() => toggleItem(key)} className="text-[10px] text-gray-400 hover:text-claude shrink-0 w-3 cursor-pointer">{isExpanded ? '▼' : '▶'}</button>
+                  <span className="text-[14px] shrink-0">📂</span>
+                  <div className="flex-1 font-medium text-[15px] min-w-0 truncate">{tName}</div>
+                  <div className="flex items-center gap-2 w-28 shrink-0">
+                    <div className="flex-1 h-[5px] bg-bg4 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: ctxColor(t.context) }} />
+                    </div>
+                    <span className="text-[10px] font-mono text-gray-400">{childDone}/{childTasks.length}</span>
+                  </div>
+                  <button onClick={() => openDetail(t.id)} className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2 py-0.5 rounded-[5px] cursor-pointer hover:bg-claude hover:text-white transition-colors shrink-0" title="Ver detalle">→</button>
+                </div>
+                <div className="flex gap-1.5 flex-wrap pl-5">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{pendChildren.length} pendientes</span>
+                  {t.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{t.clients.name}</span>}
+                  {t.due_date
+                    ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {t.due_date.slice(5).replace('-', '/')}</span>
+                    : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Ongoing</span>}
                 </div>
               </div>
-              {p.description && <div className="text-[12px] text-gray-500 mb-2 leading-snug">{p.description}</div>}
-              <div className="flex gap-1.5 flex-wrap">
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded capitalize" style={{ background: stColor + '14', color: stColor }}>{p.status || 'activo'}</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: ctxColor(p.context) + '12', color: ctxColor(p.context) }}>{ctxLabel(p.context)}</span>
-                {p.tipo_agencia && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">🏷 {p.tipo_agencia}</span>}
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-400">{all.length} tareas · {pend} pendientes</span>
-                {p.clients
-                  ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{p.clients.name}</span>
-                  : p.es_interno && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">Interno</span>}
-                {p.due_date
-                  ? <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-warn/7 text-warn">Entrega: {p.due_date.slice(5).replace('-', '/')}</span>
-                  : <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/7 text-claude">Ongoing</span>}
-              </div>
+              {isExpanded && (
+                <div className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-claude/20 pl-2.5">
+                  {pendChildren.length > 0
+                    ? pendChildren.map(c => <TaskItem key={c.id} task={c} />)
+                    : <div className="text-[12px] text-gray-400 italic py-1">Sin subtareas pendientes</div>}
+                </div>
+              )}
             </div>
           )
         })}
-        {!projects.length && <div className="text-center py-7 text-gray-400 text-[13px]">Sin {itemNoun} en este contexto</div>}
+        {allItems.length === 0 && <div className="text-center py-7 text-gray-400 text-[13px]">Sin {itemNoun} en este contexto</div>}
       </div>
-
-      {/* Agrupadores: tareas con categoria='padre' — contenedores chicos sin presentación formal */}
-      {(() => {
-        const padres = tasks.filter(t =>
-          t.categoria === 'padre' && !t.done && !t.archived_at &&
-          (!context || t.context === context)
-        )
-        if (!padres.length) return null
-        return (
-          <div className="mt-6">
-            <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2.5">Agrupadores</div>
-            <div className="flex flex-col gap-1">
-              {padres.map(t => <TaskItem key={t.id} task={t} />)}
-            </div>
-          </div>
-        )
-      })()}
 
       {selected && (
         <div className="mt-4 bg-bg2 border border-black/7 rounded-xl overflow-hidden shadow-md animate-fade-in">
