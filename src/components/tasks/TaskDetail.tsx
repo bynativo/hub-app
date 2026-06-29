@@ -832,8 +832,9 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
       }).eq('id', createdTaskId)
     }
 
-    await updateTaskStatus(task.id, 'Delegado')
+    await updateTaskStatus(task.id, 'En seguimiento')
     await updateTask(task.id, {
+      seguimiento_tipo: 'esperando',
       delegated_to: delegatedTo,
       delegation_date: todayISO(),
       delegation_return_date: returnDate || null,
@@ -1283,8 +1284,7 @@ Reglas del bloque:
               <div className="flex gap-1.5 flex-wrap">
                 {(task.es_delegada ? ctxStates.filter(s => !CLOSING_STATES.includes(s)) : ctxStates).map(s => (
                   <button key={s} onClick={() => {
-                    if (s === 'Delegado') { setDelegationModalOpen(true); return }
-                    if (s === 'Cerrado') {
+                    if (s === 'Archivado') {
                       if (task.closer_member_id) {
                         const cm = teamMembers.find(m => m.id === task.closer_member_id)
                         setConfirmClose({ closerName: cm?.nombre ?? 'la persona asignada' })
@@ -1311,6 +1311,47 @@ Reglas del bloque:
               )}
             </div>
 
+            {/* Sub-tipo de "En seguimiento" */}
+            {task.status === 'En seguimiento' && (
+              <div>
+                <label className={labelCls}>Sub-tipo</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {([null, 'esperando', 'feedback'] as const).map(v => (
+                    <button key={v ?? 'null'} onClick={() => updateTask(task.id, { seguimiento_tipo: v })}
+                      className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                        task.seguimiento_tipo === v
+                          ? 'font-semibold border-amber-400 bg-amber-50 text-amber-700'
+                          : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
+                      }`}>
+                      {v === null ? '— Sin asignar' : v === 'esperando' ? '⏳ Esperando / Delegado' : '🔄 En feedback'}
+                    </button>
+                  ))}
+                </div>
+                {task.seguimiento_tipo === 'esperando' && (
+                  <button onClick={() => setDelegationModalOpen(true)}
+                    className="mt-2 text-[11px] text-claude bg-claude/7 border border-claude/20 px-3 py-1.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors">
+                    → Delegar tarea
+                  </button>
+                )}
+                {task.seguimiento_tipo === 'feedback' && (
+                  <div className="flex gap-4 mt-2">
+                    <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
+                      <input type="checkbox" checked={!!task.feedback_interno}
+                        onChange={e => updateTask(task.id, { feedback_interno: e.target.checked })}
+                        className="cursor-pointer" />
+                      Feedback interno
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
+                      <input type="checkbox" checked={!!task.feedback_externo}
+                        onChange={e => updateTask(task.id, { feedback_externo: e.target.checked })}
+                        className="cursor-pointer" />
+                      Feedback externo
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Flujo banco RRSS/ADS — avisos contextuales */}
             {task.context === 'banco' && isContent && (() => {
               const isRRSS = isRRSSContent(task)
@@ -1321,7 +1362,7 @@ Reglas del bloque:
                   </div>
                 )
               }
-              if (isRRSS && task.status === 'Pend. validación') {
+              if (isRRSS && task.status === 'En seguimiento') {
                 return (
                   <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
                     ⚡ Contenido RRSS/ADS — requiere <span className="font-medium">aprobación de Felipe</span> (o Jani si Felipe delegó el cierre). Generá el link de aprobación desde el slide correspondiente.
@@ -2124,7 +2165,7 @@ Reglas del bloque:
             </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setConfirmClose(null)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
-              <button onClick={async () => { setConfirmClose(null); await updateTaskStatus(task.id, 'Cerrado') }} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer">
+              <button onClick={async () => { setConfirmClose(null); await updateTaskStatus(task.id, 'Archivado') }} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer">
                 Sí, cerrar igual
               </button>
             </div>

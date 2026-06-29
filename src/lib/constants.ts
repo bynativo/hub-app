@@ -19,78 +19,55 @@ export const ORIGIN_LABELS: Record<string, string> = {
   'propia': 'Propia',
 }
 
-// Flujo principal de estados por contexto (orden de avance)
+const CUATRO_ESTADOS = ['Inbox', 'En seguimiento', 'Entregado', 'Archivado']
+
 export const ESTADOS_FLOW: Record<string, string[]> = {
-  banco: ['Inbox', 'Trabajando', 'Pend. validación', 'Cerrado'],
-  agencia: ['Inbox', 'Propuesta', 'En ejecución', 'Revisión interna', 'En revisión cliente', 'Cerrado'],
-  personal: ['Inbox', 'Trabajando', 'Cerrado'],
+  banco:    CUATRO_ESTADOS,
+  agencia:  CUATRO_ESTADOS,
+  personal: CUATRO_ESTADOS,
 }
 
-// Estados de pausa por contexto (fuera del flujo lineal)
-export const ESTADOS_PAUSA: Record<string, string[]> = {
-  banco: ['Delegado', 'Bloqueado', 'Enviada'],
-  agencia: ['Delegado', 'Bloqueado', 'Enviada'],
-  personal: ['En pausa', 'Delegado', 'Enviada'],
-}
+export const ESTADOS: Record<string, string[]> = ESTADOS_FLOW
 
-// Todos los estados seleccionables por contexto (flujo + pausa)
-export const ESTADOS: Record<string, string[]> = {
-  banco: [...ESTADOS_FLOW.banco, ...ESTADOS_PAUSA.banco],
-  agencia: [...ESTADOS_FLOW.agencia, ...ESTADOS_PAUSA.agencia],
-  personal: [...ESTADOS_FLOW.personal, ...ESTADOS_PAUSA.personal],
-}
-
-// Columnas del Kanban por contexto (vistas de tareas de cada contexto)
 export const STATUS_COLUMNS: Record<string, string[]> = {
-  banco: ['Inbox', 'Trabajando', 'Pend. validación', 'Delegado', 'Bloqueado', 'Enviada', 'Cerrado'],
-  agencia: ['Inbox', 'Propuesta', 'En ejecución', 'Revisión interna', 'En revisión cliente', 'Delegado', 'Bloqueado', 'Enviada', 'Cerrado'],
-  personal: ['Inbox', 'Trabajando', 'En pausa', 'Delegado', 'Enviada', 'Cerrado'],
+  banco:    CUATRO_ESTADOS,
+  agencia:  CUATRO_ESTADOS,
+  personal: CUATRO_ESTADOS,
 }
 
-// 4 columnas universales del Kanban del dashboard
 export const KANBAN_GROUPS: { key: string; label: string; statuses: string[] }[] = [
-  { key: 'porhacer', label: 'Por hacer', statuses: ['Inbox'] },
-  { key: 'encurso', label: 'En curso', statuses: ['Trabajando', 'En ejecución', 'Revisión interna', 'Propuesta'] },
-  { key: 'delegado', label: 'Delegado', statuses: ['Delegado'] },
-  { key: 'esperando', label: 'Esperando', statuses: ['Pend. validación', 'En revisión cliente', 'Bloqueado'] },
-  { key: 'cerrado', label: 'Cerrado', statuses: ['Cerrado', 'Entregado', 'Descartado'] },
+  { key: 'inbox',       label: 'Inbox',         statuses: ['Inbox'] },
+  { key: 'seguimiento', label: 'En seguimiento', statuses: ['En seguimiento'] },
+  { key: 'entregado',   label: 'Entregado',      statuses: ['Entregado'] },
+  { key: 'archivado',   label: 'Archivado',      statuses: ['Archivado'] },
 ]
 
-// Estados que disparan alarma de seguimiento ("Esperando"). Global = union de
-// todos los contextos. Usar para conteos generales (Sidebar, store).
-export const WAITING_STATES = ['Delegado', 'Pend. validación', 'En revisión cliente', 'Bloqueado']
+export const WAITING_STATES = ['En seguimiento']
 
-// Estados de espera POR contexto. Una tarea cuenta como "esperando respuesta
-// vencida" solo si su status esta en la lista de su propio contexto. Sirve para
-// no confundir entre contextos (ej: 'Pend. validación' es waiting solo en banco).
 export const WAITING_STATES_BY_CONTEXT: Record<string, string[]> = {
-  banco: ['Delegado', 'Pend. validación', 'Bloqueado'],
-  agencia: ['En revisión cliente', 'Delegado', 'Bloqueado'],
-  personal: ['Delegado'],
+  banco:    ['En seguimiento'],
+  agencia:  ['En seguimiento'],
+  personal: ['En seguimiento'],
 }
 
-// True si el status pertenece al bucket "esperando" del contexto de la tarea.
 export function isWaitingState(context: string, status: string): boolean {
   return (WAITING_STATES_BY_CONTEXT[context] || []).includes(status)
 }
 
-// Estados de cierre: al pasar a uno de estos, la tarea se archiva (archived_at) y se oculta de las vistas
-export const CLOSING_STATES = ['Cerrado', 'Entregado', 'Descartado']
+export const CLOSING_STATES = ['Entregado', 'Archivado']
 
 export const STATUS_ICON: Record<string, string> = {
-  Inbox: '○', Trabajando: '▶', 'Pend. validación': '⌛', Cerrado: '✓',
-  Propuesta: '◎', 'En ejecución': '▶', 'Revisión interna': '◐',
-  'En revisión cliente': '⌛', Delegado: '→', Bloqueado: '✕',
-  'En pausa': '‖', Entregado: '✓', Descartado: '✕', Planificando: '◈',
-  Recordatorio: '🔔', Enviada: '↑',
+  Inbox:            '○',
+  'En seguimiento': '👀',
+  Entregado:        '✓',
+  Archivado:        '☑',
 }
 
 export const STATUS_COLOR: Record<string, string> = {
-  Inbox: '#6b7280', Trabajando: '#2563eb', 'Pend. validación': '#d97706', Cerrado: '#16a34a',
-  Propuesta: '#7c3aed', 'En ejecución': '#2563eb', 'Revisión interna': '#7c3aed',
-  'En revisión cliente': '#d97706', Delegado: '#d97706', Bloqueado: '#dc2626',
-  'En pausa': '#6b7280', Entregado: '#16a34a', Descartado: '#9ca3af', Planificando: '#7c3aed',
-  Recordatorio: '#d97706', Enviada: '#0d9488',
+  Inbox:            '#6b7280',
+  'En seguimiento': '#d97706',
+  Entregado:        '#16a34a',
+  Archivado:        '#9ca3af',
 }
 
 export const PLAT_META: Record<string, { label: string; css: string; color: string }> = {

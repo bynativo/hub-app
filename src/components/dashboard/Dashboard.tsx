@@ -284,7 +284,7 @@ export function Dashboard() {
   const refreshCalendar = useStore(s => s.refreshCalendar)
   const [mode, setMode] = useState<ViewMode>(loadMode)
   const [sinFechaCollapsed, setSinFechaCollapsed] = useState(true)
-  const [cerradoCollapsed, setCerradoCollapsed] = useState(true)
+  const [archivadoCollapsed, setArchivadoCollapsed] = useState(true)
   // Filtros persistentes por vista (clave propia en localStorage).
   const [typeFilters, setTypeFilters] = useState<Set<GeneralType>>(() => loadFilters<GeneralType>('mis_tareas_type_filters'))
   const [ctxFilters, setCtxFilters] = useState<Set<ContextFilter>>(() => loadFilters<ContextFilter>('mis_tareas_context_filters'))
@@ -507,15 +507,15 @@ export function Dashboard() {
               .filter(t => grp.statuses.includes(t.status || 'Inbox'))
               .sort(sortByPrioDate)
             if (!items.length) return null
-            const isCerrado = grp.key === 'cerrado'
-            const collapsed = isCerrado && cerradoCollapsed
+            const isArchivado = grp.key === 'archivado'
+            const collapsed = isArchivado && archivadoCollapsed
             return (
               <div key={grp.key} className="mb-5">
                 <button
-                  onClick={() => isCerrado && setCerradoCollapsed(c => !c)}
-                  className={`flex items-center gap-2 mb-2.5 ${isCerrado ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                  onClick={() => isArchivado && setArchivadoCollapsed(c => !c)}
+                  className={`flex items-center gap-2 mb-2.5 ${isArchivado ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
                 >
-                  {isCerrado && <span className="text-[10px] text-gray-400 w-3">{collapsed ? '▶' : '▼'}</span>}
+                  {isArchivado && <span className="text-[10px] text-gray-400 w-3">{collapsed ? '▶' : '▼'}</span>}
                   <span className="text-[11px] font-mono text-gray-500 tracking-wider uppercase">{grp.label}</span>
                   <span className="font-mono text-[10px] text-gray-400 bg-bg4 px-1.5 rounded-full">{items.length}</span>
                 </button>

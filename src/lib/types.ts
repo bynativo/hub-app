@@ -129,6 +129,10 @@ export interface Task {
   origen_delegacion_id: number | null
   // Categoría de contenedor (campana / proyecto / propuesta / padre); null = tarea ejecutable normal
   categoria: string | null
+  // Sub-tipo de "En seguimiento": 'esperando' = depende de un tercero, 'feedback' = entregado, esperando OK
+  seguimiento_tipo: string | null
+  feedback_interno: boolean | null
+  feedback_externo: boolean | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }

@@ -273,8 +273,9 @@ export const useStore = create<AppState>((set, get) => ({
       .maybeSingle()
     if (!delegation) return
 
-    // 1. Tarea del receptor → 'Enviada' (no done)
-    await get().updateTaskStatus(id, 'Enviada')
+    // 1. Tarea del receptor → 'En seguimiento' / esperando (enviada para validación, depende del delegador)
+    await get().updateTaskStatus(id, 'En seguimiento')
+    await get().updateTask(id, { seguimiento_tipo: 'esperando' })
 
     // 2. Tarea original del que delegó → vuelve a Inbox para revisión
     const parentTask = get().tasks.find(t => t.id === delegation.task_id)
@@ -317,7 +318,7 @@ export const useStore = create<AppState>((set, get) => ({
         .maybeSingle()
       if (outDelegation?.created_task_id) {
         const receiverTask = get().tasks.find(t => t.id === outDelegation.created_task_id)
-        if (receiverTask && receiverTask.status === 'Enviada') {
+        if (receiverTask && receiverTask.status === 'En seguimiento' && receiverTask.seguimiento_tipo === 'esperando') {
           await supabase.from('tasks').update({ done: true }).eq('id', outDelegation.created_task_id)
           set({ tasks: get().tasks.map(t => t.id === outDelegation.created_task_id ? { ...t, done: true } : t) })
           await supabase.from('task_delegations').insert({

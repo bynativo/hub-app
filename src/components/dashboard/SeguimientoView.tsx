@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { callClaudeProxy } from '../../lib/claude'
-import { WAITING_STATES, CLOSING_STATES, ESTADOS, KANBAN_GROUPS, STATUS_ICON, STATUS_COLOR, isWaitingState } from '../../lib/constants'
+import { WAITING_STATES, CLOSING_STATES, STATUS_ICON, STATUS_COLOR, isWaitingState } from '../../lib/constants'
 import { ctxLabel, todayISO, addDaysISO, tomorrowISO, thisWeekRange, nextWeekRange, nextMonthRange } from '../../lib/helpers'
-import { FilterPills, SEGUIMIENTO_PILLS, CONTEXT_PILLS, matchesSeguimientoType, matchesContext, loadFilters, saveFilters, type SeguimientoType, type ContextFilter } from '../tasks/TypeFilterPills'
+import { FilterPills, CONTEXT_PILLS, matchesContext, loadFilters, saveFilters, type ContextFilter } from '../tasks/TypeFilterPills'
 import type { Task } from '../../lib/types'
 
 // Contenido cuyo día de entrega es hoy (y aún no entregado/cerrado)
@@ -12,10 +12,8 @@ function isContentDueToday(t: Task): boolean {
   return t.task_type === 'contenido' && t.due_date === todayISO() && !CLOSING_STATES.includes(t.status)
 }
 
-function inProgressStatus(context: string): string {
-  const grp = KANBAN_GROUPS.find(g => g.key === 'encurso')!
-  const ctxStates = ESTADOS[context] || ESTADOS.banco
-  return grp.statuses.find(s => ctxStates.includes(s)) || 'Trabajando'
+function inProgressStatus(_context: string): string {
+  return 'Inbox'
 }
 
 function fmtFollowup(at: string | null): string {
@@ -247,6 +245,27 @@ function FollowupCard({ task }: { task: Task }) {
           {draft}
         </div>
       )}
+
+      {/* Recordatorios vinculados a esta tarea */}
+      {(() => {
+        const rems = allTasks.filter(r => r.parent_task_id === task.id && r.es_recordatorio && !r.done && !r.archived_at)
+        if (!rems.length) return null
+        return (
+          <div className="mt-3 border-t border-black/7 pt-2.5 flex flex-col gap-1">
+            {rems.map(r => (
+              <div key={r.id} className="flex items-center gap-2 text-[12px] text-gray-500 pl-1">
+                <span>{r.tipo_recordatorio === 'responder_correo' ? '📧' : r.tipo_recordatorio === 'enviar_correo' ? '📨' : r.tipo_recordatorio === 'seguimiento' ? '👀' : '🔔'}</span>
+                <span className="flex-1 truncate">{r.title}</span>
+                {(r.recordatorio_at || r.followup_at) && (
+                  <span className="text-[11px] font-mono text-gray-400 shrink-0">{fmtFollowup(r.recordatorio_at || r.followup_at)}</span>
+                )}
+                <button onClick={() => toggleTask(r.id)}
+                  className="text-[11px] text-success shrink-0 cursor-pointer hover:text-success/70">✓</button>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -324,20 +343,20 @@ export function SeguimientoView() {
   const updateTask = useStore(s => s.updateTask)
   const loadAll = useStore(s => s.loadAll)
   const [mode, setMode] = useState<ViewMode>(loadMode)
-  const [typeFilters, setTypeFilters] = useState<Set<SeguimientoType>>(() => loadFilters<SeguimientoType>('seguimiento_type_filters'))
   const [ctxFilters, setCtxFilters] = useState<Set<ContextFilter>>(() => loadFilters<ContextFilter>('seguimiento_context_filters'))
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, mode) } catch { /* ignore */ } }, [mode])
-  useEffect(() => { saveFilters('seguimiento_type_filters', typeFilters) }, [typeFilters])
   useEffect(() => { saveFilters('seguimiento_context_filters', ctxFilters) }, [ctxFilters])
 
-  // Filtro: solo top-level (no nested) — recordatorios nested viven bajo
-  // su tarea padre. Para top-level: reminders OR tareas con followup_at OR
-  // tareas en estado Esperando. El contenido due-today va a "Mis tareas",
-  // no acá. Aplica filtros de tipo (👀/🔔/📧/📨) y contexto.
-  const waiting = tasks.filter(t => !t.done && !t.archived_at && !t.parent_task_id && (
-    t.es_recordatorio || !!t.followup_at || WAITING_STATES.includes(t.status)
-  ) && matchesSeguimientoType(t, typeFilters) && matchesContext(t, ctxFilters))
+  // Tareas en seguimiento (con status 'En seguimiento') o con alarma de followup.
+  // Los recordatorios aparecen anidados bajo su tarea padre — no como top-level.
+  const waiting = tasks.filter(t => !t.done && !t.archived_at && !t.parent_task_id && !t.es_recordatorio && (
+    WAITING_STATES.includes(t.status) || !!t.followup_at
+  ) && matchesContext(t, ctxFilters))
+
+  // Recordatorios huérfanos: sin tarea padre, activos. Mostrar como sección separada.
+  const orphanReminders = tasks.filter(t => !t.done && !t.archived_at && t.es_recordatorio && !t.parent_task_id
+    && matchesContext(t, ctxFilters))
 
   const today = todayISO()
   const tomorrow = tomorrowISO()
@@ -398,11 +417,8 @@ export function SeguimientoView() {
 
   // ── Modo "Por estado" ───────────────────────────────────────────────
   const byEstado = [
-    { key: 'esperando',        label: '👀 En seguimiento',         filter: (t: Task) => !t.es_recordatorio && WAITING_STATES.includes(t.status) },
-    { key: 'general',          label: '🔔 Recordatorios generales', filter: (t: Task) => t.es_recordatorio && (t.tipo_recordatorio || 'general') === 'general' },
-    { key: 'seguimiento',      label: '👀 Seguimientos',            filter: (t: Task) => t.es_recordatorio && t.tipo_recordatorio === 'seguimiento' },
-    { key: 'responder_correo', label: '📧 Responder correo',        filter: (t: Task) => t.es_recordatorio && t.tipo_recordatorio === 'responder_correo' },
-    { key: 'enviar_correo',    label: '📨 Enviar correo',           filter: (t: Task) => t.es_recordatorio && t.tipo_recordatorio === 'enviar_correo' },
+    { key: 'esperando', label: '⏳ Esperando / Delegado', filter: (t: Task) => WAITING_STATES.includes(t.status) && t.seguimiento_tipo !== 'feedback' },
+    { key: 'feedback',  label: '🔄 En feedback',          filter: (t: Task) => WAITING_STATES.includes(t.status) && t.seguimiento_tipo === 'feedback' },
   ]
 
   // ── Modo "Kanban" ───────────────────────────────────────────────────
@@ -443,11 +459,8 @@ export function SeguimientoView() {
   return (
     <div className="animate-fade-in p-5">
       <h1 className="font-serif text-[26px] font-light mb-0.5" style={{ color: '#d97706' }}>Seguimiento</h1>
-      <p className="text-gray-500 text-[13px] mb-5">Tareas en seguimiento + recordatorios activos · {waiting.length}</p>
+      <p className="text-gray-500 text-[13px] mb-5">Tareas en seguimiento · {waiting.length}</p>
 
-      {/* Toggle 3 modos + filtros de tipo (Seguimiento/General/Responder/Enviar)
-          + filtros de contexto. Cada filtro persiste con su propia clave en
-          localStorage. */}
       <div className="flex flex-col gap-2 mb-4">
         <div className="flex items-start gap-3 flex-wrap">
           <div className="flex bg-bg3 border border-black/7 rounded-lg p-0.5 shrink-0">
@@ -464,12 +477,11 @@ export function SeguimientoView() {
               </button>
             ))}
           </div>
-          <FilterPills value={typeFilters} onChange={setTypeFilters} pills={SEGUIMIENTO_PILLS} allLabel="Todos" />
         </div>
         <FilterPills value={ctxFilters} onChange={setCtxFilters} pills={CONTEXT_PILLS} allLabel="Todos" />
       </div>
 
-      {!waiting.length ? (
+      {!waiting.length && !orphanReminders.length ? (
         <div className="text-center py-7 text-gray-400 text-[13px]">Nada esperando respuesta</div>
       ) : mode === 'fecha' ? (
         <div className="max-w-[760px]">
@@ -550,6 +562,16 @@ export function SeguimientoView() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Recordatorios huérfanos: sin tarea padre. Se muestran al fondo para no perderlos. */}
+      {orphanReminders.length > 0 && (
+        <div className="max-w-[760px] mt-6 border-t border-black/7 pt-4">
+          <SectionHeader icon="🔔" label={`Recordatorios sueltos (sin tarea asociada)`} count={orphanReminders.length} color="#9ca3af" />
+          <div className="flex flex-col gap-2">
+            {orphanReminders.sort(sortByAlarm).map(renderCard)}
+          </div>
         </div>
       )}
     </div>

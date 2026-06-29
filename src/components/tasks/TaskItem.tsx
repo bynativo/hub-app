@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
 import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge, vaAGrilla, isRRSSContent } from '../../lib/helpers'
-import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CONTENT_STAGES } from '../../lib/constants'
+import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CONTENT_STAGES, CLOSING_STATES } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
 
@@ -246,12 +246,12 @@ export function TaskItem({ task, level = 0, hideChildren = false }: { task: Task
               return cs ? <Tag bg="rgba(124,58,237,0.08)" color="#7c3aed">{cs.emoji} {cs.label}</Tag> : null
             })()}
 
-            {/* Banco RRSS/ADS: badge de aprobación requerida en Pend. validación */}
-            {task.context === 'banco' && isRRSSContent(task) && task.status === 'Pend. validación' && (
+            {/* Banco RRSS/ADS: badge de aprobación requerida en feedback */}
+            {task.context === 'banco' && isRRSSContent(task) && task.status === 'En seguimiento' && task.seguimiento_tipo === 'feedback' && (
               <Tag bg="rgba(220,38,38,0.10)" color="#dc2626">⚡ Aprobación Felipe</Tag>
             )}
             {/* Contenido banco no-RRSS delegado a Gonza sin aprobación necesaria */}
-            {task.context === 'banco' && task.task_type === 'contenido' && !isRRSSContent(task) && task.delegated_to === 'Gonza' && task.status !== 'Cerrado' && (
+            {task.context === 'banco' && task.task_type === 'contenido' && !isRRSSContent(task) && task.delegated_to === 'Gonza' && !CLOSING_STATES.includes(task.status) && (
               <Tag bg="rgba(13,148,136,0.10)" color="#0d9488">Gonza gestiona</Tag>
             )}
 
