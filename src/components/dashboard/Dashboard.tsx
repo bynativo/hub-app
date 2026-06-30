@@ -316,7 +316,7 @@ export function Dashboard() {
     && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
   // Base para Por estado / Kanban: misma exclusión de contenedoras.
-  const allByStatus = tasks.filter(t => !t.done
+  const allByStatus = tasks.filter(t => (!t.done || t.status === 'Archivado')
     && !esContenedora(t)
     && isShownAsTopLevel(t, tasks)
     && matchesGeneralType(t, typeFilters) && matchesContext(t, ctxFilters))
