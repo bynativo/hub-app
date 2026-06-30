@@ -54,7 +54,7 @@ export function TaskItem({ task, level = 0, hideChildren = false }: { task: Task
   // a medida que la agencia responde).
   const isPerfil = task.task_type === 'influencer'
   const perfilConfirmado = isPerfil
-    && !!(task.influencer_nombre || task.influencer_name)?.trim()
+    && !!task.influencer_nombre?.trim()
     && !!(task.influencer_handle || '').trim()
   // Tarea de contenido que va a la grilla RRSS (influencer colab o solo_contenido).
   const enGrilla = task.task_type === 'contenido' && vaAGrilla(task.tipo_publicacion || task.content_pub_type)

@@ -84,7 +84,7 @@ function FollowupCard({ task }: { task: Task }) {
         prompt = `Redacta el email de brief para la agencia de influencers solicitando ${n} perfil${n === 1 ? '' : 'es'} para la campaña "${parent.title}". Cliente: ${cliente}. Grabación / evento: ${grab}. Fecha de entrega de perfiles: ${entrega}. Pedir perfiles que encajen con el brief de la campaña, con confirmación de disponibilidad y tarifas. Tono profesional pero cercano. Devolvé asunto + cuerpo del email, y al final una tabla resumen con: #Perfil, Campaña, Grabación, Entrega.`
         system = 'Redactás briefs profesionales para agencias de influencers en español. Tono profesional pero cercano, claro y al grano. Devolvés asunto + cuerpo + una tabla resumen al final.'
       } else if (isProfileRequest && parent) {
-        const inf = parent.influencer_nombre || parent.influencer_name || ''
+        const inf = parent.influencer_nombre || ''
         const handle = parent.influencer_handle || ''
         const target = [inf, handle].filter(Boolean).join(' / ') || 'el influencer'
         const grab = parent.recording_date || 'fecha por confirmar'
@@ -150,8 +150,8 @@ function FollowupCard({ task }: { task: Task }) {
           </div>
           {isContentDue && (
             <div className="text-[12px] text-claude mt-1.5">
-              {(task.influencer_nombre || task.influencer_name)
-                ? `Hoy la agencia debe entregar el contenido del influencer ${task.influencer_nombre || task.influencer_name}`
+              {task.influencer_nombre
+                ? `Hoy la agencia debe entregar el contenido del influencer ${task.influencer_nombre}`
                 : 'Hoy vence la entrega de este contenido — ¿ya está listo?'}
             </div>
           )}

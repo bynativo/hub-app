@@ -58,19 +58,14 @@ export interface Task {
   profile_request_date: string | null
   brief_date: string | null
   num_perfiles: number | null
-  time_minutes: number
   notes: string | null
   done: boolean
   cats: string[]
-  draft_to: string | null
-  draft_cc: string | null
   draft_subject: string | null
   draft_body: string | null
   draft_needs_review: boolean
   draft_sent: boolean
   plan: string[]
-  meeting_title: string | null
-  meeting_duration: string | null
   meeting_agenda: string[]
   created_at: string
   updated_at: string
@@ -104,8 +99,6 @@ export interface Task {
   work_date: string | null
   delegation_date: string | null
   delegation_return_date: string | null
-  // Contenido sin fecha
-  publish_date_pending: boolean | null
   // Para perfiles de "Solicitar influencers": array de tipos con cantidad.
   // Reemplaza al tipo_publicacion scalar (que queda como fallback/compat).
   influencer_tipos: { tipo: string; cantidad: number }[] | null
@@ -115,8 +108,6 @@ export interface Task {
   influencer_agencia: string | null
   tipo_publicacion: string | null
   // Responsable de cierre y etapa actual de contenido
-  closer_role: string | null   // legacy
-  closer_name: string | null   // legacy
   closer_member_id: number | null
   current_stage: string | null
   // Delegación nueva (member_id)
