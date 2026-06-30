@@ -17,9 +17,12 @@ export function ArchiveProposalModal() {
 
   if (!candidates || candidates.length === 0) return null
 
-  const sel = selected ?? new Set(candidates.map(t => t.id))
+  // A partir de aquí candidates es Task[] no-nulo; lo capturamos en una const
+  // para que TypeScript lo vea así dentro de los closures también.
+  const list = candidates
+  const sel = selected ?? new Set(list.map(t => t.id))
   const selCount = sel.size
-  const n = candidates.length
+  const n = list.length
 
   function toggle(id: number) {
     const next = new Set(sel)
@@ -29,7 +32,7 @@ export function ArchiveProposalModal() {
   }
 
   function toggleAll() {
-    setSelected(sel.size === n ? new Set() : new Set(candidates.map(t => t.id)))
+    setSelected(sel.size === n ? new Set() : new Set(list.map(t => t.id)))
   }
 
   async function handleArchive(ids: number[]) {
@@ -66,7 +69,7 @@ export function ArchiveProposalModal() {
             >
               {sel.size === n ? 'Deseleccionar todas' : 'Seleccionar todas'}
             </button>
-            {candidates.map(t => {
+            {list.map(t => {
               const checked = sel.has(t.id)
               const stColor = STATUS_COLOR[t.status] || '#6b7280'
               const ago = daysAgo(t.updated_at)
@@ -105,7 +108,7 @@ export function ArchiveProposalModal() {
           {mode === 'summary' ? (
             <>
               <button
-                onClick={() => handleArchive(candidates.map(t => t.id))}
+                onClick={() => handleArchive(list.map(t => t.id))}
                 disabled={archiving}
                 className="text-[13px] bg-amber-600 text-white px-4 py-2 rounded-lg cursor-pointer hover:bg-amber-700 transition-colors disabled:opacity-50"
               >
