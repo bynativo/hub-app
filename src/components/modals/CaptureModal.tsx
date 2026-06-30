@@ -670,8 +670,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   // cliente para agencia se toma del selector del header (clientId).
   const [reminderProjectId, setReminderProjectId] = useState<number | null>(preselectProjectId ?? null)
   const [reminderTaskId, setReminderTaskId] = useState<number | null>(preselectParentId ?? null)
-  const [reminderType, setReminderType] = useState('general')
-  const [correoCtx, setCorreoCtx] = useState('')
   const [desc, setDesc] = useState(template?.notes ?? '')
   // Campaña
   const [esCampana, setEsCampana] = useState(false)
@@ -766,10 +764,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       status: reminder ? 'Recordatorio' : 'Inbox',
       es_recordatorio: reminder,
       recordatorio_at: reminder ? new Date(reminderAt).toISOString() : null,
-      tipo_recordatorio: reminder ? reminderType : null,
-      // correo_contexto se usa como "Asunto del correo" para responder_correo y
-      // como "A quién / contexto" para enviar_correo.
-      correo_contexto: (reminder && (reminderType === 'responder_correo' || reminderType === 'enviar_correo')) ? (correoCtx.trim() || null) : null,
+      tipo_recordatorio: null,
+      correo_contexto: null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     }).select('id').single()
@@ -1379,36 +1375,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
 
               {isReminder && (
                 <div className="mb-3 flex flex-col gap-2.5">
-                  <div>
-                    <label className={labelCls}>Tipo de recordatorio</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        { v: 'general', l: '🔔 General' },
-                        { v: 'seguimiento', l: '👀 Seguimiento' },
-                        { v: 'responder_correo', l: '📧 Responder correo' },
-                        { v: 'enviar_correo', l: '📨 Enviar correo' },
-                      ] as { v: string; l: string }[]).map(o => (
-                        <button key={o.v} type="button" onClick={() => setReminderType(o.v)}
-                          className={`py-2 px-1 border rounded-lg text-[11px] text-center cursor-pointer transition-all ${
-                            reminderType === o.v ? 'border-claude/20 text-claude bg-claude/7 font-medium' : 'border-black/7 text-gray-500 bg-bg3 hover:bg-bg4'
-                          }`}>
-                          {o.l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {reminderType === 'responder_correo' && (
-                    <div>
-                      <label className={labelCls}>Asunto o contexto del correo</label>
-                      <textarea value={correoCtx} onChange={e => setCorreoCtx(e.target.value)} rows={2} className={fieldCls + ' resize-y'} placeholder="Pegá el asunto o un fragmento del correo…" />
-                    </div>
-                  )}
-                  {reminderType === 'enviar_correo' && (
-                    <div>
-                      <label className={labelCls}>A quién / contexto</label>
-                      <textarea value={correoCtx} onChange={e => setCorreoCtx(e.target.value)} rows={2} className={fieldCls + ' resize-y'} placeholder="A quién va dirigido y qué hay que pedirle…" />
-                    </div>
-                  )}
                   <div>
                     <label className={labelCls}>Fecha del recordatorio *</label>
                     <input type="date" value={reminderDate}
