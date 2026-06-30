@@ -633,7 +633,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
   const [context, setContext] = useState(preselectContext ?? template?.context ?? 'banco')
   const [clientId, setClientId] = useState<number | null>(preselectClientId ?? null)
   const [priority, setPriority] = useState(template?.priority ?? 'media')
-  const [origin, setOrigin] = useState(template?.origin ?? 'propia')
+  const [vinoDeMail, setVinoDeMail] = useState(false)
+  const [emailAsunto, setEmailAsunto] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [requestedAt, setRequestedAt] = useState(todayISO())
   const [publishDate, setPublishDate] = useState('')
@@ -730,7 +731,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       title: builtTitle,
       context,
       priority,
-      origin,
+      origin: 'propia',
+      email_asunto: vinoDeMail ? (emailAsunto.trim() || null) : null,
       client_id: context === 'agencia' ? clientId : null,
       // Para recordatorios: los vínculos vienen del bloque "Vincular a (opcional)"
       // — si hay tarea, project_id queda null (se infiere del padre); si solo hay
@@ -1657,22 +1659,17 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
               </div>
 
               <div className="mb-3">
-                <label className={labelCls}>Origen</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { value: 'gmail-agencia', label: '📧 Email' },
-                    { value: 'whatsapp', label: '💬 WhatsApp' },
-                    { value: 'reunion', label: '🤝 Reunión' },
-                    { value: 'propia', label: '💡 Propia' },
-                  ].map(o => (
-                    <button key={o.value} onClick={() => setOrigin(o.value)}
-                      className={`py-2 px-1 border rounded-lg text-[11px] text-center cursor-pointer transition-all ${
-                        origin === o.value ? 'border-claude/20 text-claude bg-claude/7' : 'border-black/7 text-gray-500 bg-bg3 hover:bg-bg4'
-                      }`}>
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
+                <label className="flex items-center gap-3 cursor-pointer mb-2">
+                  <button type="button" onClick={() => setVinoDeMail(v => !v)}
+                    className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${vinoDeMail ? 'bg-claude' : 'bg-bg4'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${vinoDeMail ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                  <span className="text-[13px]">📧 Vino de un mail</span>
+                </label>
+                {vinoDeMail && (
+                  <input type="text" value={emailAsunto} onChange={e => setEmailAsunto(e.target.value)}
+                    placeholder="Asunto del correo" className={fieldCls} />
+                )}
               </div>
 
               {!isReminder && !isContent && !isSolicitud && (
@@ -1697,10 +1694,6 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
                 <div className="mb-3 p-3 bg-bg3 rounded-lg border border-claude/15 flex flex-col gap-2.5">
                   <div className="text-[11px] font-mono text-claude tracking-wider uppercase">🎬 Solicitud de influencers</div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className={labelCls}>¿Cuándo fue solicitado?</label>
-                      <input type="date" value={requestedAt} onChange={e => setRequestedAt(e.target.value)} className={fieldCls} />
-                    </div>
                     <div>
                       <label className={labelCls}>Fecha de envío del brief <span className="text-danger">*</span></label>
                       <input type="date" value={briefDate} onChange={e => setBriefDate(e.target.value)}
