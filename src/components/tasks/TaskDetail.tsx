@@ -10,6 +10,7 @@ import { NewPresentationModal } from '../modals/NewPresentationModal'
 import { CaptureModal } from '../modals/CaptureModal'
 import { DelegationModal, type DelegationFormData } from '../modals/DelegationModal'
 import { AttachmentsZone, type AttachmentsZoneHandle } from './AttachmentsZone'
+import { SearchSelect } from '../ui/SearchSelect'
 import { TaskItem } from './TaskItem'
 import { ReminderRow } from './ReminderRow'
 import type { Checklist, Task, TaskDelegation } from '../../lib/types'
@@ -776,7 +777,7 @@ Respondé SOLO JSON: {"fecha":"YYYY-MM-DD","razon":"texto corto en español (má
       status: 'Recordatorio',
       es_recordatorio: true,
       recordatorio_at: new Date(`${returnDate}T09:00:00`).toISOString(),
-      tipo_recordatorio: 'seguimiento',
+      tipo_recordatorio: null,
       done: false,
       cats: [], plan: [], meeting_agenda: [],
     })
@@ -1681,33 +1682,39 @@ Reglas del bloque:
               {task.context === 'agencia' && (
                 <div>
                   <label className={labelCls}>Cliente / marca</label>
-                  <select value={task.client_id ?? ''} className={fieldCls}
-                    onChange={async e => { await updateTask(task.id, { client_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
-                    <option value="">Agencia interna (sin cliente)</option>
-                    {clients.filter(c => c.context === 'agencia').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <SearchSelect
+                    value={task.client_id}
+                    options={clients.filter(c => c.context === 'agencia').map(c => ({ value: c.id, label: c.name }))}
+                    onChange={async val => { await updateTask(task.id, { client_id: val }); await loadAll() }}
+                    emptyLabel="Agencia interna (sin cliente)"
+                    className={fieldCls}
+                  />
                 </div>
               )}
 
               {!isEmailReply && (<>
               <div>
                 <label className={labelCls}>Parte de proyecto</label>
-                <select value={task.project_id ?? ''} className={fieldCls}
-                  onChange={async e => { await updateTask(task.id, { project_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
-                  <option value="">— Ninguno —</option>
-                  {/* Separación de contexto: solo proyectos del mismo contexto que la tarea */}
-                  {projects.filter(p => p.context === task.context).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                {/* Separación de contexto: solo proyectos del mismo contexto que la tarea */}
+                <SearchSelect
+                  value={task.project_id}
+                  options={projects.filter(p => p.context === task.context).map(p => ({ value: p.id, label: p.name }))}
+                  onChange={async val => { await updateTask(task.id, { project_id: val }); await loadAll() }}
+                  emptyLabel="— Ninguno —"
+                  className={fieldCls}
+                />
               </div>
 
               <div>
                 <label className={labelCls}>Subtarea de</label>
-                <select value={task.parent_task_id ?? ''} className={fieldCls}
-                  onChange={async e => { await updateTask(task.id, { parent_task_id: e.target.value ? Number(e.target.value) : null }); await loadAll() }}>
-                  <option value="">— Ninguna (independiente) —</option>
-                  {/* Separación de contexto: solo tareas del mismo contexto como padre */}
-                  {tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio && t.context === task.context).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-                </select>
+                {/* Separación de contexto: solo tareas del mismo contexto como padre */}
+                <SearchSelect
+                  value={task.parent_task_id}
+                  options={tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio && t.context === task.context).map(t => ({ value: t.id, label: t.title }))}
+                  onChange={async val => { await updateTask(task.id, { parent_task_id: val }); await loadAll() }}
+                  emptyLabel="— Ninguna (independiente) —"
+                  className={fieldCls}
+                />
               </div>
               </>)}
 
