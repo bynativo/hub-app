@@ -552,17 +552,28 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   checkArchiveCandidates: () => {
-    const simulate = typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('archive_sim') === '1'
+    const search = typeof window !== 'undefined' ? window.location.search : ''
+    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    const simulate = new URLSearchParams(search).get('archive_sim') === '1'
     const DAYS = simulate ? 0 : 30
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - DAYS)
     const cutoffISO = cutoff.toISOString()
-    const candidates = get().tasks.filter(t =>
+    const allTasks = get().tasks
+    const candidates = allTasks.filter(t =>
       !t.archived_at &&
       t.status !== 'Archivado' &&
       t.updated_at < cutoffISO
     )
+    console.log('[archive] checkArchiveCandidates', {
+      search,
+      hash,
+      simulate,
+      DAYS,
+      cutoffISO,
+      totalTasks: allTasks.length,
+      candidates: candidates.length,
+    })
     set({ archiveCandidates: candidates })
   },
 

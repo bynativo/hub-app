@@ -56,7 +56,10 @@ export default function App() {
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
-  useEffect(() => { if (initialized) checkArchiveCandidates() }, [initialized])
+  useEffect(() => {
+    console.log('[archive] useEffect initialized=', initialized)
+    if (initialized) checkArchiveCandidates()
+  }, [initialized])
 
   // Polling silencioso del calendario cada 5 min mientras la app está abierta.
   // También dispara un refresh al volver a focus si pasaron 5 min, para que
