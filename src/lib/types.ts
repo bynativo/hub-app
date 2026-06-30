@@ -133,6 +133,7 @@ export interface Task {
   seguimiento_tipo: string | null
   feedback_interno: boolean | null
   feedback_externo: boolean | null
+  email_asunto: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
 }

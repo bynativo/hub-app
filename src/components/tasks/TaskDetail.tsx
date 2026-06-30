@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
-import { ESTADOS, STATUS_ICON, STATUS_COLOR, PUB_TYPES, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES, CLOSING_STATES } from '../../lib/constants'
-import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO, isRRSSContent } from '../../lib/helpers'
+import { ESTADOS, STATUS_ICON, STATUS_COLOR, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES, CLOSING_STATES } from '../../lib/constants'
+import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
 import { NewPresentationModal } from '../modals/NewPresentationModal'
@@ -363,10 +363,7 @@ export function TaskDetail() {
   const loadAll = useStore(s => s.loadAll)
   const deleteTaskSoft = useStore(s => s.deleteTaskSoft)
   const showToast = useStore(s => s.showToast)
-  const recurrentes = useStore(s => s.recurrentes)
-  const openRecurrentEdit = useStore(s => s.openRecurrentEdit)
   const openDuplicateTask = useStore(s => s.openDuplicateTask)
-  const enviarParaValidacion = useStore(s => s.enviarParaValidacion)
   const teamMembers = useStore(s => s.teamMembers)
 
   const task = tasks.find(t => t.id === currentTaskId)
@@ -402,10 +399,10 @@ export function TaskDetail() {
   const [notes, setNotes] = useState('')
   const [delegatedTo, setDelegatedTo] = useState('')
   const [delegatedToMemberId, setDelegatedToMemberId] = useState<number | null>(null)
-  const [origin, setOrigin] = useState('propia')
   const [estHours, setEstHours] = useState<number | null>(null)
   const [contextReadme, setContextReadme] = useState('')
-  const [showContext, setShowContext] = useState(false)
+  const [vinoDeMail, setVinoDeMail] = useState(false)
+  const [emailAsunto, setEmailAsunto] = useState('')
   const [suggestedHours, setSuggestedHours] = useState<number | null>(null)
   const [suggesting, setSuggesting] = useState(false)
   // Nuevas fechas de planificación y delegación
@@ -420,7 +417,6 @@ export function TaskDetail() {
   // Delegación
   const [delegationModalOpen, setDelegationModalOpen] = useState(false)
   const [delegations, setDelegations] = useState<TaskDelegation[]>([])
-  const [confirmClose, setConfirmClose] = useState<{ closerName: string } | null>(null)
 
   // Subtask add: usa el CaptureModal completo con parent_task_id precargado
   const [subModalOpen, setSubModalOpen] = useState(false)
@@ -472,9 +468,10 @@ export function TaskDetail() {
     setInfAgency(task.influencer_agencia || task.influencer_agency || '')
     setContentFormat(task.content_format || '')
     setRecordatorioAt(toLocalDT(task.recordatorio_at))
-    setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setDelegatedToMemberId(task.delegated_to_member_id ?? null); setOrigin(task.origin || 'propia')
+    setNotes(task.notes || ''); setDelegatedTo(task.delegated_to || ''); setDelegatedToMemberId(task.delegated_to_member_id ?? null)
     setEstHours(task.estimated_hours)
-    setContextReadme(task.context_readme || ''); setShowContext(false)
+    setContextReadme(task.context_readme || '')
+    setVinoDeMail(!!task.email_asunto); setEmailAsunto(task.email_asunto || '')
     setSuggestedHours(null)
     setWorkDate((task as any).work_date || '')
     setDelegationDate((task as any).delegation_date || '')
@@ -636,7 +633,8 @@ export function TaskDetail() {
       content_format: isContent ? (contentFormat || null) : null,
       es_recordatorio: isReminder,
       recordatorio_at: isReminder && recordatorioAt ? new Date(recordatorioAt).toISOString() : null,
-      notes: notes.trim() || null, delegated_to: delegatedTo || null, delegated_to_member_id: delegatedToMemberId, origin,
+      notes: notes.trim() || null, delegated_to: delegatedTo || null, delegated_to_member_id: delegatedToMemberId,
+      email_asunto: vinoDeMail ? (emailAsunto.trim() || null) : null,
       estimated_hours: estHours,
       work_date: workDate || null,
       delegation_date: delegationDate || null,
@@ -1283,16 +1281,7 @@ Reglas del bloque:
               <label className={labelCls}>Estado</label>
               <div className="flex gap-1.5 flex-wrap">
                 {(task.es_delegada ? ctxStates.filter(s => !CLOSING_STATES.includes(s)) : ctxStates).map(s => (
-                  <button key={s} onClick={() => {
-                    if (s === 'Archivado') {
-                      if (task.closer_member_id) {
-                        const cm = teamMembers.find(m => m.id === task.closer_member_id)
-                        setConfirmClose({ closerName: cm?.nombre ?? 'la persona asignada' })
-                        return
-                      }
-                    }
-                    updateTaskStatus(task.id, s)
-                  }}
+                  <button key={s} onClick={() => updateTaskStatus(task.id, s)}
                     className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
                       s === task.status ? 'font-semibold' : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
                     }`}
@@ -1301,14 +1290,6 @@ Reglas del bloque:
                   </button>
                 ))}
               </div>
-              {task.es_delegada && (
-                <button
-                  onClick={() => enviarParaValidacion(task.id)}
-                  className="mt-2 text-[12px] bg-teal-50 border border-teal-200 text-teal-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors"
-                >
-                  ↑ Enviar para validación
-                </button>
-              )}
             </div>
 
             {/* Sub-tipo de "En seguimiento" */}
@@ -1352,32 +1333,6 @@ Reglas del bloque:
               </div>
             )}
 
-            {/* Flujo banco RRSS/ADS — avisos contextuales */}
-            {task.context === 'banco' && isContent && (() => {
-              const isRRSS = isRRSSContent(task)
-              if (!isRRSS && task.delegated_to === 'Gonza') {
-                return (
-                  <div className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">
-                    ✓ Contenido no-RRSS delegado a Gonza — no requiere aprobación de Felipe.
-                  </div>
-                )
-              }
-              if (isRRSS && task.status === 'En seguimiento') {
-                return (
-                  <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                    ⚡ Contenido RRSS/ADS — requiere <span className="font-medium">aprobación de Felipe</span> (o Jani si Felipe delegó el cierre). Generá el link de aprobación desde el slide correspondiente.
-                  </div>
-                )
-              }
-              if (isRRSS) {
-                return (
-                  <div className="text-[11px] text-orange-600 bg-orange-50 border border-orange-200 rounded-md px-2.5 py-1.5">
-                    📱 RRSS/ADS — aprobación obligatoria de Felipe al pasar a Pend. validación.
-                  </div>
-                )
-              }
-              return null
-            })()}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1476,29 +1431,7 @@ Reglas del bloque:
 
             {isContent && (
               <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
-                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">
-                  {isInfluencer ? 'Influencer / tipo de publicación' : 'Formato del contenido'}
-                </div>
-                {/* El toggle "Es influencer" vive arriba en "Tipo de tarea".
-                    Acá solo mostramos los campos cuando isInfluencer está ON. */}
-                {isInfluencer && (
-                  <>
-                    <div>
-                      <label className={labelCls}>Tipo de publicación</label>
-                      <select value={pubType} onChange={e => setInfo(setPubType, e.target.value)} className={fieldCls}>
-                        {PUB_TYPES.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><label className={labelCls}>Influencer</label>
-                        <input value={infName} onChange={e => setInfo(setInfName, e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
-                      <div><label className={labelCls}>Handle / cuenta</label>
-                        <input value={infHandle} onChange={e => setInfo(setInfHandle, e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
-                    </div>
-                    <div><label className={labelCls}>Agencia que lo gestiona</label>
-                      <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
-                  </>
-                )}
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Formato del contenido</div>
                 <div>
                   <label className={labelCls}>Formato</label>
                   <select value={contentFormat} onChange={e => setInfo(setContentFormat, e.target.value)} className={fieldCls}>
@@ -1555,7 +1488,7 @@ Reglas del bloque:
               <div className="mt-2">
                 {suggestedHours == null ? (
                   <button onClick={suggestEstimate} disabled={suggesting}
-                    className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 disabled:opacity-40">
+                    className="text-[11px] text-gray-400 hover:text-claude cursor-pointer disabled:opacity-40">
                     {suggesting ? 'Pensando…' : '✦ Sugerir con Claude'}
                   </button>
                 ) : (
@@ -1569,35 +1502,37 @@ Reglas del bloque:
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Delegado a</label>
-                <select
-                  value={delegatedToMemberId ?? ''}
-                  onChange={e => {
-                    const id = e.target.value ? Number(e.target.value) : null
-                    const member = id ? teamMembers.find(m => m.id === id) : null
-                    setDelegatedToMemberId(id)
-                    setInfo(setDelegatedTo, member?.nombre ?? '')
-                  }}
-                  className={fieldCls}
-                >
-                  <option value="">Nadie</option>
-                  {teamMembers
-                    .filter(m => m.contextos.includes(task.context))
-                    .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
-                  }
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Origen</label>
-                <select value={origin} onChange={e => setInfo(setOrigin, e.target.value)} className={fieldCls}>
-                  <option value="propia">💡 Propia</option>
-                  <option value="gmail-agencia">📧 Email</option>
-                  <option value="whatsapp">💬 WhatsApp</option>
-                  <option value="reunion">🤝 Reunión</option>
-                </select>
-              </div>
+            <div>
+              <label className={labelCls}>Delegado a</label>
+              <select
+                value={delegatedToMemberId ?? ''}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null
+                  const member = id ? teamMembers.find(m => m.id === id) : null
+                  setDelegatedToMemberId(id)
+                  setInfo(setDelegatedTo, member?.nombre ?? '')
+                }}
+                className={fieldCls}
+              >
+                <option value="">Nadie</option>
+                {teamMembers
+                  .filter(m => m.contextos.includes(task.context))
+                  .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
+                }
+              </select>
+            </div>
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <button type="button" onClick={() => setInfo(setVinoDeMail, !vinoDeMail)}
+                  className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${vinoDeMail ? 'bg-claude' : 'bg-bg4'}`}>
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${vinoDeMail ? 'left-5.5' : 'left-0.5'}`} />
+                </button>
+                <span className="text-[13px]">📧 Vino de un mail</span>
+              </label>
+              {vinoDeMail && (
+                <input type="text" value={emailAsunto} onChange={e => setInfo(setEmailAsunto, e.target.value)}
+                  placeholder="Asunto del correo" className={fieldCls + ' mt-2'} />
+              )}
             </div>
 
             {/* Fechas de planificación y delegación */}
@@ -1706,58 +1641,12 @@ Reglas del bloque:
               </div>
             )}
 
-            {/* Sección Origen — solo visible si es instancia de recurrente */}
-            {task.es_recurrente_instance && (() => {
-              const origen = task.recurrente_id ? recurrentes.find(r => r.id === task.recurrente_id) : null
-              return (
-                <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-3 flex items-start gap-2.5">
-                  <span className="text-base shrink-0">🔄</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-mono text-blue-600 tracking-wider uppercase mb-1">Origen</div>
-                    <div className="text-[13px] text-gray-700">
-                      Esta tarea fue generada automáticamente
-                      {origen ? (
-                        <> por la recurrente{' '}
-                          <button
-                            onClick={() => openRecurrentEdit(origen.id)}
-                            className="text-blue-600 hover:text-blue-700 underline cursor-pointer font-medium"
-                            title="Abrir y editar la recurrente"
-                          >{origen.title}</button>
-                        </>
-                      ) : ' por una recurrente'}.
-                    </div>
-                    {origen && (
-                      <div className="text-[11px] text-gray-500 mt-1">
-                        {origen.freq === 'diaria' ? 'Frecuencia: diaria' : origen.freq === 'semanal' ? `Frecuencia: semanal (${origen.day_of_month})` : `Frecuencia: mensual (día ${origen.day_of_month})`}
-                        {origen.estimated_hours ? ` · ${origen.estimated_hours}h estimadas` : ''}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })()}
 
             <div>
               <label className={labelCls}>Descripción</label>
               <textarea value={notes} onChange={e => setInfo(setNotes, e.target.value)} rows={4} className={fieldCls + ' resize-y'} placeholder="Detalles, quién pide, contexto…" />
             </div>
 
-            {/* Contexto acumulado (context_readme) — colapsable, guarda al instante */}
-            <div className="border border-black/7 rounded-lg overflow-hidden">
-              <button onClick={() => setShowContext(s => !s)} className="w-full flex items-center justify-between px-3 py-2 bg-bg2 hover:bg-bg3 cursor-pointer">
-                <span className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">📄 Contexto {contextReadme ? '' : '· vacío'}</span>
-                <span className="text-[10px] text-gray-400">{showContext ? '▼' : '▶'}</span>
-              </button>
-              {showContext && (
-                <div className="p-3 border-t border-black/7">
-                  <textarea value={contextReadme} onChange={e => setContextReadme(e.target.value)}
-                    onBlur={() => { if (contextReadme !== (task.context_readme || '')) updateTask(task.id, { context_readme: contextReadme || null }) }}
-                    rows={5} className={fieldCls + ' resize-y'}
-                    placeholder="Contexto acumulado: de qué se trata, quién pide, historial. Claude lo usa como contexto en el chat de esta tarea." />
-                  <div className="text-[10px] text-gray-400 mt-1">Se guarda al salir del campo. El chat de la tarea lo usa como contexto y lo actualiza al pegar contenido.</div>
-                </div>
-              )}
-            </div>
 
             <div className="flex justify-end">
               <button onClick={saveInfo} disabled={!dirty || savingInfo}
@@ -1812,43 +1701,6 @@ Reglas del bloque:
               </div>
               </>)}
 
-              <div className="flex items-center gap-3 p-3 bg-bg2 rounded-lg border border-black/7">
-                <button onClick={async () => { const next = !isContent; await updateTask(task.id, { task_type: next ? 'contenido' : 'independiente' }); if (next) setTab('slide') }}
-                  className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${isContent ? 'bg-claude' : 'bg-bg4'}`}>
-                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${isContent ? 'left-5.5' : 'left-0.5'}`} />
-                </button>
-                <div>
-                  <div className="text-[13px]">Convertir a tarea de contenido</div>
-                  <div className="text-[11px] text-gray-400">Habilita el tab Slide para vincular o crear una presentación</div>
-                </div>
-              </div>
-
-              {/* Responsable de cierre */}
-              <div>
-                <label className={labelCls}>Responsable de cierre</label>
-                <select
-                  value={task.closer_member_id ?? ''}
-                  onChange={async e => {
-                    const id = e.target.value ? Number(e.target.value) : null
-                    await updateTask(task.id, { closer_member_id: id })
-                  }}
-                  className={fieldCls}
-                >
-                  <option value="">Cualquiera (sin restricción)</option>
-                  {teamMembers
-                    .filter(m => m.contextos.includes(task.context))
-                    .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
-                  }
-                </select>
-                {task.closer_member_id && (() => {
-                  const cm = teamMembers.find(m => m.id === task.closer_member_id)
-                  return cm ? (
-                    <div className="text-[11px] text-orange-500 mt-1">
-                      Solo {cm.nombre} puede cerrar esta tarea.
-                    </div>
-                  ) : null
-                })()}
-              </div>
             </div>
 
             <AttachmentsZone ref={attachmentsRef} taskId={task.id} />
@@ -2020,19 +1872,10 @@ Reglas del bloque:
               <div className="text-center py-5 text-gray-400 text-[13px]">Aún no hay borrador. Pegá el email y redactá la respuesta.</div>
             )}
 
-            {task.es_delegada ? (
-              <button
-                onClick={() => enviarParaValidacion(task.id)}
-                className="self-start text-xs bg-teal-50 border border-teal-200 text-teal-700 px-4 py-2 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors"
-              >
-                ↑ Enviar para validación
-              </button>
-            ) : (
-              <button onClick={async () => { await updateTask(task.id, { done: true }); closeDetail() }}
-                className="self-start text-xs bg-success/10 border border-success/30 text-success px-4 py-2 rounded-lg cursor-pointer hover:bg-success/18 transition-colors">
-                ✓ Marcar respondido (cierra la tarea)
-              </button>
-            )}
+            <button onClick={async () => { await updateTask(task.id, { done: true }); closeDetail() }}
+              className="self-start text-xs bg-success/10 border border-success/30 text-success px-4 py-2 rounded-lg cursor-pointer hover:bg-success/18 transition-colors">
+              ✓ Marcar respondido (cierra la tarea)
+            </button>
           </div>
         )}
 
@@ -2156,22 +1999,6 @@ Reglas del bloque:
         />
       )}
 
-      {confirmClose && (
-        <div className="fixed inset-0 z-[330] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => { if (e.target === e.currentTarget) setConfirmClose(null) }}>
-          <div className="bg-bg2 border border-black/7 rounded-2xl p-5 w-[400px] max-w-[94vw] shadow-lg">
-            <div className="font-serif text-lg font-light mb-1">Responsable de cierre</div>
-            <p className="text-[13px] text-gray-500 mb-4">
-              Esta tarea está configurada para ser cerrada por <span className="font-medium text-gray-700">{confirmClose.closerName}</span>. ¿Cerrarla de todas formas?
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmClose(null)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
-              <button onClick={async () => { setConfirmClose(null); await updateTaskStatus(task.id, 'Archivado') }} className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 cursor-pointer">
-                Sí, cerrar igual
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
