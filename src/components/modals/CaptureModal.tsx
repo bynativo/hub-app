@@ -787,6 +787,12 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         kv_color: '#7c3aed',
         share_enabled: false,
       })
+      if (resolvedProjectId && (campanaFechaInicio || campanaFechaFin)) {
+        await supabase.from('projects').update({
+          campana_fecha_inicio: campanaFechaInicio || null,
+          campana_fecha_fin: campanaFechaFin || null,
+        }).eq('id', resolvedProjectId)
+      }
       showToast('✓ Campaña creada con presentación vinculada', { durationMs: 3000 })
     }
     // Solicitar influencers: crear brief (recordatorio enviar_correo) + N subtareas Perfil X.

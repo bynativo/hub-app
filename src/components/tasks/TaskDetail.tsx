@@ -689,8 +689,10 @@ export function TaskDetail() {
   }
 
   async function confirmPerfilFlow(createContent: boolean) {
+    if (!task) return
     if (dirty) await saveInfo()
     if (createContent) await createContentTasksForPerfil()
+    await updateTask(task.id, { perfil_confirmed_at: new Date().toISOString() })
     setConfirmingPerfil(false)
     await loadAll()
   }
@@ -1411,21 +1413,29 @@ Reglas del bloque:
                     Al confirmar el perfil se ofrece crear <b>una subtarea por unidad</b> de cada tipo (ej: 2 Stories + 1 Reel = 3 subtareas).
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <span className="text-[11px] text-gray-500">
-                    {perfilConfirmable
-                      ? <>✓ Perfil completo — listo para confirmar</>
-                      : <>Completá nombre y handle para confirmar</>}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={!perfilConfirmable}
-                    onClick={() => setConfirmingPerfil(true)}
-                    className="text-[11px] text-success bg-success/10 border border-success/25 px-3 py-1 rounded-md cursor-pointer hover:bg-success hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
-                  >
-                    ✓ Confirmar perfil
-                  </button>
-                </div>
+                {task.perfil_confirmed_at ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[11px] text-success font-medium">
+                      ✓ Perfil confirmado {new Date(task.perfil_confirmed_at).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[11px] text-gray-500">
+                      {perfilConfirmable
+                        ? <>✓ Perfil completo — listo para confirmar</>
+                        : <>Completá nombre y handle para confirmar</>}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!perfilConfirmable}
+                      onClick={() => setConfirmingPerfil(true)}
+                      className="text-[11px] text-success bg-success/10 border border-success/25 px-3 py-1 rounded-md cursor-pointer hover:bg-success hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+                    >
+                      ✓ Confirmar perfil
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
