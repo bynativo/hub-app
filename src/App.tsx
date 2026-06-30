@@ -24,6 +24,7 @@ import { SearchModal } from './components/modals/SearchModal'
 import { RecurrenteModal } from './components/modals/RecurrenteModal'
 import { SubtaskConvertModal } from './components/modals/SubtaskConvertModal'
 import { DuplicarTareaModal } from './components/modals/DuplicarTareaModal'
+import { ArchiveProposalModal } from './components/modals/ArchiveProposalModal'
 import { Toast } from './components/layout/Toast'
 import { PWAUpdatePrompt } from './components/pwa/PWAUpdatePrompt'
 import { InstallBanner } from './components/pwa/InstallBanner'
@@ -50,9 +51,12 @@ export default function App() {
   const closeRecurrentCreate = useStore(s => s.closeRecurrentCreate)
   const recurrentes = useStore(s => s.recurrentes)
   const undoLast = useStore(s => s.undoLast)
+  const initialized = useStore(s => s.initialized)
+  const checkArchiveCandidates = useStore(s => s.checkArchiveCandidates)
   const [openPresId, setOpenPresId] = useState<number | null>(null)
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => { if (initialized) checkArchiveCandidates() }, [initialized])
 
   // Polling silencioso del calendario cada 5 min mientras la app está abierta.
   // También dispara un refresh al volver a focus si pasaron 5 min, para que
@@ -231,6 +235,7 @@ export default function App() {
 
       <SubtaskConvertModal />
       <DuplicarTareaModal />
+      <ArchiveProposalModal />
       <Toast />
       <PWAUpdatePrompt />
       <InstallBanner />

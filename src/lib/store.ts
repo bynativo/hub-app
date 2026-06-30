@@ -82,6 +82,7 @@ interface AppState {
   duplicateTask: { taskId: number } | null
   history: HistoryEntry[]
   toast: ToastState | null
+  archiveCandidates: Task[] | null
 
   loadAll: () => Promise<void>
   // Refetch de calendar_events. Si pasa from/to también dispara el proxy de
@@ -122,6 +123,10 @@ interface AppState {
   dismissToast: () => void
   // Delete con gracia de 10s (toast + Cmd+Z); DELETE real al expirar.
   deleteTaskSoft: (id: number) => Promise<void>
+  // Auto-archivo con confirmación
+  checkArchiveCandidates: () => void
+  archiveTasks: (ids: number[]) => Promise<void>
+  dismissArchiveCandidates: () => void
 }
 
 // Bootstrap del cache al crear el store: el array inicial ya viene poblado
@@ -162,6 +167,7 @@ export const useStore = create<AppState>((set, get) => ({
   duplicateTask: null,
   history: [],
   toast: null,
+  archiveCandidates: null,
 
   openSearch: () => set({ searchOpen: true }),
   closeSearch: () => set({ searchOpen: false }),
@@ -544,4 +550,34 @@ export const useStore = create<AppState>((set, get) => ({
     if (next.length > MAX_HISTORY) next.shift()
     set({ history: next })
   },
+
+  checkArchiveCandidates: () => {
+    const simulate = typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('archive_sim') === '1'
+    const DAYS = simulate ? 0 : 30
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - DAYS)
+    const cutoffISO = cutoff.toISOString()
+    const candidates = get().tasks.filter(t =>
+      !t.archived_at &&
+      t.status !== 'Archivado' &&
+      t.updated_at < cutoffISO
+    )
+    set({ archiveCandidates: candidates })
+  },
+
+  archiveTasks: async (ids) => {
+    if (!ids.length) { get().dismissArchiveCandidates(); return }
+    const archived_at = new Date().toISOString()
+    await supabase.from('tasks').update({ status: 'Archivado', archived_at }).in('id', ids)
+    set({
+      tasks: get().tasks.map(t =>
+        ids.includes(t.id) ? { ...t, status: 'Archivado', archived_at } : t
+      ),
+    })
+    get().dismissArchiveCandidates()
+    get().showToast(`✓ ${ids.length} tarea${ids.length === 1 ? '' : 's'} archivada${ids.length === 1 ? '' : 's'}`, { durationMs: 3500 })
+  },
+
+  dismissArchiveCandidates: () => set({ archiveCandidates: [] }),
 }))
