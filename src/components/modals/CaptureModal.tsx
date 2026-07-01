@@ -802,6 +802,8 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
         fecha_filmacion: recordingDate || null,
         position: 1,
         es_slide_libre: true,
+        fase: 'creativo',
+        etapa: 'ideacion',
         status_prod: 'Pendiente',
         status_cm: 'Pendiente de contenido',
       })
