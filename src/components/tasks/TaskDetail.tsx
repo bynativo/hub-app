@@ -413,6 +413,11 @@ export function TaskDetail() {
   const [suggestingWorkDate, setSuggestingWorkDate] = useState(false)
   const [suggestedWorkDate, setSuggestedWorkDate] = useState<{ date: string; reason: string } | null>(null)
   const [linkedSlide, setLinkedSlide] = useState<{ id: number; fase: string | null; etapa: string | null } | null>(null)
+  const [quickMemberOpen, setQuickMemberOpen] = useState(false)
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberRol, setNewMemberRol] = useState('')
+  const [newMemberEmail, setNewMemberEmail] = useState('')
+  const [savingMember, setSavingMember] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
@@ -1336,12 +1341,7 @@ Reglas del bloque:
                     </button>
                   ))}
                 </div>
-                {task.seguimiento_tipo === 'esperando' && (
-                  <button onClick={() => setDelegationModalOpen(true)}
-                    className="mt-2 text-[11px] text-claude bg-claude/7 border border-claude/20 px-3 py-1.5 rounded-md cursor-pointer hover:bg-claude/15 transition-colors">
-                    → Delegar tarea
-                  </button>
-                )}
+                {task.seguimiento_tipo === 'esperando' && null /* → Delegar tarea: flujo formal desactivado */}
                 {task.seguimiento_tipo === 'feedback' && (
                   <div className="flex gap-4 mt-2">
                     <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
@@ -1554,22 +1554,37 @@ Reglas del bloque:
 
             <div>
               <label className={labelCls}>Delegado a</label>
-              <select
-                value={delegatedToMemberId ?? ''}
-                onChange={e => {
-                  const id = e.target.value ? Number(e.target.value) : null
-                  const member = id ? teamMembers.find(m => m.id === id) : null
-                  setDelegatedToMemberId(id)
-                  setInfo(setDelegatedTo, member?.nombre ?? '')
-                }}
-                className={fieldCls}
-              >
-                <option value="">Nadie</option>
-                {teamMembers
+              <SearchSelect
+                value={delegatedToMemberId}
+                options={teamMembers
                   .filter(m => m.contextos.includes(task.context))
-                  .map(m => <option key={m.id} value={m.id}>{m.nombre}{m.cargo ? ` · ${m.cargo}` : ''}</option>)
-                }
-              </select>
+                  .map(m => ({ value: m.id, label: m.nombre + (m.cargo ? ` · ${m.cargo}` : '') }))}
+                emptyLabel="Nadie"
+                className={fieldCls}
+                onChange={async id => {
+                  if (id !== null) {
+                    const member = teamMembers.find(m => m.id === id)
+                    if (!member) return
+                    setDelegatedToMemberId(id)
+                    setDelegatedTo(member.nombre)
+                    await updateTask(task.id, {
+                      delegated_to: member.nombre,
+                      delegated_to_member_id: id,
+                      status: 'En seguimiento',
+                      seguimiento_tipo: 'esperando',
+                    })
+                  } else {
+                    setDelegatedToMemberId(null)
+                    setDelegatedTo('')
+                    await updateTask(task.id, { delegated_to: null, delegated_to_member_id: null })
+                  }
+                }}
+              />
+              <button type="button"
+                onClick={() => { setNewMemberName(''); setNewMemberRol(''); setNewMemberEmail(''); setQuickMemberOpen(true) }}
+                className="mt-1.5 text-[11px] text-claude hover:underline cursor-pointer">
+                + Crear persona
+              </button>
             </div>
             <div>
               <label className="flex items-center gap-3 cursor-pointer">
@@ -2041,6 +2056,67 @@ Reglas del bloque:
               <button onClick={() => setConfirmDel(false)} className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 cursor-pointer">Cancelar</button>
               <button onClick={deleteTask} disabled={deleting} className="text-xs bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90 cursor-pointer disabled:opacity-40">
                 {deleting ? 'Eliminando…' : 'Eliminar permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quickMemberOpen && (
+        <div className="fixed inset-0 bg-black/40 z-[320] flex items-start justify-center pt-20 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget) setQuickMemberOpen(false) }}>
+          <div className="bg-bg2 border border-black/7 rounded-2xl p-6 w-[380px] max-w-[96vw] shadow-lg">
+            <div className="font-serif text-xl font-light mb-4">Nueva persona</div>
+            <div className="flex flex-col gap-3 mb-4">
+              <div>
+                <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Nombre *</label>
+                <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter' && newMemberName.trim()) document.getElementById('quick-member-save')?.click() }}
+                  className={fieldCls} placeholder="Nombre completo" />
+              </div>
+              <div>
+                <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Rol (opcional)</label>
+                <input value={newMemberRol} onChange={e => setNewMemberRol(e.target.value)}
+                  className={fieldCls} placeholder="ej. Coordinador, CM, Producción…" />
+              </div>
+              <div>
+                <label className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-1 block">Email (opcional)</label>
+                <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} type="email"
+                  className={fieldCls} placeholder="email@…" />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setQuickMemberOpen(false)}
+                className="text-xs bg-bg3 border border-black/7 text-gray-500 px-4 py-2 rounded-lg hover:bg-bg4 transition-colors cursor-pointer">
+                Cancelar
+              </button>
+              <button id="quick-member-save" disabled={!newMemberName.trim() || savingMember}
+                onClick={async () => {
+                  if (!newMemberName.trim()) return
+                  setSavingMember(true)
+                  const { data, error } = await supabase.from('team_members').insert({
+                    nombre: newMemberName.trim(),
+                    cargo: newMemberRol.trim() || null,
+                    email: newMemberEmail.trim() || null,
+                    contextos: [task.context],
+                    activo: true,
+                    aliases: [],
+                  }).select('id, nombre').single()
+                  if (error || !data) { alert('Error: ' + error?.message); setSavingMember(false); return }
+                  await loadAll()
+                  setDelegatedToMemberId(data.id)
+                  setDelegatedTo(data.nombre)
+                  await updateTask(task.id, {
+                    delegated_to: data.nombre,
+                    delegated_to_member_id: data.id,
+                    status: 'En seguimiento',
+                    seguimiento_tipo: 'esperando',
+                  })
+                  setQuickMemberOpen(false)
+                  setSavingMember(false)
+                }}
+                className="text-xs bg-claude border-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                {savingMember ? 'Creando…' : 'Crear persona'}
               </button>
             </div>
           </div>
