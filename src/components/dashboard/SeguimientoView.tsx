@@ -135,6 +135,18 @@ function FollowupCard({ task }: { task: Task }) {
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg4 text-gray-500">{ctxLabel(task.context)}</span>
             {task.clients && <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-agencia/7 text-agencia">{task.clients.name}</span>}
+            {task.task_type === 'contenido' && (() => {
+              const sl = task.slides?.[0]
+              if (!sl?.fase) return null
+              const phaseColors: Record<string, { bg: string; color: string }> = {
+                creativo:    { bg: 'rgba(124,58,237,0.08)',  color: '#7c3aed' },
+                produccion:  { bg: 'rgba(37,99,235,0.08)',   color: '#2563eb' },
+                publicacion: { bg: 'rgba(21,128,61,0.12)',   color: '#15803d' },
+              }
+              const cols = phaseColors[sl.fase] ?? { bg: 'rgba(107,114,128,0.08)', color: '#6b7280' }
+              const label = sl.etapa ? `${sl.fase} · ${sl.etapa}` : sl.fase
+              return <span className="text-[10px] font-mono px-1.5 py-0.5 rounded" style={{ background: cols.bg, color: cols.color }}>{label}</span>
+            })()}
             {isContentDue ? (
               <>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-claude/10 text-claude font-medium">📅 Entrega hoy</span>
