@@ -418,8 +418,6 @@ export function TaskDetail() {
   const [newMemberRol, setNewMemberRol] = useState('')
   const [newMemberEmail, setNewMemberEmail] = useState('')
   const [savingMember, setSavingMember] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [savingInfo, setSavingInfo] = useState(false)
 
   // Delegación
   const [delegationModalOpen, setDelegationModalOpen] = useState(false)
@@ -484,7 +482,6 @@ export function TaskDetail() {
     setDelegationDate((task as any).delegation_date || '')
     setDelegationReturnDate((task as any).delegation_return_date || '')
     setSuggestedWorkDate(null)
-    setDirty(false)
     setMessages([{ role: 'assistant', content: `Estoy al tanto de "${task.title}" (${ctxLabel(task.context)}). Pegá texto, una captura o dictá: puedo actualizar fecha, prioridad, el contexto o crear subtareas (con tu aprobación).` }])
     setPendingAction(null); setChatImages([])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
@@ -525,108 +522,108 @@ export function TaskDetail() {
     ...(isContent ? [{ id: 'slide' as Tab, label: '🎬 Slide' }] : []),
   ]
 
-  function setInfo<T>(setter: (v: T) => void, v: T) { setter(v); setDirty(true) }
-
   // ── Conversiones de tipo desde Info ────────────────────────────────
-  // Toggle "Es contenido": al desactivar con subtareas de contenido o slide
-  // vinculada, pide confirmación. Al desactivar también apaga "Es influencer".
   function toggleContent() {
+    if (!task) return
+    const preservedTypes = ['solicitud_influencers', 'influencer', 'responder_email']
     if (isContent) {
       const hasContentChildren = subtasks.some(s => s.task_type === 'contenido' && !s.archived_at)
+      const doToggle = () => {
+        setIsContent(false)
+        if (isInfluencer) setIsInfluencer(false)
+        setInfluencerAviso(null)
+        if (!preservedTypes.includes(task.task_type))
+          updateTask(task.id, { task_type: 'independiente', es_influencer: null })
+      }
       if (hasContentChildren) {
         setConfirmDeactivate({
           kind: 'contenido',
           message: 'Esta tarea tiene subtareas de contenido vinculadas. Si desactivás "Es contenido", las subtareas se mantienen pero esta tarea pierde su rol de contenido y no aparece más en la grilla / calendario RRSS.',
-          onConfirm: () => {
-            setInfo(setIsContent, false)
-            if (isInfluencer) setInfo(setIsInfluencer, false)
-            setInfluencerAviso(null)
-            setConfirmDeactivate(null)
-          },
+          onConfirm: () => { doToggle(); setConfirmDeactivate(null) },
         })
       } else {
-        setInfo(setIsContent, false)
-        if (isInfluencer) setInfo(setIsInfluencer, false)
-        setInfluencerAviso(null)
+        doToggle()
       }
     } else {
-      setInfo(setIsContent, true)
+      setIsContent(true)
+      if (!preservedTypes.includes(task.task_type))
+        updateTask(task.id, { task_type: 'contenido' })
     }
   }
-  // Toggle "Es influencer": al activar auto-activa "Es contenido" y muestra
-  // aviso/acción según si ya hay subtareas de contenido. Al desactivar con
-  // datos vinculados, pide confirmación.
+
   function toggleInfluencer() {
+    if (!task) return
     if (isInfluencer) {
       const hasPerfilChildren = subtasks.some(s => s.task_type === 'influencer' && !s.archived_at)
       const hasData = !!(infName || '').trim() || !!(infHandle || '').trim() || !!(infAgency || '').trim()
+      const doToggle = () => {
+        setIsInfluencer(false)
+        setInfluencerAviso(null)
+        updateTask(task.id, {
+          es_influencer: null,
+          influencer_nombre: null,
+          influencer_handle: null,
+          influencer_agencia: null,
+          tipo_publicacion: isContent ? 'propia' : null,
+        })
+      }
       if (hasPerfilChildren || hasData) {
         setConfirmDeactivate({
           kind: 'influencer',
           message: hasPerfilChildren
             ? 'Esta tarea tiene subtareas de perfil vinculadas. Si desactivás "Es influencer", las subtareas se mantienen pero los datos del influencer (nombre, handle, agencia, tipo) se vacían en esta tarea.'
             : 'Vas a desactivar el modo influencer. Los campos (nombre, handle, agencia, tipo de publicación) se vacían en esta tarea.',
-          onConfirm: () => {
-            setInfo(setIsInfluencer, false)
-            setInfluencerAviso(null)
-            setConfirmDeactivate(null)
-          },
+          onConfirm: () => { doToggle(); setConfirmDeactivate(null) },
         })
       } else {
-        setInfo(setIsInfluencer, false)
-        setInfluencerAviso(null)
+        doToggle()
       }
     } else {
-      setInfo(setIsInfluencer, true)
-      if (!isContent) setInfo(setIsContent, true)
+      setIsInfluencer(true)
+      if (!isContent) setIsContent(true)
+      updateTask(task.id, { es_influencer: true, task_type: 'contenido' })
       const hasContentChildren = subtasks.some(s => s.task_type === 'contenido' && !s.archived_at)
       setInfluencerAviso(hasContentChildren ? 'has_content_children' : 'can_create_perfiles')
     }
   }
-  // Toggle "Es recordatorio": al desactivar con recordatorio_at definido pide
-  // confirmación. Al activar setea recordatorio_at a hoy 09:00 si está vacío.
+
   function toggleReminderType() {
+    if (!task) return
     if (isReminder) {
-      const hasData = !!task?.recordatorio_at
-      if (hasData) {
+      const doToggle = () => {
+        setIsReminder(false)
+        setRecordatorioAt('')
+        updateTask(task.id, { es_recordatorio: false, recordatorio_at: null })
+      }
+      if (task.recordatorio_at) {
         setConfirmDeactivate({
           kind: 'recordatorio',
           message: 'Vas a convertir esto en tarea normal. La fecha y hora del recordatorio se pierde.',
-          onConfirm: () => {
-            setInfo(setIsReminder, false)
-            setInfo(setRecordatorioAt, '')
-            setConfirmDeactivate(null)
-          },
+          onConfirm: () => { doToggle(); setConfirmDeactivate(null) },
         })
       } else {
-        setInfo(setIsReminder, false)
+        doToggle()
       }
     } else {
-      setInfo(setIsReminder, true)
-      if (!recordatorioAt) {
+      setIsReminder(true)
+      let dt = recordatorioAt
+      if (!dt) {
         const d = new Date()
-        const dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T09:00`
-        setInfo(setRecordatorioAt, dt)
+        dt = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T09:00`
+        setRecordatorioAt(dt)
       }
+      updateTask(task.id, { es_recordatorio: true, recordatorio_at: new Date(dt).toISOString() })
     }
   }
 
+  // Guarda todos los campos del Info tab — usado por confirmPerfilFlow y handleClose
+  // para asegurar que ediciones de texto sin blur queden persistidas.
   async function saveInfo() {
     if (!task) return
-    setSavingInfo(true)
-    // En perfiles (task_type='influencer') también guardamos los campos influencer
-    // aunque isContent=false: son perfiles a confirmar y el selector vive en su
-    // propio panel, no en el bloque "Es contenido".
     const saveInflFields = (isContent && isInfluencer) || isPerfil
-    // Para perfiles, tipo_publicacion deriva del primer tipo del array (fallback
-    // de compat para vistas que aún leen ese campo scalar). Si el array está
-    // vacío usamos pubType del state (default 'colab').
     const derivedTipoPub = isPerfil
       ? (influencerTipos[0]?.tipo || pubType || 'colab')
       : pubType
-    // task_type: si el usuario activa/desactiva isContent, mover entre
-    // 'contenido' e 'independiente'. Preservar tipos especiales
-    // (solicitud_influencers / influencer / responder_email).
     const preservedTypes = ['solicitud_influencers', 'influencer', 'responder_email']
     const newTaskType = preservedTypes.includes(task.task_type)
       ? task.task_type
@@ -653,7 +650,25 @@ export function TaskDetail() {
       delegation_date: delegationDate || null,
       delegation_return_date: delegationReturnDate || null,
     }, 'Edición de tarea')
-    setSavingInfo(false); setDirty(false)
+  }
+
+  async function handleClose() {
+    if (!task) { closeDetail(); return }
+    // Flush any text fields that may not have triggered onBlur yet
+    const newTitle = buildTitle(titlePrefix, title.trim() || stripPrefix(task.title))
+    const patch: Record<string, any> = {}
+    if (newTitle !== task.title) patch.title = newTitle
+    const newNotes = notes.trim() || null
+    if (newNotes !== task.notes) patch.notes = newNotes
+    const newInfName = infName.trim() || null
+    if (newInfName !== task.influencer_nombre) patch.influencer_nombre = newInfName
+    const newInfHandle = infHandle.trim() || null
+    if (newInfHandle !== task.influencer_handle) patch.influencer_handle = newInfHandle
+    const newInfAgency = infAgency.trim() || null
+    if (newInfAgency !== task.influencer_agencia) patch.influencer_agencia = newInfAgency
+    if (vinoDeMail && emailAsunto.trim()) patch.email_asunto = emailAsunto.trim()
+    if (Object.keys(patch).length) await updateTask(task.id, patch)
+    closeDetail()
   }
 
   // Confirma un perfil: crea UNA subtarea por cada unidad declarada en
@@ -721,7 +736,7 @@ export function TaskDetail() {
 
   async function confirmPerfilFlow(createContent: boolean) {
     if (!task) return
-    if (dirty) await saveInfo()
+    await saveInfo()
     if (createContent) await createContentTasksForPerfil()
     await updateTask(task.id, { perfil_confirmed_at: new Date().toISOString() })
     setConfirmingPerfil(false)
@@ -1224,7 +1239,7 @@ Reglas del bloque:
               </div>
             </>
           )}
-          <button onClick={closeDetail} className="text-gray-400 text-lg hover:text-gray-900 cursor-pointer">✕</button>
+          <button onClick={handleClose} className="text-gray-400 text-lg hover:text-gray-900 cursor-pointer">✕</button>
         </div>
       </div>
 
@@ -1244,19 +1259,35 @@ Reglas del bloque:
         {/* INFO */}
         {tab === 'info' && (
           <div className="animate-fade-in flex flex-col gap-3">
+
+            {/* 1. IDENTIDAD */}
             <div>
               <label className={labelCls}>Título</label>
               <div className="flex items-stretch">
                 {titlePrefix && (
                   <span className="shrink-0 inline-flex items-center px-3 rounded-l-lg border border-r-0 border-black/7 bg-bg4 text-claude font-mono text-[13px] font-medium">{titlePrefix} |</span>
                 )}
-                <input value={title} onChange={e => setInfo(setTitle, e.target.value)} className={fieldCls + (titlePrefix ? ' rounded-l-none' : '')} />
+                <input
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  onBlur={e => {
+                    const newTitle = buildTitle(titlePrefix, e.target.value.trim() || stripPrefix(task.title))
+                    if (newTitle !== task.title) updateTask(task.id, { title: newTitle })
+                  }}
+                  className={fieldCls + (titlePrefix ? ' rounded-l-none' : '')}
+                />
               </div>
             </div>
 
-            {/* "Tipo de tarea" — convertir tipo en cualquier momento. Oculto
-                para task_type='influencer' (perfil) y 'solicitud_influencers':
-                esos tipos especiales se gestionan por su propio panel. */}
+            <div>
+              <label className={labelCls}>Contexto</label>
+              <select value={task.context} className={fieldCls} onChange={e => changeContext(e.target.value)}>
+                <option value="banco">Banco Falabella</option>
+                <option value="agencia">Agencia</option>
+                <option value="personal">Personal</option>
+              </select>
+            </div>
+
             {!isPerfil && task.task_type !== 'solicitud_influencers' && !isEmailReply && (() => {
               const togg = (on: boolean) => `w-10 h-5 rounded-full relative transition-colors shrink-0 ${on ? 'bg-claude' : 'bg-bg4'}`
               const knob = (on: boolean) => `w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${on ? 'left-5.5' : 'left-0.5'}`
@@ -1290,8 +1321,6 @@ Reglas del bloque:
                       <div className="text-[11px] text-gray-400">Convierte en recordatorio. Fecha/hora abajo (auto-completada con hoy 9:00).</div>
                     </div>
                   </label>
-
-                  {/* Aviso al activar "Es influencer" */}
                   {influencerAviso === 'has_content_children' && (
                     <div className="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
                       ⚠ Esta tarea ya tiene subtareas de contenido vinculadas — los datos del influencer se aplican a esta tarea madre.
@@ -1310,8 +1339,9 @@ Reglas del bloque:
               )
             })()}
 
-            <div>
-              <label className={labelCls}>Estado</label>
+            {/* 2. ESTADO */}
+            <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
+              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Estado</div>
               <div className="flex gap-1.5 flex-wrap">
                 {(task.es_delegada ? ctxStates.filter(s => !CLOSING_STATES.includes(s)) : ctxStates).map(s => (
                   <button key={s} onClick={() => updateTaskStatus(task.id, s)}
@@ -1323,96 +1353,250 @@ Reglas del bloque:
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Sub-tipo de "En seguimiento" */}
-            {task.status === 'En seguimiento' && (
-              <div>
-                <label className={labelCls}>Sub-tipo</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {([null, 'esperando', 'feedback'] as const).map(v => (
-                    <button key={v ?? 'null'} onClick={() => updateTask(task.id, { seguimiento_tipo: v })}
-                      className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
-                        task.seguimiento_tipo === v
-                          ? 'font-semibold border-amber-400 bg-amber-50 text-amber-700'
-                          : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
-                      }`}>
-                      {v === null ? '— Sin asignar' : v === 'esperando' ? '⏳ Esperando / Delegado' : '🔄 En feedback'}
-                    </button>
-                  ))}
-                </div>
-                {task.seguimiento_tipo === 'esperando' && null /* → Delegar tarea: flujo formal desactivado */}
-                {task.seguimiento_tipo === 'feedback' && (
-                  <div className="flex gap-4 mt-2">
-                    <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
-                      <input type="checkbox" checked={!!task.feedback_interno}
-                        onChange={e => updateTask(task.id, { feedback_interno: e.target.checked })}
-                        className="cursor-pointer" />
-                      Feedback interno
-                    </label>
-                    <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
-                      <input type="checkbox" checked={!!task.feedback_externo}
-                        onChange={e => updateTask(task.id, { feedback_externo: e.target.checked })}
-                        className="cursor-pointer" />
-                      Feedback externo
-                    </label>
+              {task.status === 'En seguimiento' && (
+                <div className="border-t border-black/7 pt-2.5 flex flex-col gap-2">
+                  <div className="text-[11px] font-mono text-gray-400">Sub-tipo de seguimiento</div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {([null, 'esperando', 'feedback'] as const).map(v => (
+                      <button key={v ?? 'null'} onClick={() => updateTask(task.id, { seguimiento_tipo: v })}
+                        className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                          task.seguimiento_tipo === v
+                            ? 'font-semibold border-amber-400 bg-amber-50 text-amber-700'
+                            : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
+                        }`}>
+                        {v === null ? '— Sin asignar' : v === 'esperando' ? '⏳ Esperando / Delegado' : '🔄 En feedback'}
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
-            )}
+                  {task.seguimiento_tipo === 'feedback' && (
+                    <div className="flex gap-4 mt-1">
+                      <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
+                        <input type="checkbox" checked={!!task.feedback_interno}
+                          onChange={e => updateTask(task.id, { feedback_interno: e.target.checked })}
+                          className="cursor-pointer" />
+                        Feedback interno
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[12px] text-gray-600 cursor-pointer">
+                        <input type="checkbox" checked={!!task.feedback_externo}
+                          onChange={e => updateTask(task.id, { feedback_externo: e.target.checked })}
+                          className="cursor-pointer" />
+                        Feedback externo
+                      </label>
+                    </div>
+                  )}
+                </div>
+              )}
 
+              <div className="border-t border-black/7 pt-2.5 flex flex-col gap-1.5">
+                <label className={labelCls}>Delegado a</label>
+                <SearchSelect
+                  value={delegatedToMemberId}
+                  options={teamMembers
+                    .filter(m => m.contextos.includes(task.context))
+                    .map(m => ({ value: m.id, label: m.nombre + (m.cargo ? ` · ${m.cargo}` : '') }))}
+                  emptyLabel="Nadie"
+                  className={fieldCls}
+                  onChange={async id => {
+                    if (id !== null) {
+                      const member = teamMembers.find(m => m.id === id)
+                      if (!member) return
+                      setDelegatedToMemberId(id)
+                      setDelegatedTo(member.nombre)
+                      await updateTask(task.id, {
+                        delegated_to: member.nombre,
+                        delegated_to_member_id: id,
+                        status: 'En seguimiento',
+                        seguimiento_tipo: 'esperando',
+                      })
+                    } else {
+                      setDelegatedToMemberId(null)
+                      setDelegatedTo('')
+                      await updateTask(task.id, { delegated_to: null, delegated_to_member_id: null })
+                    }
+                  }}
+                />
+                <button type="button"
+                  onClick={() => { setNewMemberName(''); setNewMemberRol(''); setNewMemberEmail(''); setQuickMemberOpen(true) }}
+                  className="text-[11px] text-claude hover:underline cursor-pointer w-fit">
+                  + Crear persona
+                </button>
+              </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Prioridad</label>
-                <select value={priority} onChange={e => setInfo(setPriority, e.target.value)} className={fieldCls}>
-                  <option value="alta">🔴 Alta</option>
-                  <option value="media">🟡 Media</option>
-                  <option value="baja">🟢 Baja</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Fecha de entrega{isContent ? ' (a CM)' : ''}</label>
-                <input type="date" value={dueDate} onChange={e => setInfo(setDueDate, e.target.value)} className={fieldCls} />
-              </div>
+              {delegatedTo && (
+                <div className="border-t border-black/7 pt-2.5 flex flex-col gap-2.5">
+                  <div>
+                    <label className={labelCls}>Fecha de delegación — cuándo le pasás la tarea a {delegatedTo}</label>
+                    <input type="date" value={delegationDate}
+                      onChange={e => { setDelegationDate(e.target.value); updateTask(task.id, { delegation_date: e.target.value || null }) }}
+                      className={fieldCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Fecha de devolución — cuándo necesitás que te devuelvan lo delegado</label>
+                    <input type="date" value={delegationReturnDate}
+                      onChange={e => {
+                        const v = e.target.value
+                        setDelegationReturnDate(v)
+                        if (v && dueDate && v >= dueDate) {
+                          alert(`⚠ La fecha de devolución debe ser al menos 1 día antes de la entrega (${dueDate}).`)
+                        } else {
+                          updateTask(task.id, { delegation_return_date: v || null })
+                        }
+                      }}
+                      className={fieldCls} />
+                    {delegationReturnDate && dueDate && delegationReturnDate >= dueDate && (
+                      <div className="text-[11px] text-danger mt-1">⚠ Debe ser al menos 1 día antes de la entrega ({dueDate})</div>
+                    )}
+                    {delegationReturnDate && !(delegationReturnDate >= dueDate) && (
+                      <button
+                        onClick={async () => { await createDelegationReturnReminder(delegationReturnDate) }}
+                        className="mt-1.5 text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">
+                        🔔 Crear recordatorio de seguimiento
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {delegations.length > 0 && (
+                <div className="border-t border-black/7 pt-2.5">
+                  <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2.5">↗ Historial de delegaciones</div>
+                  <div className="flex flex-col gap-2">
+                    {delegations.map((d, i) => (
+                      <div key={d.id} className="flex items-start gap-2.5">
+                        <div className="flex flex-col items-center shrink-0 pt-0.5">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${d.completed_at ? 'bg-success' : 'bg-orange-400'}`} />
+                          {i < delegations.length - 1 && <div className="w-px bg-black/10 mt-1 h-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
+                            <span className="font-medium text-gray-700">{d.delegated_to}</span>
+                            <span className="text-gray-400">·</span>
+                            <span className="text-gray-500">{{
+                              espero_devolucion: 'Espero devolución',
+                              queda_a_cargo: 'Queda a cargo',
+                              publicacion: 'Publicación',
+                            }[d.stage as string] || (DELEGATION_STAGES.find(s => s.v === d.stage)?.label ?? d.stage)}</span>
+                            {d.return_date && (
+                              <>
+                                <span className="text-gray-400">·</span>
+                                <span className="text-gray-400 font-mono">devuelve {d.return_date.slice(5).replace('-', '/')}</span>
+                              </>
+                            )}
+                            {d.completed_at && (
+                              <span className="text-[10px] bg-success/10 text-success px-1.5 py-0.5 rounded font-mono">✓ devuelta</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">
+                            {new Date(d.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                            {d.note && <> · <span className="italic">"{d.note}"</span></>}
+                            {d.created_task_id && <span className="ml-1.5 text-claude font-mono">· tarea creada</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
+            {/* 3. RECORDATORIO */}
             {isReminder && (
               <div>
                 <label className={labelCls}>🔔 Fecha y hora del recordatorio</label>
                 <ReminderDateTimePicker
                   value={recordatorioAt}
-                  onChange={v => setInfo(setRecordatorioAt, v)}
+                  onChange={v => {
+                    setRecordatorioAt(v)
+                    if (v) updateTask(task.id, { recordatorio_at: new Date(v).toISOString() })
+                    else updateTask(task.id, { recordatorio_at: null })
+                  }}
                   dateLabel="Fecha"
                 />
               </div>
             )}
 
+            {/* 4. CONTENIDO */}
             {isContent && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
+                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">🎬 Contenido</div>
+
                 <div>
-                  <label className={labelCls}>Fecha de grabación 🎬</label>
-                  <input type="date" value={recordingDate} onChange={e => setInfo(setRecordingDate, e.target.value)} className={fieldCls} />
-                  <div className="text-[10px] text-gray-400 mt-1">Opcional. Cuándo se filma — debe ser ≥24h antes de la entrega.</div>
+                  <label className={labelCls}>Fase de producción</label>
+                  {linkedSlide ? (
+                    <>
+                      <select
+                        value={linkedSlide.fase || ''}
+                        className={fieldCls}
+                        onChange={async e => {
+                          const newFase = e.target.value || null
+                          await supabase.from('slides').update({ fase: newFase, etapa: null }).eq('id', linkedSlide.id)
+                          setLinkedSlide(s => s ? { ...s, fase: newFase, etapa: null } : s)
+                        }}
+                      >
+                        <option value="">— sin fase —</option>
+                        {FASES.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                      {linkedSlide.fase && (
+                        <select
+                          value={linkedSlide.etapa || ''}
+                          className={fieldCls + ' mt-1.5'}
+                          onChange={async e => {
+                            const newEtapa = e.target.value || null
+                            await supabase.from('slides').update({ etapa: newEtapa }).eq('id', linkedSlide.id)
+                            setLinkedSlide(s => s ? { ...s, etapa: newEtapa } : s)
+                          }}
+                        >
+                          <option value="">— sin etapa —</option>
+                          {(ETAPAS_POR_FASE[linkedSlide.fase] || []).map(et => <option key={et} value={et}>{et}</option>)}
+                        </select>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-[11px] text-gray-400 py-1">Sin slide vinculado</div>
+                  )}
                 </div>
+
                 <div>
-                  <label className={labelCls}>Fecha de publicación</label>
-                  <input type="date" value={publishDate} onChange={e => setInfo(setPublishDate, e.target.value)} className={fieldCls} />
-                  <div className="text-[10px] text-gray-400 mt-1">La define el CM. No cierra tu parte — vos cerrás al entregar.</div>
+                  <label className={labelCls}>Formato</label>
+                  <select value={contentFormat}
+                    onChange={e => { setContentFormat(e.target.value); updateTask(task.id, { content_format: e.target.value || null }) }}
+                    className={fieldCls}>
+                    <option value="">— Sin definir —</option>
+                    {FORMATOS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
                 </div>
-                {recWarn && (
-                  <div className="col-span-2 text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
-                    ⚠ La grabación debe ser al menos 24h antes de la entrega. Grabación máxima sugerida: <span className="font-medium">{recWarn}</span>.
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={labelCls}>Fecha de grabación 🎬</label>
+                    <input type="date" value={recordingDate}
+                      onChange={e => { setRecordingDate(e.target.value); updateTask(task.id, { recording_date: e.target.value || null }) }}
+                      className={fieldCls} />
+                    <div className="text-[10px] text-gray-400 mt-1">Opcional. Cuándo se filma — debe ser ≥24h antes de la entrega.</div>
                   </div>
-                )}
-                {pubWarn && (
-                  <div className="col-span-2 text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
-                    ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
+                  <div>
+                    <label className={labelCls}>Fecha de publicación</label>
+                    <input type="date" value={publishDate}
+                      onChange={e => { setPublishDate(e.target.value); updateTask(task.id, { publish_date: e.target.value || null }) }}
+                      className={fieldCls} />
+                    <div className="text-[10px] text-gray-400 mt-1">La define el CM. No cierra tu parte — vos cerrás al entregar.</div>
                   </div>
-                )}
+                  {recWarn && (
+                    <div className="col-span-2 text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
+                      ⚠ La grabación debe ser al menos 24h antes de la entrega. Grabación máxima sugerida: <span className="font-medium">{recWarn}</span>.
+                    </div>
+                  )}
+                  {pubWarn && (
+                    <div className="col-span-2 text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-md px-2.5 py-1.5">
+                      ⚠ La entrega debe ser al menos 24h antes de la publicación. Entrega mínima sugerida: <span className="font-medium">{pubWarn}</span>.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
+            {/* 5. PERFIL */}
             {isPerfil && (
               <div className="border border-claude/20 bg-claude/5 rounded-lg p-3 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between gap-2">
@@ -1421,18 +1605,33 @@ Reglas del bloque:
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className={labelCls}>Nombre del influencer</label>
-                    <input value={infName} onChange={e => setInfo(setInfName, e.target.value)} className={fieldCls} placeholder="Nombre" /></div>
+                    <input value={infName}
+                      onChange={e => setInfName(e.target.value)}
+                      onBlur={e => { const v = e.target.value.trim() || null; if (v !== task.influencer_nombre) updateTask(task.id, { influencer_nombre: v }) }}
+                      className={fieldCls} placeholder="Nombre" /></div>
                   <div><label className={labelCls}>Handle / cuenta</label>
-                    <input value={infHandle} onChange={e => setInfo(setInfHandle, e.target.value)} className={fieldCls} placeholder="@usuario" /></div>
+                    <input value={infHandle}
+                      onChange={e => setInfHandle(e.target.value)}
+                      onBlur={e => { const v = e.target.value.trim() || null; if (v !== task.influencer_handle) updateTask(task.id, { influencer_handle: v }) }}
+                      className={fieldCls} placeholder="@usuario" /></div>
                 </div>
                 <div><label className={labelCls}>Agencia que lo gestiona</label>
-                  <input value={infAgency} onChange={e => setInfo(setInfAgency, e.target.value)} className={fieldCls} placeholder="Opcional" /></div>
+                  <input value={infAgency}
+                    onChange={e => setInfAgency(e.target.value)}
+                    onBlur={e => { const v = e.target.value.trim() || null; if (v !== task.influencer_agencia) updateTask(task.id, { influencer_agencia: v }) }}
+                    className={fieldCls} placeholder="Opcional" /></div>
                 <div>
                   <label className={labelCls}>Tipos de contenido</label>
                   <div className="bg-bg2 border border-black/7 rounded-md p-2.5">
                     <TiposChecklist
                       value={influencerTipos}
-                      onChange={next => setInfo(setInfluencerTipos, next)}
+                      onChange={next => {
+                        setInfluencerTipos(next)
+                        updateTask(task.id, {
+                          influencer_tipos: next.length ? next : null,
+                          tipo_publicacion: next[0]?.tipo || pubType || 'colab',
+                        })
+                      }}
                     />
                   </div>
                   <div className="text-[10px] text-gray-400 mt-1">
@@ -1465,273 +1664,9 @@ Reglas del bloque:
               </div>
             )}
 
-            {isContent && (
-              <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-2.5">
-                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Formato del contenido</div>
-                <div>
-                  <label className={labelCls}>Formato</label>
-                  <select value={contentFormat} onChange={e => setInfo(setContentFormat, e.target.value)} className={fieldCls}>
-                    <option value="">— Sin definir —</option>
-                    {FORMATOS.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Fase / etapa del slide vinculado — fuente de verdad: tabla slides */}
-            {isContent && (
-              <div>
-                <label className={labelCls}>Fase de producción</label>
-                {linkedSlide ? (
-                  <>
-                    <select
-                      value={linkedSlide.fase || ''}
-                      className={fieldCls}
-                      onChange={async e => {
-                        const newFase = e.target.value || null
-                        await supabase.from('slides').update({ fase: newFase, etapa: null }).eq('id', linkedSlide.id)
-                        setLinkedSlide(s => s ? { ...s, fase: newFase, etapa: null } : s)
-                      }}
-                    >
-                      <option value="">— sin fase —</option>
-                      {FASES.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                    {linkedSlide.fase && (
-                      <select
-                        value={linkedSlide.etapa || ''}
-                        className={fieldCls + ' mt-1.5'}
-                        onChange={async e => {
-                          const newEtapa = e.target.value || null
-                          await supabase.from('slides').update({ etapa: newEtapa }).eq('id', linkedSlide.id)
-                          setLinkedSlide(s => s ? { ...s, etapa: newEtapa } : s)
-                        }}
-                      >
-                        <option value="">— sin etapa —</option>
-                        {(ETAPAS_POR_FASE[linkedSlide.fase] || []).map(et => <option key={et} value={et}>{et}</option>)}
-                      </select>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-[11px] text-gray-400 py-1">Sin slide vinculado</div>
-                )}
-              </div>
-            )}
-
-            <div>
-              <label className={labelCls}>Estimado de tiempo</label>
-              <div className="flex gap-1.5 flex-wrap">
-                {[0.5, 1, 1.5, 2, 3, 4, 6, 8].map(h => (
-                  <button key={h} onClick={() => setInfo(setEstHours, h)}
-                    className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
-                      estHours === h ? 'border-claude text-claude bg-claude/7 font-semibold' : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
-                    }`}>
-                    {fmtHoras(h)}
-                  </button>
-                ))}
-                <button onClick={() => setInfo(setEstHours, null)}
-                  className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
-                    estHours == null ? 'border-claude text-claude bg-claude/7 font-semibold' : 'bg-bg2 border-black/7 text-gray-400 hover:border-black/13'
-                  }`}>
-                  —
-                </button>
-              </div>
-              <div className="mt-2">
-                {suggestedHours == null ? (
-                  <button onClick={suggestEstimate} disabled={suggesting}
-                    className="text-[11px] text-gray-400 hover:text-claude cursor-pointer disabled:opacity-40">
-                    {suggesting ? 'Pensando…' : '✦ Sugerir con Claude'}
-                  </button>
-                ) : (
-                  <div className="inline-flex items-center gap-2 text-[11px] bg-claude/7 border border-claude/20 text-claude px-2.5 py-1 rounded-md">
-                    Claude sugiere: <span className="font-semibold">{fmtHoras(suggestedHours)}</span>
-                    <button onClick={async () => { await updateTask(task.id, { estimated_hours: suggestedHours }); setEstHours(suggestedHours); setSuggestedHours(null) }}
-                      className="text-success hover:opacity-70 cursor-pointer" title="Aceptar">✓</button>
-                    <button onClick={() => setSuggestedHours(null)} className="text-gray-400 hover:text-danger cursor-pointer" title="Descartar">✕</button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className={labelCls}>Delegado a</label>
-              <SearchSelect
-                value={delegatedToMemberId}
-                options={teamMembers
-                  .filter(m => m.contextos.includes(task.context))
-                  .map(m => ({ value: m.id, label: m.nombre + (m.cargo ? ` · ${m.cargo}` : '') }))}
-                emptyLabel="Nadie"
-                className={fieldCls}
-                onChange={async id => {
-                  if (id !== null) {
-                    const member = teamMembers.find(m => m.id === id)
-                    if (!member) return
-                    setDelegatedToMemberId(id)
-                    setDelegatedTo(member.nombre)
-                    await updateTask(task.id, {
-                      delegated_to: member.nombre,
-                      delegated_to_member_id: id,
-                      status: 'En seguimiento',
-                      seguimiento_tipo: 'esperando',
-                    })
-                  } else {
-                    setDelegatedToMemberId(null)
-                    setDelegatedTo('')
-                    await updateTask(task.id, { delegated_to: null, delegated_to_member_id: null })
-                  }
-                }}
-              />
-              <button type="button"
-                onClick={() => { setNewMemberName(''); setNewMemberRol(''); setNewMemberEmail(''); setQuickMemberOpen(true) }}
-                className="mt-1.5 text-[11px] text-claude hover:underline cursor-pointer">
-                + Crear persona
-              </button>
-            </div>
-            <div>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <button type="button" onClick={() => setInfo(setVinoDeMail, !vinoDeMail)}
-                  className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${vinoDeMail ? 'bg-claude' : 'bg-bg4'}`}>
-                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${vinoDeMail ? 'left-5.5' : 'left-0.5'}`} />
-                </button>
-                <span className="text-[13px]">📧 Vino de un mail</span>
-              </label>
-              {vinoDeMail && (
-                <input type="text" value={emailAsunto} onChange={e => setInfo(setEmailAsunto, e.target.value)}
-                  placeholder="Asunto del correo" className={fieldCls + ' mt-2'} />
-              )}
-            </div>
-
-            {/* Fechas de planificación y delegación */}
+            {/* 6. CLASIFICACIÓN */}
             <div className="border border-black/7 rounded-lg p-3 flex flex-col gap-3">
-              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">📅 Planificación y delegación</div>
-
-              {/* Fecha de trabajo */}
-              <div>
-                <label className={labelCls}>Fecha de trabajo — cuándo trabajás esta tarea</label>
-                <input type="date" value={workDate} onChange={e => { setInfo(setWorkDate, e.target.value); setSuggestedWorkDate(null) }} className={fieldCls} />
-                <div className="mt-1.5">
-                  {suggestedWorkDate == null ? (
-                    <button onClick={suggestWorkDate} disabled={suggestingWorkDate}
-                      className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 disabled:opacity-40">
-                      {suggestingWorkDate ? 'Pensando…' : '✦ Sugerir con Claude'}
-                    </button>
-                  ) : (
-                    <div className="inline-flex items-center gap-2 text-[11px] bg-claude/7 border border-claude/20 text-claude px-2.5 py-1 rounded-md flex-wrap">
-                      <span>Te sugiero trabajar esto el <span className="font-semibold">{suggestedWorkDate.date.slice(5).replace('-', '/')}</span>{suggestedWorkDate.reason ? ` — ${suggestedWorkDate.reason}` : ''}</span>
-                      <button onClick={() => { setInfo(setWorkDate, suggestedWorkDate.date); setSuggestedWorkDate(null) }}
-                        className="text-success hover:opacity-70 cursor-pointer" title="Aceptar">✓</button>
-                      <button onClick={() => setSuggestedWorkDate(null)} className="text-gray-400 hover:text-danger cursor-pointer" title="Descartar">✕</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Fecha de delegación — solo si hay alguien asignado */}
-              {delegatedTo && (
-                <div>
-                  <label className={labelCls}>Fecha de delegación — cuándo le pasás la tarea a {delegatedTo}</label>
-                  <input type="date" value={delegationDate} onChange={e => setInfo(setDelegationDate, e.target.value)} className={fieldCls} />
-                </div>
-              )}
-
-              {/* Fecha de devolución — solo si hay delegación */}
-              {delegatedTo && (
-                <div>
-                  <label className={labelCls}>Fecha de devolución — cuándo necesitás que te devuelvan lo delegado</label>
-                  <input type="date" value={delegationReturnDate}
-                    onChange={e => {
-                      const v = e.target.value
-                      setInfo(setDelegationReturnDate, v)
-                      // Validar: devolución debe ser ≥24h antes de due_date
-                      if (v && dueDate && v >= dueDate) {
-                        alert(`⚠ La fecha de devolución debe ser al menos 1 día antes de la entrega (${dueDate}).`)
-                      }
-                    }}
-                    className={fieldCls} />
-                  {delegationReturnDate && dueDate && delegationReturnDate >= dueDate && (
-                    <div className="text-[11px] text-danger mt-1">⚠ Debe ser al menos 1 día antes de la entrega ({dueDate})</div>
-                  )}
-                  {delegationReturnDate && !(delegationReturnDate >= dueDate) && (
-                    <button
-                      onClick={async () => {
-                        await saveInfo()
-                        await createDelegationReturnReminder(delegationReturnDate)
-                      }}
-                      className="mt-1.5 text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15">
-                      🔔 Crear recordatorio de seguimiento
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Historial de delegaciones */}
-            {delegations.length > 0 && (
-              <div className="border border-black/7 rounded-lg p-3">
-                <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase mb-2.5">↗ Historial de delegaciones</div>
-                <div className="flex flex-col gap-2">
-                  {delegations.map((d, i) => (
-                    <div key={d.id} className="flex items-start gap-2.5">
-                      <div className="flex flex-col items-center shrink-0 pt-0.5">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${d.completed_at ? 'bg-success' : 'bg-orange-400'}`} />
-                        {i < delegations.length - 1 && <div className="w-px bg-black/10 mt-1 h-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
-                          <span className="font-medium text-gray-700">{d.delegated_to}</span>
-                          <span className="text-gray-400">·</span>
-                          <span className="text-gray-500">{{
-                            espero_devolucion: 'Espero devolución',
-                            queda_a_cargo: 'Queda a cargo',
-                            publicacion: 'Publicación',
-                          }[d.stage as string] || (DELEGATION_STAGES.find(s => s.v === d.stage)?.label ?? d.stage)}</span>
-                          {d.return_date && (
-                            <>
-                              <span className="text-gray-400">·</span>
-                              <span className="text-gray-400 font-mono">devuelve {d.return_date.slice(5).replace('-', '/')}</span>
-                            </>
-                          )}
-                          {d.completed_at && (
-                            <span className="text-[10px] bg-success/10 text-success px-1.5 py-0.5 rounded font-mono">✓ devuelta</span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">
-                          {new Date(d.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
-                          {d.note && <> · <span className="italic">"{d.note}"</span></>}
-                          {d.created_task_id && <span className="ml-1.5 text-claude font-mono">· tarea creada</span>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-
-            <div>
-              <label className={labelCls}>Descripción</label>
-              <textarea value={notes} onChange={e => setInfo(setNotes, e.target.value)} rows={4} className={fieldCls + ' resize-y'} placeholder="Detalles, quién pide, contexto…" />
-            </div>
-
-
-            <div className="flex justify-end">
-              <button onClick={saveInfo} disabled={!dirty || savingInfo}
-                className="text-xs bg-claude text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
-                {savingInfo ? 'Guardando…' : dirty ? 'Guardar cambios' : 'Guardado'}
-              </button>
-            </div>
-
-            {/* Organización — guarda al instante */}
-            <div className="border-t border-black/7 pt-3 mt-1 flex flex-col gap-3">
-              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Organización · se guarda al instante</div>
-
-              <div>
-                <label className={labelCls}>Contexto</label>
-                <select value={task.context} className={fieldCls} onChange={e => changeContext(e.target.value)}>
-                  <option value="banco">Banco Falabella</option>
-                  <option value="agencia">Agencia</option>
-                  <option value="personal">Personal</option>
-                </select>
-              </div>
+              <div className="text-[11px] font-mono text-gray-400 tracking-wider uppercase">Clasificación</div>
 
               {task.context === 'agencia' && (
                 <div>
@@ -1747,31 +1682,131 @@ Reglas del bloque:
               )}
 
               {!isEmailReply && (<>
-              <div>
-                <label className={labelCls}>Parte de proyecto</label>
-                {/* Separación de contexto: solo proyectos del mismo contexto que la tarea */}
-                <SearchSelect
-                  value={task.project_id}
-                  options={projects.filter(p => p.context === task.context).map(p => ({ value: p.id, label: p.name }))}
-                  onChange={async val => { await updateTask(task.id, { project_id: val }); await loadAll() }}
-                  emptyLabel="— Ninguno —"
-                  className={fieldCls}
-                />
-              </div>
-
-              <div>
-                <label className={labelCls}>Subtarea de</label>
-                {/* Separación de contexto: solo tareas del mismo contexto como padre */}
-                <SearchSelect
-                  value={task.parent_task_id}
-                  options={tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio && t.context === task.context).map(t => ({ value: t.id, label: t.title }))}
-                  onChange={async val => { await updateTask(task.id, { parent_task_id: val }); await loadAll() }}
-                  emptyLabel="— Ninguna (independiente) —"
-                  className={fieldCls}
-                />
-              </div>
+                <div>
+                  <label className={labelCls}>Parte de proyecto</label>
+                  <SearchSelect
+                    value={task.project_id}
+                    options={projects.filter(p => p.context === task.context).map(p => ({ value: p.id, label: p.name }))}
+                    onChange={async val => { await updateTask(task.id, { project_id: val }); await loadAll() }}
+                    emptyLabel="— Ninguno —"
+                    className={fieldCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Subtarea de</label>
+                  <SearchSelect
+                    value={task.parent_task_id}
+                    options={tasks.filter(t => t.id !== task.id && t.parent_task_id !== task.id && !t.done && !t.es_recordatorio && t.context === task.context).map(t => ({ value: t.id, label: t.title }))}
+                    onChange={async val => { await updateTask(task.id, { parent_task_id: val }); await loadAll() }}
+                    emptyLabel="— Ninguna (independiente) —"
+                    className={fieldCls}
+                  />
+                </div>
               </>)}
+            </div>
 
+            {/* 7. PLANIFICACIÓN */}
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Prioridad</label>
+                  <select value={priority}
+                    onChange={e => { setPriority(e.target.value); updateTask(task.id, { priority: e.target.value }) }}
+                    className={fieldCls}>
+                    <option value="alta">🔴 Alta</option>
+                    <option value="media">🟡 Media</option>
+                    <option value="baja">🟢 Baja</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Fecha de entrega{isContent ? ' (a CM)' : ''}</label>
+                  <input type="date" value={dueDate}
+                    onChange={e => { setDueDate(e.target.value); updateTask(task.id, { due_date: e.target.value || null }) }}
+                    className={fieldCls} />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Fecha de trabajo — cuándo trabajás esta tarea</label>
+                <input type="date" value={workDate}
+                  onChange={e => { setWorkDate(e.target.value); setSuggestedWorkDate(null); updateTask(task.id, { work_date: e.target.value || null }) }}
+                  className={fieldCls} />
+                <div className="mt-1.5">
+                  {suggestedWorkDate == null ? (
+                    <button onClick={suggestWorkDate} disabled={suggestingWorkDate}
+                      className="text-[11px] text-claude bg-claude/7 border border-claude/20 px-2.5 py-1 rounded-md cursor-pointer hover:bg-claude/15 disabled:opacity-40">
+                      {suggestingWorkDate ? 'Pensando…' : '✦ Sugerir con Claude'}
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 text-[11px] bg-claude/7 border border-claude/20 text-claude px-2.5 py-1 rounded-md flex-wrap">
+                      <span>Te sugiero trabajar esto el <span className="font-semibold">{suggestedWorkDate.date.slice(5).replace('-', '/')}</span>{suggestedWorkDate.reason ? ` — ${suggestedWorkDate.reason}` : ''}</span>
+                      <button onClick={() => { setWorkDate(suggestedWorkDate.date); setSuggestedWorkDate(null); updateTask(task.id, { work_date: suggestedWorkDate.date }) }}
+                        className="text-success hover:opacity-70 cursor-pointer" title="Aceptar">✓</button>
+                      <button onClick={() => setSuggestedWorkDate(null)} className="text-gray-400 hover:text-danger cursor-pointer" title="Descartar">✕</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className={labelCls}>Estimado de tiempo</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[0.5, 1, 1.5, 2, 3, 4, 6, 8].map(h => (
+                    <button key={h} onClick={() => { setEstHours(h); updateTask(task.id, { estimated_hours: h }) }}
+                      className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                        estHours === h ? 'border-claude text-claude bg-claude/7 font-semibold' : 'bg-bg2 border-black/7 text-gray-500 hover:border-black/13'
+                      }`}>
+                      {fmtHoras(h)}
+                    </button>
+                  ))}
+                  <button onClick={() => { setEstHours(null); updateTask(task.id, { estimated_hours: null }) }}
+                    className={`text-[11px] font-mono px-2.5 py-1 rounded-md border cursor-pointer transition-all ${
+                      estHours == null ? 'border-claude text-claude bg-claude/7 font-semibold' : 'bg-bg2 border-black/7 text-gray-400 hover:border-black/13'
+                    }`}>
+                    —
+                  </button>
+                </div>
+                <div className="mt-2">
+                  {suggestedHours == null ? (
+                    <button onClick={suggestEstimate} disabled={suggesting}
+                      className="text-[11px] text-gray-400 hover:text-claude cursor-pointer disabled:opacity-40">
+                      {suggesting ? 'Pensando…' : '✦ Sugerir con Claude'}
+                    </button>
+                  ) : (
+                    <div className="inline-flex items-center gap-2 text-[11px] bg-claude/7 border border-claude/20 text-claude px-2.5 py-1 rounded-md">
+                      Claude sugiere: <span className="font-semibold">{fmtHoras(suggestedHours)}</span>
+                      <button onClick={async () => { await updateTask(task.id, { estimated_hours: suggestedHours }); setEstHours(suggestedHours); setSuggestedHours(null) }}
+                        className="text-success hover:opacity-70 cursor-pointer" title="Aceptar">✓</button>
+                      <button onClick={() => setSuggestedHours(null)} className="text-gray-400 hover:text-danger cursor-pointer" title="Descartar">✕</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <button type="button" onClick={() => { const v = !vinoDeMail; setVinoDeMail(v); updateTask(task.id, { email_asunto: v ? (emailAsunto.trim() || null) : null }) }}
+                    className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${vinoDeMail ? 'bg-claude' : 'bg-bg4'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-all shadow-sm ${vinoDeMail ? 'left-5.5' : 'left-0.5'}`} />
+                  </button>
+                  <span className="text-[13px]">📧 Vino de un mail</span>
+                </label>
+                {vinoDeMail && (
+                  <input type="text" value={emailAsunto}
+                    onChange={e => setEmailAsunto(e.target.value)}
+                    onBlur={e => updateTask(task.id, { email_asunto: e.target.value.trim() || null })}
+                    placeholder="Asunto del correo" className={fieldCls + ' mt-2'} />
+                )}
+              </div>
+            </div>
+
+            {/* 8. DETALLE */}
+            <div>
+              <label className={labelCls}>Descripción</label>
+              <textarea value={notes}
+                onChange={e => setNotes(e.target.value)}
+                onBlur={e => { const v = e.target.value.trim() || null; if (v !== task.notes) updateTask(task.id, { notes: v }) }}
+                rows={4} className={fieldCls + ' resize-y'} placeholder="Detalles, quién pide, contexto…" />
             </div>
 
             <AttachmentsZone ref={attachmentsRef} taskId={task.id} />
