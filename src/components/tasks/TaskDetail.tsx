@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useStore } from '../../lib/store'
 import { supabase } from '../../lib/supabase'
 import { callClaudeProxy } from '../../lib/claude'
-import { ESTADOS, STATUS_ICON, STATUS_COLOR, FORMATOS, DELEGATION_STAGES, CONTENT_STAGES, CLOSING_STATES } from '../../lib/constants'
+import { ESTADOS, STATUS_ICON, STATUS_COLOR, FORMATOS, DELEGATION_STAGES, CLOSING_STATES, FASES, ETAPAS_POR_FASE } from '../../lib/constants'
 import { ctxLabel, fmtHoras, taskPrefix, buildTitle, stripPrefix, splitTitle, deliveryWarning, recordingWarning, tipoShortLabel, todayISO } from '../../lib/helpers'
 import { TiposChecklist, TiposSummary, type TipoConCantidad } from './TiposChecklist'
 import { ReminderDateTimePicker } from '../shared/ReminderDateTimePicker'
@@ -412,6 +412,7 @@ export function TaskDetail() {
   const [delegationReturnDate, setDelegationReturnDate] = useState('')
   const [suggestingWorkDate, setSuggestingWorkDate] = useState(false)
   const [suggestedWorkDate, setSuggestedWorkDate] = useState<{ date: string; reason: string } | null>(null)
+  const [linkedSlide, setLinkedSlide] = useState<{ id: number; fase: string | null; etapa: string | null } | null>(null)
   const [dirty, setDirty] = useState(false)
   const [savingInfo, setSavingInfo] = useState(false)
 
@@ -483,6 +484,12 @@ export function TaskDetail() {
     setPendingAction(null); setChatImages([])
     supabase.from('checklists').select('*').eq('task_id', task.id).order('position').then(({ data }) => setChecklists(data || []))
     supabase.from('task_delegations').select('*').eq('task_id', task.id).order('delegated_at').then(({ data }) => setDelegations(data || []))
+    if (task.task_type === 'contenido') {
+      supabase.from('slides').select('id,fase,etapa').eq('task_id', task.id).maybeSingle()
+        .then(({ data }) => setLinkedSlide(data ?? null))
+    } else {
+      setLinkedSlide(null)
+    }
     setAssignPresId('')
   }, [currentTaskId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -686,7 +693,23 @@ export function TaskDetail() {
         })
       }
     }
-    if (rows.length) await supabase.from('tasks').insert(rows)
+    if (rows.length) {
+      const { data: created } = await supabase.from('tasks').insert(rows).select('id, title, tipo_publicacion')
+      if (created?.length) {
+        await supabase.from('slides').insert(
+          created.map(t => ({
+            presentation_id: null,
+            task_id: t.id,
+            title: t.title,
+            content_pub_type: t.tipo_publicacion || null,
+            position: 1,
+            es_slide_libre: true,
+            status_prod: 'Pendiente',
+            status_cm: 'Pendiente de contenido',
+          }))
+        )
+      }
+    }
   }
 
   async function confirmPerfilFlow(createContent: boolean) {
@@ -1453,28 +1476,42 @@ Reglas del bloque:
               </div>
             )}
 
-            {/* Etapa actual del flujo de contenido — guarda al instante */}
+            {/* Fase / etapa del slide vinculado — fuente de verdad: tabla slides */}
             {isContent && (
               <div>
-                <label className={labelCls}>Etapa actual</label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {CONTENT_STAGES.map(s => {
-                    const active = task.current_stage === s.v
-                    return (
-                      <button key={s.v} type="button"
-                        onClick={async () => {
-                          await updateTask(task.id, { current_stage: active ? null : s.v })
+                <label className={labelCls}>Fase de producción</label>
+                {linkedSlide ? (
+                  <>
+                    <select
+                      value={linkedSlide.fase || ''}
+                      className={fieldCls}
+                      onChange={async e => {
+                        const newFase = e.target.value || null
+                        await supabase.from('slides').update({ fase: newFase, etapa: null }).eq('id', linkedSlide.id)
+                        setLinkedSlide(s => s ? { ...s, fase: newFase, etapa: null } : s)
+                      }}
+                    >
+                      <option value="">— sin fase —</option>
+                      {FASES.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    {linkedSlide.fase && (
+                      <select
+                        value={linkedSlide.etapa || ''}
+                        className={fieldCls + ' mt-1.5'}
+                        onChange={async e => {
+                          const newEtapa = e.target.value || null
+                          await supabase.from('slides').update({ etapa: newEtapa }).eq('id', linkedSlide.id)
+                          setLinkedSlide(s => s ? { ...s, etapa: newEtapa } : s)
                         }}
-                        className={`flex items-center gap-1.5 px-2.5 py-2 border rounded-lg cursor-pointer transition-all text-left ${
-                          active ? 'border-claude/30 bg-claude/7 text-claude' : 'border-black/7 bg-bg3 text-gray-500 hover:bg-bg4'
-                        }`}>
-                        <span className="text-base leading-none">{s.emoji}</span>
-                        <span className="text-[11px] leading-tight">{s.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="text-[10px] text-gray-400 mt-1">Visible como badge en las tarjetas. Click para activar/desactivar.</div>
+                      >
+                        <option value="">— sin etapa —</option>
+                        {(ETAPAS_POR_FASE[linkedSlide.fase] || []).map(et => <option key={et} value={et}>{et}</option>)}
+                      </select>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-[11px] text-gray-400 py-1">Sin slide vinculado</div>
+                )}
               </div>
             )}
 

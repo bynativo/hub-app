@@ -180,7 +180,7 @@ export const useStore = create<AppState>((set, get) => ({
       // OJO: existen dos FKs entre tasks y projects (tasks.project_id→projects y
       // projects.task_id→tasks), así que el embed `projects(...)` es ambiguo y
       // PostgREST devuelve error (las tareas desaparecían). Desambiguar con el FK.
-      supabase.from('tasks').select('*,projects!tasks_project_id_fkey(name,color),clients(name,email)').order('created_at', { ascending: false }),
+      supabase.from('tasks').select('*,projects!tasks_project_id_fkey(name,color),clients(name,email),slides!slides_task_id_fkey(id,fase,etapa)').order('created_at', { ascending: false }),
       supabase.from('projects').select('*,clients(name)').order('created_at', { ascending: false }),
       supabase.from('clients').select('*').eq('active', true).order('name'),
       supabase.from('recurrentes').select('*,clients(name)').eq('active', true),

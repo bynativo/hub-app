@@ -157,6 +157,30 @@ export const ETAPAS_POR_FASE: Record<string, string[]> = {
   publicacion: ['pendiente de contenido', 'listo para programar', 'programado', 'publicado', 'patrocinado'],
 }
 
+export const FASE_CSS: Record<string, string> = {
+  creativo:    'bg-purple-600/10 text-purple-600 border-purple-600/20',
+  produccion:  'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  publicacion: 'bg-green-700/15 text-green-700 border-green-700/30',
+}
+export const ETAPA_CSS: Record<string, string> = {
+  ideacion:                 'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  guion:                    'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  'feedback interno':       'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  'feedback contraparte':   'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  aprobado:                 'bg-green-700/15 text-green-700 border-green-700/30',
+  preproduccion:            'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  grabacion:                'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  edicion:                  'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  'feedback contenido':     'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  ajustes:                  'bg-amber-600/10 text-amber-600 border-amber-600/20',
+  'entregado a CM':         'bg-green-700/15 text-green-700 border-green-700/30',
+  'pendiente de contenido': 'bg-gray-500/10 text-gray-500 border-gray-500/20',
+  'listo para programar':   'bg-purple-600/10 text-purple-600 border-purple-600/20',
+  programado:               'bg-blue-600/10 text-blue-600 border-blue-600/20',
+  publicado:                'bg-green-700/15 text-green-700 border-green-700/30',
+  patrocinado:              'bg-green-700/15 text-green-700 border-green-700/30',
+}
+
 // Roles de equipo para delegación
 export const BANCO_ROLES: { v: string; label: string; subtitle: string }[] = [
   { v: 'gonza', label: 'Gonza', subtitle: 'Coordinador contenidos' },

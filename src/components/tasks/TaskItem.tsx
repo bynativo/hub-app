@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Task } from '../../lib/types'
 import { fmtDue, ctxLabel, fmtHoras, splitTitle, pubTypeBadge, overdueLabel, clientBadge, vaAGrilla, isRRSSContent } from '../../lib/helpers'
-import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CONTENT_STAGES, CLOSING_STATES } from '../../lib/constants'
+import { STATUS_ICON, STATUS_COLOR, ORIGIN_LABELS, CLOSING_STATES } from '../../lib/constants'
 import { useStore } from '../../lib/store'
 import { ReminderRow } from './ReminderRow'
 
@@ -240,10 +240,17 @@ export function TaskItem({ task, level = 0, hideChildren = false }: { task: Task
               <Tag bg="rgba(13,148,136,0.10)" color="#0d9488">📅 En grilla</Tag>
             )}
 
-            {/* Etapa actual del flujo de contenido */}
-            {task.task_type === 'contenido' && task.current_stage && (() => {
-              const cs = CONTENT_STAGES.find(s => s.v === task.current_stage)
-              return cs ? <Tag bg="rgba(124,58,237,0.08)" color="#7c3aed">{cs.emoji} {cs.label}</Tag> : null
+            {task.task_type === 'contenido' && (() => {
+              const sl = task.slides?.[0]
+              if (!sl?.fase) return null
+              const phaseColors: Record<string, { bg: string; color: string }> = {
+                creativo:    { bg: 'rgba(124,58,237,0.08)',  color: '#7c3aed' },
+                produccion:  { bg: 'rgba(37,99,235,0.08)',   color: '#2563eb' },
+                publicacion: { bg: 'rgba(21,128,61,0.12)',   color: '#15803d' },
+              }
+              const cols = phaseColors[sl.fase] ?? { bg: 'rgba(107,114,128,0.08)', color: '#6b7280' }
+              const label = sl.etapa ? `${sl.fase} · ${sl.etapa}` : sl.fase
+              return <Tag bg={cols.bg} color={cols.color}>{label}</Tag>
             })()}
 
             {/* Banco RRSS/ADS: badge de aprobación requerida en feedback */}

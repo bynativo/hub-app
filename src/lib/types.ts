@@ -107,9 +107,8 @@ export interface Task {
   influencer_nombre: string | null
   influencer_agencia: string | null
   tipo_publicacion: string | null
-  // Responsable de cierre y etapa actual de contenido
+  // Responsable de cierre
   closer_member_id: number | null
-  current_stage: string | null
   // Delegación nueva (member_id)
   delegated_to_member_id: number | null
   // Instancias de recurrentes
@@ -128,6 +127,7 @@ export interface Task {
   perfil_confirmed_at: string | null
   projects?: { name: string; color: string | null } | null
   clients?: { name: string; email: string | null } | null
+  slides?: { id: number; fase: string | null; etapa: string | null }[] | null
 }
 
 export interface TaskDelegation {
@@ -230,7 +230,7 @@ export interface Presentation {
 
 export interface Slide {
   id: number
-  presentation_id: number
+  presentation_id: number | null
   position: number
   title: string
   campana: string | null

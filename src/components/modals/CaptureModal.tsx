@@ -791,6 +791,21 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
       }
       showToast('✓ Campaña creada con presentación vinculada', { durationMs: 3000 })
     }
+    // Tarea de contenido: crear slide vacío vinculado (fuente de verdad de fase/etapa)
+    if (!reminder && isContent) {
+      await supabase.from('slides').insert({
+        presentation_id: null,
+        task_id: inserted.id,
+        title: builtTitle,
+        content_pub_type: isInfluencer ? pubType : 'propia',
+        fecha_publicacion: publishDate || null,
+        fecha_filmacion: recordingDate || null,
+        position: 1,
+        es_slide_libre: true,
+        status_prod: 'Pendiente',
+        status_cm: 'Pendiente de contenido',
+      })
+    }
     // Solicitar influencers: crear brief (recordatorio enviar_correo) + N subtareas Perfil X.
     if (!reminder && isSolicitud && briefDate) {
       await supabase.from('tasks').insert({
@@ -1137,6 +1152,21 @@ export function CaptureModal({ onClose, preselectContext, preselectClientId, pre
           })
         }
       }
+      // Slides para tareas de contenido del batch
+      const slideRows = creates
+        .map((s, i) => ({ s, row: created[i] }))
+        .filter(({ s, row }) => !s.isReminder && s.isContent && !!row)
+        .map(({ s, row }) => ({
+          presentation_id: null,
+          task_id: row!.id,
+          title: buildTitle(taskPrefix(s.contexto, clients.find(c => c.id === s.clientId) || null), s.titulo),
+          content_pub_type: s.isInfluencer ? s.pubType : 'propia',
+          position: 1,
+          es_slide_libre: true,
+          status_prod: 'Pendiente',
+          status_cm: 'Pendiente de contenido',
+        }))
+      if (slideRows.length) await supabase.from('slides').insert(slideRows)
     }
     // Subir adjuntos persistibles (image / pdf) al bucket como contexto vinculado
     // a la primera tarea creada. Los txt/md ya quedaron inyectados al prompt y

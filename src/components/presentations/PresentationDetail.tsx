@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
-import { PLAT_META, REDES, FORMATOS, PUB_TYPES, FASES, ETAPAS_POR_FASE } from '../../lib/constants'
+import { PLAT_META, REDES, FORMATOS, PUB_TYPES, FASES, ETAPAS_POR_FASE, FASE_CSS, ETAPA_CSS } from '../../lib/constants'
 import { addDaysISO, todayISO, splitTitle, ctxLabel, ctxColor, deliveryWarning, pubTypeBadge } from '../../lib/helpers'
 import { callClaudeProxy } from '../../lib/claude'
 import { exportPresentationPDF } from '../../lib/pdfExport'
@@ -20,33 +20,6 @@ const CM_CSS: Record<string, string> = {
   'Listo para programar': 'bg-purple-600/10 text-purple-600 border-purple-600/20',
   Programado: 'bg-blue-600/10 text-blue-600 border-blue-600/20',
   Publicado: 'bg-green-700/15 text-green-700 border-green-700/30',
-}
-
-const FASE_CSS: Record<string, string> = {
-  creativo:    'bg-purple-600/10 text-purple-600 border-purple-600/20',
-  produccion:  'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  publicacion: 'bg-green-700/15 text-green-700 border-green-700/30',
-}
-const ETAPA_CSS: Record<string, string> = {
-  // creativo
-  ideacion:              'bg-gray-500/10 text-gray-500 border-gray-500/20',
-  guion:                 'bg-gray-500/10 text-gray-500 border-gray-500/20',
-  'feedback interno':    'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  'feedback contraparte':'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  aprobado:              'bg-green-700/15 text-green-700 border-green-700/30',
-  // produccion
-  preproduccion:         'bg-gray-500/10 text-gray-500 border-gray-500/20',
-  grabacion:             'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  edicion:               'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  'feedback contenido':  'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  ajustes:               'bg-amber-600/10 text-amber-600 border-amber-600/20',
-  'entregado a CM':      'bg-green-700/15 text-green-700 border-green-700/30',
-  // publicacion
-  'pendiente de contenido': 'bg-gray-500/10 text-gray-500 border-gray-500/20',
-  'listo para programar':   'bg-purple-600/10 text-purple-600 border-purple-600/20',
-  programado:               'bg-blue-600/10 text-blue-600 border-blue-600/20',
-  publicado:                'bg-green-700/15 text-green-700 border-green-700/30',
-  patrocinado:              'bg-green-700/15 text-green-700 border-green-700/30',
 }
 
 function isImageUrl(u?: string | null) {
